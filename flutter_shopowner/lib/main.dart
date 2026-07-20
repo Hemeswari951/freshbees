@@ -6,6 +6,8 @@ import 'widgets/shop_owner_layout.dart';
 
 import 'widgets/splash_screen.dart';
 
+import './services/api_service.dart';
+
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/forgot_password.dart';
 import '../screens/auth/otp_verification.dart';
@@ -20,8 +22,12 @@ import '../screens/reports/reports_screen.dart';
 import '../screens/earnings/earnings_screen.dart';
 import '../screens/profile/profile_screen.dart';
 
-void main() {
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await ApiService.loadToken(); // <-- ADD THIS
+
   runApp(const ThiraaShopOwner());
 }
 

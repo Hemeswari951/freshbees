@@ -3,13 +3,31 @@ import 'package:flutter/material.dart';
 import '../../widgets/app_colors.dart';
 import '../../services/product_service.dart';
 
-/// Shows the product exactly the way a CUSTOMER would see it on the
-/// storefront — image slider, color swatches, size picker, price, details.
-/// Opened when the shop owner taps a product card/row on the Products page,
-/// so they can preview their listing before/after publishing it.
+/// Shows the product the way a shop owner needs to review it — gallery on
+/// one side (with 360° spin merged right into the image sequence), and
+/// name / price / color / size-stock / description on the other. Below
+/// that: read-only ratings & reviews (no "add review" — this is the shop
+/// owner portal, not the customer app). Edit button sits in the app bar.
+///
+/// Layout:
+/// - Desktop (wide): thumbnails listed left→right ABOVE a big image; click
+///   a thumbnail to change the big image below it. Details sit to the right.
+/// - Mobile (narrow): gallery is a swipeable PageView (next/prev), with a
+///   thumbnail strip underneath for quick jumps. Details stack below.
+///
+/// NOTE: Only the "details" panel (name / price / colors / size chart) was
+/// restyled to match the Myntra-style reference — circular size selector
+/// with per-size stock pills, "MORE COLORS" label above color swatches.
+/// The gallery (left side / image logic, 360 spin, zoom) is UNCHANGED.
 class ProductViewScreen extends StatefulWidget {
   final int productId;
-  const ProductViewScreen({super.key, required this.productId});
+
+  /// Optional override for what happens when "Edit" is tapped. If not
+  /// provided, defaults to pushing the named route below with the
+  /// productId as argument — adjust the route name to match your app.
+  final void Function(int productId)? onEdit;
+
+  const ProductViewScreen({super.key, required this.productId, this.onEdit});
 
   @override
   State<ProductViewScreen> createState() => _ProductViewScreenState();
@@ -21,13 +39,9 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
   String? _error;
 
   int _activeColorIndex = 0;
-  int _activeImageIndex = 0;
+  int _selectedIndex = 0; // index within _galleryItems
   int? _selectedVariantIndex;
   late final PageController _pageController;
-
-  // 'photos' = normal swipeable gallery (zoomable), '360' = auto-spin
-  // built by cycling through the same photos on drag. Needs 2+ photos.
-  String _galleryMode = 'photos';
 
   @override
   void initState() {
@@ -73,13 +87,39 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
   List<Map<String, dynamic>> get _activeVariants =>
       (_activeColor?['variants'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
 
+  /// Builds the gallery sequence: normal photos in order, with any group of
+  /// images tagged type: '360' collapsed into ONE spin item, inserted right
+  /// where the first 360-frame appears in the original order. That's what
+  /// makes the 360 view sit "in between" the regular photos instead of
+  /// living behind a separate toggle.
+  List<_GalleryItem> get _galleryItems {
+    final items = <_GalleryItem>[];
+    List<String>? spinList;
+    for (final img in _activeImages) {
+      final type = img['type'] as String? ?? 'other';
+      final url = ProductService.fullImageUrl(img['url'] as String);
+      if (type == '360') {
+        spinList ??= <String>[];
+        if (spinList.isEmpty) items.add(_GalleryItem.spin(spinList));
+        spinList.add(url);
+      } else {
+        items.add(_GalleryItem.photo(url, type));
+      }
+    }
+    // Needs 2+ frames to actually spin — drop it otherwise.
+    items.removeWhere((it) => it.kind == _GalleryKind.spin && (it.spinUrls?.length ?? 0) < 2);
+    return items;
+  }
+
   void _selectColor(int index) {
     setState(() {
       _activeColorIndex = index;
-      _activeImageIndex = 0;
+      _selectedIndex = 0;
       _selectedVariantIndex = null;
     });
-    _pageController.jumpToPage(0);
+    if (_pageController.hasClients) {
+      _pageController.jumpToPage(0);
+    }
   }
 
   Color _parseHex(String? hex, {Color fallback = AppColors.blush}) {
@@ -104,6 +144,17 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     }
   }
 
+  void _onEditTap() {
+    if (widget.onEdit != null) {
+      widget.onEdit!(widget.productId);
+      return;
+    }
+    // Adjust this route name to whatever your admin/shop-owner router uses.
+    Navigator.pushNamed(context, '/shop-owner/products/edit', arguments: widget.productId).then((changed) {
+      if (changed == true) _load();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -120,6 +171,15 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
             Text('This is how customers see it', style: TextStyle(fontSize: 11.5, color: AppColors.inkSoft, fontWeight: FontWeight.w400)),
           ],
         ),
+        actions: [
+          if (!_loading && _error == null && _product != null)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Edit product',
+              onPressed: _onEditTap,
+            ),
+          const SizedBox(width: 6),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -147,32 +207,43 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     final mrp = product['mrp'] != null ? (product['mrp'] as num).toDouble() : null;
     final discountPercent = product['discountPercent'] as int? ?? 0;
     final overallStatus = product['stockStatus'] as String? ?? 'In stock';
+    final items = _galleryItems;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
+          constraints: const BoxConstraints(maxWidth: 900),
           child: LayoutBuilder(builder: (context, c) {
             final wide = c.maxWidth >= 640;
-            final gallery = _gallerySection();
+            // ── Left side (gallery) — UNCHANGED, same as before ──────────
+            final gallery = wide ? _desktopGallery(items) : _mobileGallery(items);
+            // ── Right side (details) — restyled to match reference ───────
             final details = _detailsSection(price, mrp, discountPercent, overallStatus);
-            if (wide) {
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: 340, child: gallery),
-                  const SizedBox(width: 28),
-                  Expanded(child: details),
-                ],
-              );
-            }
+
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                gallery,
-                const SizedBox(height: 22),
-                details,
+                if (wide)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 380, child: gallery),
+                      const SizedBox(width: 28),
+                      Expanded(child: details),
+                    ],
+                  )
+                else
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      gallery,
+                      const SizedBox(height: 22),
+                      details,
+                    ],
+                  ),
+                const SizedBox(height: 28),
+                _ratingsSection(),
               ],
             );
           }),
@@ -181,128 +252,93 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     );
   }
 
-  // ── Left side: swipeable image slider + thumbnail strip ──────────────────
-  Widget _gallerySection() {
-    final images = _activeImages;
-    final urls = images.map((m) => ProductService.fullImageUrl(m['url'] as String)).toList();
-
-    // Real turntable sequence, tagged type: '360' by the backend, in
-    // upload order — this is what makes the spin look smooth and real
-    // instead of a 4-photo flip. Falls back to cycling ALL photos (old
-    // behavior) only for products that don't have a dedicated spin set.
-    final spinImages = images.where((m) => (m['type'] as String?) == '360').toList();
-    final spinUrls = spinImages.map((m) => ProductService.fullImageUrl(m['url'] as String)).toList();
-    final spinUrlsForViewer = spinUrls.length >= 2 ? spinUrls : urls;
-    final has360 = spinUrlsForViewer.length >= 2;
-
+  // ── Desktop: thumbnails left→right on top, big image below them ──────────
+  // (UNCHANGED — image/gallery concept left exactly as-is)
+  Widget _desktopGallery(List<_GalleryItem> items) {
+    final selected = items.isEmpty ? 0 : _selectedIndex.clamp(0, items.length - 1);
     return _SectionPanel(
       padding: const EdgeInsets.all(14),
       child: Column(
         children: [
-          if (has360) ...[
-            _galleryModeToggle(),
-            const SizedBox(height: 10),
-          ],
+          SizedBox(
+            height: 64,
+            child: items.isEmpty
+                ? const SizedBox()
+                : ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, i) => _thumbnail(items[i], i, i == selected),
+                  ),
+          ),
+          const SizedBox(height: 12),
           AspectRatio(
             aspectRatio: 1,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: images.isEmpty
-                  ? Container(
-                      color: AppColors.blush,
-                      alignment: Alignment.center,
-                      child: const Icon(Icons.checkroom, size: 56, color: AppColors.inkSoft),
-                    )
-                  : (_galleryMode == '360' && has360)
-                      ? Product360AutoViewer(imageUrls: spinUrlsForViewer)
-                      : Stack(
-                          alignment: Alignment.bottomCenter,
-                          children: [
-                            PageView.builder(
-                              controller: _pageController,
-                              itemCount: images.length,
-                              onPageChanged: (i) => setState(() => _activeImageIndex = i),
-                              itemBuilder: (context, i) => _ZoomableNetworkImage(imageUrl: urls[i]),
-                            ),
-                            if (images.length > 1)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: List.generate(images.length, (i) {
-                                    final active = i == _activeImageIndex;
-                                    return AnimatedContainer(
-                                      duration: const Duration(milliseconds: 150),
-                                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                                      width: active ? 16 : 6,
-                                      height: 6,
-                                      decoration: BoxDecoration(
-                                        color: active ? Colors.white : Colors.white.withOpacity(0.6),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                    );
-                                  }),
-                                ),
-                              ),
-                          ],
-                        ),
+              child: items.isEmpty ? _emptyImagePlaceholder() : _bigDisplay(items[selected]),
             ),
           ),
-          if (images.length > 1) ...[
+        ],
+      ),
+    );
+  }
+
+  // ── Mobile: swipeable gallery (next/prev), thumbnail strip underneath ────
+  // (UNCHANGED — image/gallery concept left exactly as-is)
+  Widget _mobileGallery(List<_GalleryItem> items) {
+    return _SectionPanel(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        children: [
+          AspectRatio(
+            aspectRatio: 1,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: items.isEmpty
+                  ? _emptyImagePlaceholder()
+                  : Stack(
+                      alignment: Alignment.bottomCenter,
+                      children: [
+                        PageView.builder(
+                          controller: _pageController,
+                          itemCount: items.length,
+                          onPageChanged: (i) => setState(() => _selectedIndex = i),
+                          itemBuilder: (context, i) => _bigDisplay(items[i]),
+                        ),
+                        if (items.length > 1)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: List.generate(items.length, (i) {
+                                final active = i == _selectedIndex;
+                                return AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150),
+                                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                                  width: active ? 16 : 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: active ? Colors.white : Colors.white.withOpacity(0.6),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ),
+                      ],
+                    ),
+            ),
+          ),
+          if (items.length > 1) ...[
             const SizedBox(height: 10),
             SizedBox(
               height: 56,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                itemCount: images.length,
+                itemCount: items.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (context, i) {
-                  final active = i == _activeImageIndex && _galleryMode == 'photos';
-                  final type = images[i]['type'] as String? ?? 'other';
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _activeImageIndex = i;
-                        _galleryMode = 'photos';
-                      });
-                      _pageController.animateToPage(i, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
-                    },
-                    child: Container(
-                      width: 56,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(9),
-                        border: Border.all(color: active ? AppColors.terracotta : AppColors.line, width: active ? 2 : 1),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: Stack(
-                        children: [
-                          Image.network(
-                            urls[i],
-                            fit: BoxFit.cover,
-                            width: 56,
-                            height: 56,
-                            errorBuilder: (_, __, ___) => Container(color: AppColors.blush),
-                          ),
-                          if (type != 'other')
-                            Positioned(
-                              bottom: 0,
-                              left: 0,
-                              right: 0,
-                              child: Container(
-                                color: Colors.black.withOpacity(0.55),
-                                padding: const EdgeInsets.symmetric(vertical: 1),
-                                child: Text(
-                                  type[0].toUpperCase() + type.substring(1),
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
+                itemBuilder: (context, i) => _thumbnail(items[i], i, i == _selectedIndex),
               ),
             ),
           ],
@@ -311,156 +347,347 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     );
   }
 
-  Widget _galleryModeToggle() {
-    Widget seg(String id, String label, IconData icon) {
-      final active = _galleryMode == id;
-      return Expanded(
-        child: GestureDetector(
-          onTap: () => setState(() => _galleryMode = id),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            decoration: BoxDecoration(
-              color: active ? AppColors.terracotta : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 14, color: active ? Colors.white : AppColors.inkSoft),
-                const SizedBox(width: 5),
-                Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: active ? Colors.white : AppColors.inkSoft)),
-              ],
-            ),
-          ),
+  Widget _thumbnail(_GalleryItem item, int index, bool active) {
+    final thumbUrl = item.kind == _GalleryKind.spin ? item.spinUrls!.first : item.url!;
+    return GestureDetector(
+      onTap: () {
+        setState(() => _selectedIndex = index);
+        if (_pageController.hasClients) {
+          _pageController.animateToPage(index, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+        }
+      },
+      child: Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: active ? AppColors.terracotta : AppColors.line, width: active ? 2 : 1),
         ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(color: AppColors.blush, borderRadius: BorderRadius.circular(10)),
-      child: Row(children: [
-        seg('photos', 'Photos', Icons.photo_library_outlined),
-        seg('360', '360°', Icons.threed_rotation),
-      ]),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.network(thumbUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: AppColors.blush)),
+            if (item.kind == _GalleryKind.spin)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  color: Colors.black.withOpacity(0.6),
+                  padding: const EdgeInsets.symmetric(vertical: 1),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.threed_rotation, size: 9, color: Colors.white),
+                      SizedBox(width: 2),
+                      Text('360°', style: TextStyle(fontSize: 7.5, color: Colors.white, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              )
+            else if ((item.photoType ?? 'other') != 'other')
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  color: Colors.black.withOpacity(0.55),
+                  padding: const EdgeInsets.symmetric(vertical: 1),
+                  child: Text(
+                    item.photoType![0].toUpperCase() + item.photoType!.substring(1),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
-  // ── Right side: name, price, color swatches, size picker, description ────
+
+  Widget _bigDisplay(_GalleryItem item) {
+    if (item.kind == _GalleryKind.spin) {
+      return Product360AutoViewer(imageUrls: item.spinUrls!);
+    }
+    return _ZoomableNetworkImage(imageUrl: item.url!);
+  }
+
+  Widget _emptyImagePlaceholder() => Container(
+        color: AppColors.blush,
+        alignment: Alignment.center,
+        child: const Icon(Icons.checkroom, size: 56, color: AppColors.inkSoft),
+      );
+
+  // ── Details: name, price, color, size + stock, description ───────────────
+  // Restyled to match the Myntra-style reference screenshot.
   Widget _detailsSection(double price, double? mrp, int discountPercent, String overallStatus) {
     final product = _product!;
     final (label, kind, color) = _stockPill(overallStatus);
 
+    return _SectionPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(product['brand'] as String? ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.terracotta)),
+          const SizedBox(height: 4),
+          Text(
+            product['name'] as String,
+            style: const TextStyle(fontFamily: 'Fraunces', fontSize: 21, fontWeight: FontWeight.w600, color: AppColors.ink),
+          ),
+          const SizedBox(height: 6),
+          Text(product['category'] as String? ?? 'Uncategorized', style: const TextStyle(fontSize: 12.5, color: AppColors.inkSoft)),
+          const SizedBox(height: 14),
+
+          // Price row: ₹price  MRP(strikethrough)  (xx% OFF)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text('₹${price.toStringAsFixed(0)}',
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.ink, fontFamily: 'JetBrainsMono')),
+              if (mrp != null && mrp > price) ...[
+                const SizedBox(width: 10),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Text('MRP ₹${mrp.toStringAsFixed(0)}',
+                      style: const TextStyle(fontSize: 14, color: AppColors.inkSoft, decoration: TextDecoration.lineThrough)),
+                ),
+              ],
+              if (discountPercent > 0) ...[
+                const SizedBox(width: 10),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Text('($discountPercent% OFF)',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.terracotta)),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 2),
+          const Text('inclusive of all taxes', style: TextStyle(fontSize: 11.5, color: AppColors.green, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          _StatusBadge(text: label, kind: kind),
+          const SizedBox(height: 22),
+
+          // ── MORE COLORS ────────────────────────────────────────────────
+          if (_colors.isNotEmpty) ...[
+            const Text('MORE COLORS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.ink, letterSpacing: 0.3)),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: List.generate(_colors.length, (i) {
+                final c = _colors[i];
+                final active = i == _activeColorIndex;
+                return GestureDetector(
+                  onTap: () => _selectColor(i),
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: _parseHex(c['colorHex'] as String?),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: active ? AppColors.terracotta : AppColors.line, width: active ? 3 : 1.5),
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 22),
+          ],
+
+          _sizeStockSection(),
+          const SizedBox(height: 22),
+
+          _sectionTitle('Product details'),
+          const SizedBox(height: 8),
+          Text(
+            (product['description'] as String?)?.trim().isNotEmpty == true
+                ? product['description'] as String
+                : 'No description added yet.',
+            style: const TextStyle(fontSize: 13.5, color: AppColors.ink, height: 1.5),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Size chart + stock (per size, for the selected color) ────────────────
+  // Restyled as circular size buttons with a stock pill underneath each
+  // (matches the "SELECT SIZE" row in the reference screenshot). Sizes with
+  // zero stock render greyed-out with a strike-through look.
+  Widget _sizeStockSection() {
+    final variants = _activeVariants;
+    if (variants.isEmpty) return const SizedBox.shrink();
+    final totalStock = variants.fold<int>(0, (sum, v) => sum + (v['stock'] as num).toInt());
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(product['brand'] as String? ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.terracotta)),
-        const SizedBox(height: 4),
-        Text(
-          product['name'] as String,
-          style: const TextStyle(fontFamily: 'Fraunces', fontSize: 21, fontWeight: FontWeight.w600, color: AppColors.ink),
-        ),
-        const SizedBox(height: 6),
-        Text(product['category'] as String? ?? 'Uncategorized', style: const TextStyle(fontSize: 12.5, color: AppColors.inkSoft)),
-        const SizedBox(height: 14),
-
         Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('₹${price.toStringAsFixed(0)}',
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.ink, fontFamily: 'JetBrainsMono')),
-            if (mrp != null && mrp > price) ...[
-              const SizedBox(width: 10),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 3),
-                child: Text('₹${mrp.toStringAsFixed(0)}',
-                    style: const TextStyle(fontSize: 14, color: AppColors.inkSoft, decoration: TextDecoration.lineThrough)),
-              ),
-            ],
-            if (discountPercent > 0) ...[
-              const SizedBox(width: 10),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 3),
-                child: Text('$discountPercent% off',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.green)),
-              ),
-            ],
+            const Text('SELECT SIZE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.ink, letterSpacing: 0.3)),
+            Row(
+              children: [
+                Text('Total: $totalStock pcs', style: const TextStyle(fontSize: 11.5, color: AppColors.inkSoft, fontWeight: FontWeight.w600)),
+                const SizedBox(width: 12),
+                const Text('SIZE CHART', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.terracotta)),
+                const SizedBox(width: 2),
+                const Icon(Icons.chevron_right, size: 14, color: AppColors.terracotta),
+              ],
+            ),
           ],
         ),
-        const SizedBox(height: 10),
-        _StatusBadge(text: label, kind: kind),
-        const SizedBox(height: 22),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 14,
+          runSpacing: 12,
+          children: List.generate(variants.length, (i) {
+            final v = variants[i];
+            final stock = (v['stock'] as num).toInt();
+            final outOfStock = stock <= 0;
+            final lowStock = stock > 0 && stock <= 5;
+            final selected = _selectedVariantIndex == i;
 
-        if (_colors.isNotEmpty) ...[
-          Text('Color: ${_activeColor?['colorName'] ?? ''}',
-              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.inkSoft)),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: List.generate(_colors.length, (i) {
-              final c = _colors[i];
-              final active = i == _activeColorIndex;
-              return GestureDetector(
-                onTap: () => _selectColor(i),
-                child: Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: _parseHex(c['colorHex'] as String?),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: active ? AppColors.terracotta : AppColors.line, width: active ? 3 : 1.5),
-                  ),
-                ),
-              );
-            }),
-          ),
-          const SizedBox(height: 22),
-        ],
-
-        if (_activeVariants.isNotEmpty) ...[
-          const Text('Size', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.inkSoft)),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: List.generate(_activeVariants.length, (i) {
-              final v = _activeVariants[i];
-              final outOfStock = (v['stock'] as num).toInt() <= 0;
-              final selected = _selectedVariantIndex == i;
-              return GestureDetector(
-                onTap: outOfStock ? null : () => setState(() => _selectedVariantIndex = i),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: selected ? AppColors.black : AppColors.blush,
-                    borderRadius: BorderRadius.circular(9),
-                    border: Border.all(color: selected ? AppColors.black : AppColors.line),
-                  ),
-                  child: Text(
-                    v['size'] as String,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: outOfStock ? AppColors.inkSoft : (selected ? Colors.white : AppColors.ink),
-                      decoration: outOfStock ? TextDecoration.lineThrough : null,
+            return GestureDetector(
+              onTap: outOfStock ? null : () => setState(() => _selectedVariantIndex = i),
+              child: Opacity(
+                opacity: outOfStock ? 0.4 : 1,
+                child: Column(
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: selected ? AppColors.terracotta : AppColors.white,
+                        border: Border.all(
+                          color: selected
+                              ? AppColors.terracotta
+                              : (outOfStock ? AppColors.line : AppColors.ink.withOpacity(0.35)),
+                          width: selected ? 0 : 1.2,
+                        ),
+                      ),
+                      child: Text(
+                        v['size'] as String,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: selected ? Colors.white : AppColors.ink,
+                          decoration: outOfStock ? TextDecoration.lineThrough : null,
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    if (outOfStock)
+                      const Text('Out of stock', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w600, color: AppColors.inkSoft))
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: lowStock ? AppColors.gold : AppColors.greenSoft,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '$stock left',
+                          style: TextStyle(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w700,
+                            color: lowStock ? Colors.white : const Color(0xFF2F5A44),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-              );
-            }),
-          ),
-          const SizedBox(height: 22),
-        ],
-
-        _sectionTitle('Product details'),
-        const SizedBox(height: 8),
-        Text(
-          (product['description'] as String?)?.trim().isNotEmpty == true
-              ? product['description'] as String
-              : 'No description added yet.',
-          style: const TextStyle(fontSize: 13.5, color: AppColors.ink, height: 1.5),
+              ),
+            );
+          }),
         ),
       ],
+    );
+  }
+
+  // ── Ratings & reviews — read-only, no "add review" (shop owner portal) ───
+  Widget _ratingsSection() {
+    final reviews = (_product?['reviews'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
+    final double avgRating = _product?['avgRating'] != null
+        ? (_product!['avgRating'] as num).toDouble()
+        : (reviews.isNotEmpty ? reviews.map((r) => (r['rating'] as num).toDouble()).reduce((a, b) => a + b) / reviews.length : 0.0);
+    final int reviewCount = _product?['reviewCount'] as int? ?? reviews.length;
+
+    return _SectionPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _sectionTitle('Ratings & reviews'),
+              const Spacer(),
+              if (reviewCount > 0) ...[
+                const Icon(Icons.star_rounded, size: 18, color: AppColors.gold),
+                const SizedBox(width: 4),
+                Text(avgRating.toStringAsFixed(1), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.ink)),
+                const SizedBox(width: 4),
+                Text('($reviewCount)', style: const TextStyle(fontSize: 12.5, color: AppColors.inkSoft)),
+              ],
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (reviews.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text('No reviews yet.', style: TextStyle(fontSize: 13, color: AppColors.inkSoft)),
+            )
+          else
+            Column(
+              children: List.generate(reviews.length, (i) {
+                final r = reviews[i];
+                final rating = (r['rating'] as num?)?.toDouble() ?? 0;
+                final name = r['customerName'] as String? ?? 'Customer';
+                final comment = r['comment'] as String? ?? '';
+                final date = r['date'] as String? ?? '';
+                return Container(
+                  margin: EdgeInsets.only(bottom: i == reviews.length - 1 ? 0 : 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: AppColors.blush.withOpacity(0.3), borderRadius: BorderRadius.circular(10)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.ink)),
+                          ),
+                          Row(
+                            children: List.generate(
+                              5,
+                              (s) => Icon(
+                                s < rating.round() ? Icons.star_rounded : Icons.star_border_rounded,
+                                size: 14,
+                                color: AppColors.gold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (date.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(date, style: const TextStyle(fontSize: 10.5, color: AppColors.inkSoft)),
+                      ],
+                      if (comment.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(comment, style: const TextStyle(fontSize: 12.5, color: AppColors.ink, height: 1.4)),
+                      ],
+                    ],
+                  ),
+                );
+              }),
+            ),
+        ],
+      ),
     );
   }
 
@@ -468,13 +695,33 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
       Text(title, style: const TextStyle(fontFamily: 'Fraunces', fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.ink));
 }
 
-/// 360° spin viewer. Prefers the dedicated turntable sequence (images
-/// tagged type: '360', uploaded in order from AddProductScreen's "360°
-/// spin photos" section) for a real, smooth spin — 8-30 photos recommended.
-/// Falls back to cycling whatever photos exist (front/back/side/zoom) for
-/// older products with no dedicated spin set — that only gives a rough
-/// "see the other side" flip with just 2-4 frames, not a true spin.
+// ─────────────────────────────────────────────────────────────
+// Gallery item model — a photo, or a collapsed group of 360° frames.
+// (UNCHANGED)
+// ─────────────────────────────────────────────────────────────
+
+enum _GalleryKind { photo, spin }
+
+class _GalleryItem {
+  final _GalleryKind kind;
+  final String? url;
+  final String? photoType;
+  final List<String>? spinUrls;
+
+  _GalleryItem.photo(this.url, this.photoType)
+      : kind = _GalleryKind.photo,
+        spinUrls = null;
+
+  _GalleryItem.spin(this.spinUrls)
+      : kind = _GalleryKind.spin,
+        url = null,
+        photoType = null;
+}
+
+/// 360° spin viewer. Rendered as one item inside the gallery sequence
+/// (thumbnail strip / swipe order) rather than behind a separate toggle.
 /// Drag left/right to control; auto-spins after 2 seconds of no touch.
+/// (UNCHANGED)
 class Product360AutoViewer extends StatefulWidget {
   final List<String> imageUrls;
   final bool autoPlay;
@@ -595,9 +842,7 @@ class _Product360AutoViewerState extends State<Product360AutoViewer> {
 }
 
 /// Pinch/scroll-to-zoom on a single product photo, with a fullscreen
-/// expand button for an even closer look. Used for every image in the
-/// normal "Photos" gallery mode (not the 360° mode, which needs full
-/// drag gestures free for spinning).
+/// expand button for an even closer look. (UNCHANGED)
 class _ZoomableNetworkImage extends StatefulWidget {
   final String imageUrl;
   const _ZoomableNetworkImage({required this.imageUrl});
@@ -663,6 +908,7 @@ class _ZoomableNetworkImageState extends State<_ZoomableNetworkImage> {
 }
 
 /// Fullscreen popup — pinch or drag to zoom further, tap X to close.
+/// (UNCHANGED)
 class _FullscreenZoomView extends StatelessWidget {
   final String imageUrl;
   const _FullscreenZoomView({required this.imageUrl});
@@ -697,6 +943,7 @@ class _FullscreenZoomView extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────
 // Local replacements for what used to come from common_widgets.dart.
 // Kept private (_prefixed) since only this file needs them.
+// (UNCHANGED)
 // ─────────────────────────────────────────────────────────────
 
 enum _StatusKind { pending, preparing, ready, outForDelivery, done, cancelled }

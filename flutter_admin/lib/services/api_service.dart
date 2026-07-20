@@ -41,14 +41,11 @@ class ApiService {
   // =========================
   // HEADERS
   // =========================
-
-  static Map<String, String> get headers {
-    return {
-      'Content-Type': 'application/json',
-      if (_token != null && _token!.isNotEmpty)
-        'Authorization': 'Bearer $_token',
-    };
-  }
+  static Map<String, String> get headers => {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    if (_token != null && _token!.isNotEmpty) 'Authorization': 'Bearer $_token',
+  };
 
   static Future<Map<String, dynamic>> get(String endpoint) async {
     final res = await http.get(
@@ -76,8 +73,45 @@ class ApiService {
     return _handle(res);
   }
 
+  // NEW
+  static Future<Map<String, dynamic>> put(
+    String endpoint,
+    Map<String, dynamic> body,
+  ) async {
+    final res = await http.put(
+      Uri.parse('$baseUrl$endpoint'),
+      headers: headers,
+      body: jsonEncode(body),
+    );
+
+    return _handle(res);
+  }
+
+  // NEW
+  static Future<Map<String, dynamic>> delete(String endpoint) async {
+    final res = await http.delete(
+      Uri.parse('$baseUrl$endpoint'),
+      headers: headers,
+    );
+
+    return _handle(res);
+  }
+
   static Map<String, dynamic> _handle(http.Response res) {
-    final body = jsonDecode(res.body);
+    print("STATUS: ${res.statusCode}");
+    print("BODY: ${res.body}");
+
+    Map<String, dynamic> body;
+
+    try {
+      body = jsonDecode(res.body) as Map<String, dynamic>;
+    } on FormatException {
+      throw Exception(
+        'Server returned invalid JSON.\n'
+        'Status: ${res.statusCode}\n'
+        'Body: ${res.body}',
+      );
+    }
 
     if (res.statusCode >= 200 && res.statusCode < 300) {
       return body;

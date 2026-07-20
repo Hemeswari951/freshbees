@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../widgets/app_colors.dart';
 import '../../services/product_service.dart';
@@ -194,7 +195,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
         discountPercent: int.tryParse(_discountCtrl.text.trim()) ?? 0,
         colors: colorsPayload,
       );
-      if (mounted) Navigator.of(context).pop(true); // true = "refresh the list"
+
+      if (mounted) return;
+        context.go('/products');
+
     } catch (e) {
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
