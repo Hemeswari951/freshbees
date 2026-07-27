@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../widgets/app_colors.dart';
+import '../../widgets/t_colors.dart';
 import '../../services/product_service.dart';
-import 'add_product_screen.dart';
 
-/// Shows the product the way a shop owner needs to review it.
+/// Shows the product the way an admin needs to review it.
 ///
 /// Layout:
 /// - Desktop (wide): thumbnails listed left→right ABOVE a big image; click
@@ -12,10 +11,10 @@ import 'add_product_screen.dart';
 /// - Mobile (narrow): gallery is a swipeable PageView (next/prev), with a
 ///   thumbnail strip underneath for quick jumps. Details stack below.
 ///
-/// Right-side detail order: name → sub name (category) → ratings summary →
-/// price (with discount) → colors (shown as each color's own product photo)
-/// → size (tap to select, price updates if that size has its own price) →
-/// small pencil icon per size to adjust stock → product specifications
+/// Right-side detail order: name → sub name (category) → active/inactive
+/// status → ratings summary → price (with discount) → colors
+/// (shown as each color's own product photo) → size (tap to select, price
+/// updates if that size has its own price) → product specifications
 /// (Myntra-style two-column grid) → full product description → ratings &
 /// reviews list at the very bottom.
 ///
@@ -27,22 +26,15 @@ import 'add_product_screen.dart';
 /// and again whenever the owner switches color (each color gets its own
 /// default size selection, since sizes/stock differ per color).
 ///
-/// Size selection vs stock editing are DELIBERATELY separate gestures:
-///  - Tapping the size itself just SELECTS it — exactly like the real
-///    customer-facing product page, where selecting a size can reveal a
-///    different effective price for that size (per-size price override).
-///  - A small pencil icon on the corner of each size chip is the ONLY way
-///    to open the stock editor — so adjusting stock never gets confused
-///    with "the shop owner picked this size to buy it".
+/// NOTE: this screen is FULLY READ-ONLY on the admin side. The admin
+/// backend only exposes list-all-products and get-product-by-id — there
+/// is no status-update endpoint here, so unlike the shop owner's version
+/// of this screen, there is no activate/deactivate button. The status is
+/// shown as a plain pill for visibility only.
 class ProductViewScreen extends StatefulWidget {
   final int productId;
 
-  /// Optional override for what happens when "Edit" is tapped. If not
-  /// provided, defaults to pushing the named route below with the
-  /// productId as argument — adjust the route name to match your app.
-  final void Function(int productId)? onEdit;
-
-  const ProductViewScreen({super.key, required this.productId, this.onEdit});
+  const ProductViewScreen({super.key, required this.productId});
 
   @override
   State<ProductViewScreen> createState() => _ProductViewScreenState();
@@ -86,6 +78,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
       final product = await ProductService.getProductDetail(widget.productId);
       setState(() {
         _product = product;
+        _isActive = product['isActive'] ?? true;
         _loading = false;
       });
       // Once data is in, default-select size 0 for whatever color is
@@ -129,7 +122,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           .toList() ??
       [];
 
-  // The variant the owner has currently SELECTED by tapping a size chip
+  // The variant the admin has currently SELECTED by tapping a size chip
   // (or the auto-selected default — see _defaultSizeSelection).
   Map<String, dynamic>? get _selectedVariant {
     if (_selectedSizeIndex == null) return null;
@@ -155,6 +148,11 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
             : 0.0);
 
   int get _reviewCount => _product?['reviewCount'] as int? ?? _reviews.length;
+
+  // Whether the product is currently active (visible to customers) or
+  // inactive (hidden). Defaults to true if the backend hasn't sent the
+  // field for some reason. Display-only on the admin side — see class note.
+  bool _isActive = true;
 
   // ── Product specifications — everything captured on Add Product that
   // isn't already shown elsewhere on this page. SKU is intentionally
@@ -247,160 +245,37 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
 
   // Tapping a size chip SELECTS it — exactly like a customer choosing a
   // size. Unlike a customer page there's always a default, so tapping the
-  // already-selected size just keeps it selected (no "deselect" state,
-  // since "nothing selected" isn't a real state here once data has
-  // loaded and sizes exist).
+  // already-selected size just keeps it selected.
   void _onSizeTap(int index) {
     setState(() => _selectedSizeIndex = index);
   }
 
-  (String, _StatusKind) _stockPill(String status) {
-    switch (status) {
-      case 'Out of stock':
-        return ('Out of stock', _StatusKind.cancelled);
-      case 'Only few left':
-        return ('Only few left', _StatusKind.pending);
-      default:
-        return ('In stock', _StatusKind.done);
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
     }
-  }
-
-  void _onEditTap() {
-    if (widget.onEdit != null) {
-      widget.onEdit!(widget.productId);
-      return;
-    }
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            AddProductScreen(product: _product ?? {'id': widget.productId}),
-      ),
-    ).then((updated) {
-      if (updated != null) _load();
-    });
-  }
-
-  // ── Stock editing — ONLY reachable via the small pencil icon on a size
-  // chip, never via a plain tap on the size itself (that's reserved for
-  // selection, see _onSizeTap). Updates local state optimistically, calls
-  // the real adjustVariantStock endpoint with a DELTA (not an absolute
-  // value), then refetches the product so the source-of-truth data
-  // (_product) reflects the new stock on the next rebuild.
-  Future<void> _openStockEditor(Map<String, dynamic> variant) async {
-    // ⚠️ Confirm your API's variant id key — this assumes `id`.
-    final variantId = variant['id'] as int;
-    final originalStock = (variant['stock'] as num).toInt();
-
-    final result = await showModalBottomSheet<int>(
-      context: context,
-      backgroundColor: AppColors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => _StockEditorSheet(
-        colorName: _activeColor?['colorName'] as String? ?? '',
-        size: variant['size'] as String,
-        initialStock: originalStock,
-      ),
-    );
-    if (result == null || result == originalStock)
-      return; // cancelled or unchanged
-
-    final delta = result - originalStock;
-
-    // Optimistic update so the sheet closing feels instant.
-    setState(() => variant['stock'] = result);
-
-    try {
-      await ProductService.adjustVariantStock(variantId, delta);
-      // Refetch so _product (the real source of truth) has the updated
-      // stock — the `variant` map here is just a throwaway copy from the
-      // getter and won't be visible on the next rebuild otherwise.
-      await _load();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => variant['stock'] = originalStock);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not update stock: ${e.toString().replaceFirst('Exception: ', '')}',
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: TColors.ink.withOpacity(0.7)),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(onPressed: _load, child: const Text('Retry')),
+            ],
           ),
         ),
       );
     }
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.white,
-      appBar: AppBar(
-        backgroundColor: AppColors.white,
-        elevation: 3,
-        shadowColor: Colors.black.withOpacity(0.15),
-        surfaceTintColor: Colors.transparent,
-        iconTheme: const IconThemeData(color: AppColors.ink),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Text(
-              'Product view',
-              style: TextStyle(
-                fontFamily: 'Fraunces',
-                fontWeight: FontWeight.w600,
-                color: AppColors.ink,
-                fontSize: 16,
-              ),
-            ),
-            Text(
-              'This is how customers see it',
-              style: TextStyle(
-                fontSize: 11.5,
-                color: AppColors.inkSoft,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          if (!_loading && _error == null && _product != null)
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: 'Edit product',
-              onPressed: _onEditTap,
-            ),
-          const SizedBox(width: 6),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _error!,
-                      style: const TextStyle(color: AppColors.inkSoft),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 14),
-                    _AppButton(label: 'Try again', onPressed: _load),
-                  ],
-                ),
-              ),
-            )
-          : _buildContent(),
-    );
-  }
-
-  Widget _buildContent() {
     final product = _product!;
-    final overallStatus = product['stockStatus'] as String? ?? 'In stock';
 
     // Base product price/mrp/discount.
     double price = (product['price'] as num).toDouble();
@@ -430,38 +305,108 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     final items = _galleryItems;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(10),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 900),
-          child: LayoutBuilder(
-            builder: (context, c) {
-              final wide = c.maxWidth >= 640;
-              final gallery = wide
-                  ? _desktopGallery(items)
-                  : _mobileGallery(items);
-              final details = _detailsSection(
-                price,
-                mrp,
-                discountPercent,
-                overallStatus,
-              );
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text("Back"),
+                  ),
 
-              if (wide) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(width: 380, child: gallery),
-                    const SizedBox(width: 32),
-                    Expanded(child: details),
-                  ],
-                );
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [gallery, const SizedBox(height: 24), details],
-              );
-            },
+                  Row(
+                    children: [
+                      Text(
+                        _isActive ? "Active" : "Inactive",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: _isActive ? TColors.green : Colors.red,
+                        ),
+                      ),
+
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _isActive
+                              ? Colors.red
+                              : Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 14,
+                          ),
+                        ),
+                        icon: Icon(
+                          _isActive ? Icons.block : Icons.check_circle,
+                        ),
+                        label: Text(
+                          _isActive ? 'Deactivate Product' : 'Activate Product',
+                        ),
+                        onPressed: () async {
+                          final confirmed = await _showStatusDialog(!_isActive);
+
+                          if (confirmed != true) return;
+
+                          await ProductService.updateProductStatus(
+                            widget.productId,
+                            !_isActive,
+                          );
+
+                          setState(() {
+                            _isActive = !_isActive;
+                          });
+
+                          if (!mounted) return;
+
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                _isActive
+                                    ? 'Product activated successfully'
+                                    : 'Product deactivated successfully',
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 30),
+
+              LayoutBuilder(
+                builder: (context, c) {
+                  final wide = c.maxWidth >= 640;
+                  final gallery = wide
+                      ? _desktopGallery(items)
+                      : _mobileGallery(items);
+                  final details = _detailsSection(price, mrp, discountPercent);
+
+                  if (wide) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(width: 380, child: gallery),
+                        const SizedBox(width: 32),
+                        Expanded(child: details),
+                      ],
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [gallery, const SizedBox(height: 24), details],
+                  );
+                },
+              ),
+            ],
           ),
         ),
       ),
@@ -537,8 +482,8 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                                 height: 6,
                                 decoration: BoxDecoration(
                                   color: active
-                                      ? AppColors.ink
-                                      : AppColors.ink.withOpacity(0.3),
+                                      ? TColors.ink
+                                      : TColors.ink.withOpacity(0.3),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                               );
@@ -591,7 +536,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           boxShadow: active
               ? [
                   BoxShadow(
-                    color: AppColors.terracotta.withOpacity(0.45),
+                    color: TColors.terracotta.withOpacity(0.45),
                     blurRadius: 0,
                     spreadRadius: 2,
                   ),
@@ -602,7 +547,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
         child: Image.network(
           thumbUrl,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(color: AppColors.blush),
+          errorBuilder: (_, __, ___) => Container(color: TColors.blush),
         ),
       ),
     );
@@ -616,20 +561,14 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
   }
 
   Widget _emptyImagePlaceholder() => Container(
-    color: AppColors.blush,
+    color: TColors.blush,
     alignment: Alignment.center,
-    child: const Icon(Icons.checkroom, size: 56, color: AppColors.inkSoft),
+    child: const Icon(Icons.checkroom, size: 56, color: TColors.inkSoft),
   );
 
   // ── Details column ────────────────────────────────────────────────────
-  Widget _detailsSection(
-    double price,
-    double? mrp,
-    int discountPercent,
-    String overallStatus,
-  ) {
+  Widget _detailsSection(double price, double? mrp, int discountPercent) {
     final product = _product!;
-    final (label, kind) = _stockPill(overallStatus);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -641,7 +580,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
             fontFamily: 'Fraunces',
             fontSize: 20,
             fontWeight: FontWeight.w700,
-            color: AppColors.ink,
+            color: TColors.ink,
             height: 1.25,
           ),
         ),
@@ -649,15 +588,17 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
         // Sub name (category) — regular weight, softer gray, more legible
         // than the previous heavy 45% opacity mute.
         Text(
-          product['subCategory'] as String,
+          product['subCategory'] as String? ?? '',
           style: TextStyle(
             fontSize: 14.5,
-            color: AppColors.ink.withOpacity(0.6),
+            color: TColors.ink.withOpacity(0.6),
             fontWeight: FontWeight.w400,
             height: 1.35,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
+
+        const SizedBox(height: 16),
         // Ratings summary — green pill badge + count, matching the
         // Myntra "4.4 ★ | 679 Ratings" treatment.
         if (_reviewCount > 0)
@@ -669,7 +610,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                   vertical: 3.5,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.green,
+                  color: TColors.green,
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Row(
@@ -697,7 +638,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                 '$_reviewCount ${_reviewCount == 1 ? 'Rating' : 'Ratings'}',
                 style: TextStyle(
                   fontSize: 13,
-                  color: AppColors.ink.withOpacity(0.55),
+                  color: TColors.ink.withOpacity(0.55),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -708,7 +649,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
             'No ratings yet',
             style: TextStyle(
               fontSize: 12.5,
-              color: AppColors.ink.withOpacity(0.5),
+              color: TColors.ink.withOpacity(0.5),
             ),
           ),
         Divider(color: Colors.grey.withOpacity(0.45), thickness: 1, height: 20),
@@ -724,7 +665,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
               style: const TextStyle(
                 fontSize: 25,
                 fontWeight: FontWeight.w800,
-                color: AppColors.ink,
+                color: TColors.ink,
                 fontFamily: 'JetBrainsMono',
               ),
             ),
@@ -736,7 +677,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                   'MRP ₹${mrp.toStringAsFixed(0)}',
                   style: TextStyle(
                     fontSize: 15,
-                    color: AppColors.ink.withOpacity(0.4),
+                    color: TColors.ink.withOpacity(0.4),
                     fontWeight: FontWeight.w500,
                     decoration: TextDecoration.lineThrough,
                   ),
@@ -769,8 +710,6 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        // _StatusBadge(text: label, kind: kind),
-        // const SizedBox(height: 24),
 
         // Colors — shown as each color's own product photo, not a dot
         if (_colors.isNotEmpty) ...[
@@ -779,7 +718,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: AppColors.ink,
+              color: TColors.ink,
               letterSpacing: 0.4,
             ),
           ),
@@ -802,13 +741,10 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                         width: 56,
                         height: 70,
                         decoration: BoxDecoration(
-                          // borderRadius: BorderRadius.circular(12),
                           boxShadow: active
                               ? [
                                   BoxShadow(
-                                    color: AppColors.terracotta.withOpacity(
-                                      0.45,
-                                    ),
+                                    color: TColors.terracotta.withOpacity(0.45),
                                     blurRadius: 0,
                                     spreadRadius: 2,
                                   ),
@@ -821,16 +757,16 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                                 coverUrl,
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, __, ___) =>
-                                    Container(color: AppColors.blush),
+                                    Container(color: TColors.blush),
                               )
-                            : Container(color: AppColors.blush),
+                            : Container(color: TColors.blush),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         c['colorName'] as String? ?? '',
                         style: TextStyle(
                           fontSize: 10,
-                          color: AppColors.ink.withOpacity(active ? 0.9 : 0.5),
+                          color: TColors.ink.withOpacity(active ? 0.9 : 0.5),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -843,7 +779,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           const SizedBox(height: 24),
         ],
 
-        _sizeStockSection(),
+        _sizeSection(),
         Divider(color: Colors.grey.withOpacity(0.45), thickness: 1, height: 20),
         const SizedBox(height: 24),
 
@@ -855,7 +791,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
               : 'No description added yet.',
           style: const TextStyle(
             fontSize: 13.5,
-            color: AppColors.ink,
+            color: TColors.ink,
             height: 1.6,
           ),
         ),
@@ -874,13 +810,11 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     );
   }
 
-  // ── Size chart + stock (per size, for the selected color) ────────────────
+  // ── Size chart (read-only for stock) ──────────────────────────────────
   // Tap the size itself to SELECT it (updates price above if this size has
-  // its own price/mrp). Tap the small pencil icon in the corner to open the
-  // stock stepper for that size — these are two separate gestures on
-  // purpose, see the class doc comment. Size 0 is selected by default,
-  // exactly like the color swatch above defaults to index 0.
-  Widget _sizeStockSection() {
+  // its own price/mrp). Size 0 is selected by default, exactly like the
+  // color swatch above defaults to index 0.
+  Widget _sizeSection() {
     final variants = _activeVariants;
     if (variants.isEmpty) return const SizedBox.shrink();
     final totalStock = variants.fold<int>(
@@ -899,7 +833,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: AppColors.ink,
+                color: TColors.ink,
                 letterSpacing: 0.4,
               ),
             ),
@@ -907,19 +841,11 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
               'Total: $totalStock pcs',
               style: TextStyle(
                 fontSize: 11.5,
-                color: AppColors.ink.withOpacity(0.5),
+                color: TColors.ink.withOpacity(0.5),
                 fontWeight: FontWeight.w600,
               ),
             ),
           ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Tap a size to select it · tap the pencil to update stock',
-          style: TextStyle(
-            fontSize: 10.5,
-            color: AppColors.ink.withOpacity(0.65),
-          ),
         ),
         const SizedBox(height: 10),
         Wrap(
@@ -936,70 +862,38 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
               onTap: () => _onSizeTap(i),
               child: Column(
                 children: [
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: 50,
-                        height: 50,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: selected
-                              ? AppColors.terracotta.withOpacity(0.18)
-                              : const Color.fromARGB(
-                                  255,
-                                  246,
-                                  243,
-                                  241,
-                                ).withOpacity(0.5),
-                          border: selected
-                              ? Border.all(
-                                  color: const Color.fromARGB(93, 15, 12, 10),
-                                  width: 1.6,
-                                )
-                              : null,
-                        ),
-                        child: Text(
-                          v['size'] as String,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.ink,
-                            decoration: outOfStock
-                                ? TextDecoration.lineThrough
-                                : null,
-                          ),
-                        ),
+                  Container(
+                    width: 50,
+                    height: 50,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: selected
+                          ? TColors.terracotta.withOpacity(0.18)
+                          : const Color.fromARGB(
+                              255,
+                              246,
+                              243,
+                              241,
+                            ).withOpacity(0.5),
+                      border: selected
+                          ? Border.all(
+                              color: const Color.fromARGB(93, 15, 12, 10),
+                              width: 1.6,
+                            )
+                          : null,
+                    ),
+                    child: Text(
+                      v['size'] as String,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: TColors.ink,
+                        decoration: outOfStock
+                            ? TextDecoration.lineThrough
+                            : null,
                       ),
-                      // Small pencil icon — the ONLY way to open the stock
-                      // editor. Its own GestureDetector so tapping it
-                      // never triggers the size-select behaviour above.
-                      Positioned(
-                        right: -4,
-                        bottom: -4,
-                        child: GestureDetector(
-                          onTap: () => _openStockEditor(v),
-                          child: Container(
-                            width: 22,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              color: AppColors.black,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: AppColors.white,
-                                width: 2,
-                              ),
-                            ),
-                            child: const Icon(
-                              Icons.edit,
-                              size: 11,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -1008,8 +902,8 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                       fontSize: 8.5,
                       fontWeight: FontWeight.w700,
                       color: outOfStock
-                          ? AppColors.ink.withOpacity(0.4)
-                          : (lowStock ? AppColors.gold : AppColors.green),
+                          ? TColors.ink.withOpacity(0.4)
+                          : (lowStock ? TColors.gold : TColors.green),
                     ),
                   ),
                 ],
@@ -1018,6 +912,34 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           }),
         ),
       ],
+    );
+  }
+
+  // Status UPdation Dialog
+
+  Future<bool?> _showStatusDialog(bool makeActive) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(makeActive ? 'Activate Product' : 'Deactivate Product'),
+          content: Text(
+            makeActive
+                ? 'Are you sure you want to activate this product?'
+                : 'Are you sure you want to deactivate this product?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(makeActive ? 'Activate' : 'Deactivate'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1080,7 +1002,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           entry.key,
           style: TextStyle(
             fontSize: 11.5,
-            color: AppColors.ink.withOpacity(0.45),
+            color: TColors.ink.withOpacity(0.45),
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -1089,7 +1011,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           entry.value,
           style: const TextStyle(
             fontSize: 14,
-            color: AppColors.ink,
+            color: TColors.ink,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -1110,10 +1032,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
         if (reviews.isEmpty)
           Text(
             'No reviews yet.',
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.ink.withOpacity(0.5),
-            ),
+            style: TextStyle(fontSize: 13, color: TColors.ink.withOpacity(0.5)),
           )
         else
           Column(
@@ -1138,7 +1057,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                             style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.ink,
+                              color: TColors.ink,
                             ),
                           ),
                         ),
@@ -1150,7 +1069,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                                   ? Icons.star_rounded
                                   : Icons.star_border_rounded,
                               size: 14,
-                              color: AppColors.gold,
+                              color: TColors.gold,
                             ),
                           ),
                         ),
@@ -1162,7 +1081,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                         date,
                         style: TextStyle(
                           fontSize: 10.5,
-                          color: AppColors.ink.withOpacity(0.4),
+                          color: TColors.ink.withOpacity(0.4),
                         ),
                       ),
                     ],
@@ -1172,7 +1091,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                         comment,
                         style: const TextStyle(
                           fontSize: 12.5,
-                          color: AppColors.ink,
+                          color: TColors.ink,
                           height: 1.4,
                         ),
                       ),
@@ -1192,178 +1111,10 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
       fontFamily: 'Fraunces',
       fontSize: 15,
       fontWeight: FontWeight.w700,
-      color: AppColors.ink,
+      color: TColors.ink,
       letterSpacing: 0.3,
     ),
   );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Stock editor bottom sheet — −/+ stepper for one color+size.
-// Pops with the new stock value, or null if cancelled/unchanged.
-// ─────────────────────────────────────────────────────────────
-
-class _StockEditorSheet extends StatefulWidget {
-  final String colorName;
-  final String size;
-  final int initialStock;
-
-  const _StockEditorSheet({
-    required this.colorName,
-    required this.size,
-    required this.initialStock,
-  });
-
-  @override
-  State<_StockEditorSheet> createState() => _StockEditorSheetState();
-}
-
-class _StockEditorSheetState extends State<_StockEditorSheet> {
-  late int _stock = widget.initialStock;
-  bool _saving = false;
-
-  void _step(int delta) {
-    setState(() => _stock = (_stock + delta).clamp(0, 9999));
-  }
-
-  Future<void> _save() async {
-    setState(() => _saving = true);
-    // Small delay just so the button shows a spinner briefly; the actual
-    // network call happens back in the parent after this sheet pops.
-    await Future.delayed(const Duration(milliseconds: 120));
-    if (mounted) Navigator.of(context).pop(_stock);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 24,
-        right: 24,
-        top: 20,
-        bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 18),
-              decoration: BoxDecoration(
-                color: AppColors.line,
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
-          ),
-          Text(
-            '${widget.colorName} · Size ${widget.size}',
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: AppColors.ink,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'Update stock for this size',
-            style: TextStyle(
-              fontSize: 12.5,
-              color: AppColors.ink.withOpacity(0.5),
-            ),
-          ),
-          const SizedBox(height: 22),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _StepButton(
-                icon: Icons.remove,
-                onTap: _stock > 0 ? () => _step(-1) : null,
-              ),
-              SizedBox(
-                width: 90,
-                child: Text(
-                  '$_stock',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.ink,
-                    fontFamily: 'JetBrainsMono',
-                  ),
-                ),
-              ),
-              _StepButton(icon: Icons.add, onTap: () => _step(1)),
-            ],
-          ),
-          const SizedBox(height: 22),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _saving ? null : _save,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.black,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              child: _saving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text(
-                      'Save',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StepButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback? onTap;
-  const _StepButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onTap != null;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 42,
-        height: 42,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: enabled
-              ? AppColors.blush.withOpacity(0.6)
-              : AppColors.blush.withOpacity(0.25),
-        ),
-        child: Icon(
-          icon,
-          size: 18,
-          color: enabled ? AppColors.ink : AppColors.ink.withOpacity(0.3),
-        ),
-      ),
-    );
-  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1466,7 +1217,7 @@ class _Product360AutoViewerState extends State<Product360AutoViewer> {
           fit: BoxFit.cover,
           width: double.infinity,
           errorBuilder: (_, __, ___) => const Center(
-            child: Icon(Icons.broken_image_outlined, color: AppColors.inkSoft),
+            child: Icon(Icons.broken_image_outlined, color: TColors.inkSoft),
           ),
         ),
       ),
@@ -1518,12 +1269,12 @@ class _ZoomableNetworkImageState extends State<_ZoomableNetworkImage> {
             fit: BoxFit.cover,
             width: double.infinity,
             errorBuilder: (_, __, ___) => Container(
-              color: AppColors.blush,
+              color: TColors.blush,
               alignment: Alignment.center,
               child: const Icon(
                 Icons.image_not_supported_outlined,
                 size: 40,
-                color: AppColors.inkSoft,
+                color: TColors.inkSoft,
               ),
             ),
           ),
@@ -1581,92 +1332,6 @@ class _FullscreenZoomView extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Local replacements for what used to come from common_widgets.dart.
-// Kept private (_prefixed) since only this file needs them.
-// ─────────────────────────────────────────────────────────────
-
-enum _StatusKind { pending, preparing, ready, outForDelivery, done, cancelled }
-
-class _StatusBadge extends StatelessWidget {
-  final String text;
-  final _StatusKind kind;
-
-  const _StatusBadge({required this.text, required this.kind});
-
-  @override
-  Widget build(BuildContext context) {
-    late Color bg;
-    late Color fg;
-    switch (kind) {
-      case _StatusKind.pending:
-        bg = const Color(0xFFFBEBD2);
-        fg = const Color(0xFF966A1B);
-        break;
-      case _StatusKind.preparing:
-        bg = AppColors.blueSoft;
-        fg = AppColors.blue;
-        break;
-      case _StatusKind.ready:
-        bg = AppColors.terracottaSoft;
-        fg = AppColors.terracotta;
-        break;
-      case _StatusKind.outForDelivery:
-        bg = AppColors.amberSoft;
-        fg = AppColors.amber;
-        break;
-      case _StatusKind.done:
-        bg = AppColors.greenSoft;
-        fg = const Color(0xFF2F5A44);
-        break;
-      case _StatusKind.cancelled:
-        bg = AppColors.redSoft;
-        fg = const Color(0xFF8C3F32);
-        break;
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
-          color: fg,
-        ),
-      ),
-    );
-  }
-}
-
-class _AppButton extends StatelessWidget {
-  final String label;
-  final IconData? icon;
-  final VoidCallback? onPressed;
-
-  const _AppButton({required this.label, this.icon, this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return ElevatedButton.icon(
-      onPressed: onPressed,
-      icon: icon != null ? Icon(icon, size: 16) : const SizedBox.shrink(),
-      label: Text(label),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.black,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
       ),
     );
   }

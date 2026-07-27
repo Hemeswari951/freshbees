@@ -1,6 +1,5 @@
 const express = require("express");
 const router = express.Router();
-
 const productsController = require("../../controllers/shop_owner/products.controller");
 const shopOwnerAuth = require("../../middleware/shopownerauth");
 const { validateProductImageFields, upload, handleUploadError } = require("../../middleware/upload");
@@ -8,7 +7,6 @@ const { validateProductImageFields, upload, handleUploadError } = require("../..
 // Categories + brands for the Add Product form's dropdowns.
 // NOTE: registered BEFORE '/:id' so "meta" isn't parsed as a product id.
 router.get('/meta/lookup', shopOwnerAuth, productsController.getMeta);
-
 router.get('/', shopOwnerAuth, productsController.getAllProducts);
 router.get('/:id', shopOwnerAuth, productsController.getProductById);
 
@@ -18,7 +16,15 @@ router.get('/:id', shopOwnerAuth, productsController.getProductById);
 // field names ahead of time — they depend on how many colors the owner adds.
 router.post('/', shopOwnerAuth, upload.any(), validateProductImageFields, handleUploadError, productsController.createProduct);
 
-router.put('/:id', shopOwnerAuth, productsController.updateProduct);
+router.put(
+    '/:id',
+    shopOwnerAuth,
+    upload.any(),
+    validateProductImageFields,
+    handleUploadError,
+    productsController.updateProduct
+);
+
 router.patch('/:id/status', shopOwnerAuth, productsController.updateProductStatus);
 
 // Manage stock screen — restock (delta > 0) or correction (delta < 0) on one

@@ -33,11 +33,8 @@ class ShopOwnerLayout extends StatelessWidget {
                       children: [
                         ShopOwnerSidebar(currentPath: currentPath),
                         Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.all(10),
                             child: child,
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -47,10 +44,7 @@ class ShopOwnerLayout extends StatelessWidget {
                 children: [
                   const ShopOwnerHeader(),
                   Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
                       child: child,
-                    ),
                   ),
                 ],
               ),

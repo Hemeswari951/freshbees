@@ -1,8 +1,9 @@
 -- ============================================================================
 -- THIRAA — Multi-Vendor Fashion & Beauty Marketplace
--- Fresh Consolidated Schema (PostgreSQL)
--- Includes: base schema + product_colors migration merged in directly.
--- Run this ONCE against a NEW empty database. No separate migration needed.
+-- Fresh Consolidated Schema (PostgreSQL) — FINAL UPDATED VERSION
+-- Includes: base schema + product_colors + fixed clothing attributes
+--           + EAV product_attributes + tags + variant fixes
+-- Run this ONCE against a NEW empty database.
 -- ============================================================================
 
 -- ─────────────────────────────────────────────────────────────────────────
@@ -38,7 +39,7 @@ CREATE TABLE customers (
     city VARCHAR(100),
     state VARCHAR(100),
     date_of_birth DATE,
-    is_verified BOOLEAN DEFAULT FALSE,    -- verified via OTP or not
+    is_verified BOOLEAN DEFAULT FALSE,
     is_blocked BOOLEAN DEFAULT FALSE,
     last_login TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -82,7 +83,6 @@ CREATE TABLE shops (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-
 CREATE TABLE shop_categories (
     shop_category_id SERIAL PRIMARY KEY,
     shop_id INT NOT NULL REFERENCES shops(shop_id) ON DELETE CASCADE,
@@ -90,6 +90,7 @@ CREATE TABLE shop_categories (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(shop_id, category_id)
 );
+
 -- ─────────────────────────────────────────────────────────────────────────
 -- SHOP OWNERS
 -- ─────────────────────────────────────────────────────────────────────────
@@ -111,7 +112,7 @@ CREATE TABLE shop_owners (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────
--- SHOP BANK DETAILS — Add Shop step 3
+-- SHOP BANK DETAILS
 -- ─────────────────────────────────────────────────────────────────────────
 CREATE TABLE shop_bank_details (
     bank_detail_id SERIAL PRIMARY KEY,
@@ -126,7 +127,7 @@ CREATE TABLE shop_bank_details (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────
--- SHOP SETTINGS — Add Shop step 4
+-- SHOP SETTINGS
 -- ─────────────────────────────────────────────────────────────────────────
 CREATE TABLE shop_settings (
     setting_id SERIAL PRIMARY KEY,
@@ -151,7 +152,7 @@ CREATE TABLE brands (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────
--- PRODUCTS
+-- PRODUCTS  (now includes common clothing attributes + new-arrival flag)
 -- ─────────────────────────────────────────────────────────────────────────
 CREATE TABLE products (
     product_id SERIAL PRIMARY KEY,
@@ -159,20 +160,60 @@ CREATE TABLE products (
     category_id INT REFERENCES categories(category_id),
     brand_id INT REFERENCES brands(brand_id),
     product_name VARCHAR(255) NOT NULL,
+    sku VARCHAR(50) UNIQUE,
     description TEXT,
     sub_category VARCHAR(100),
+
+    -- common clothing attributes (frequently filtered/searched)
+    fabric VARCHAR(100),
+    pattern VARCHAR(50),
+    fit_type VARCHAR(50),
+    sleeve_type VARCHAR(50),
+    neck_type VARCHAR(50),
+    occasion VARCHAR(50),
+    wash_care TEXT,
+    country_of_origin VARCHAR(100) DEFAULT 'India',
+
     mrp NUMERIC(10,2),
     price NUMERIC(10,2) NOT NULL,
     discount_percent INT DEFAULT 0,
+
     is_active BOOLEAN DEFAULT TRUE,
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ─────────────────────────────────────────────────────────────────────────
--- PRODUCT COLORS  (merged in from migration — no longer a separate step)
--- Each product can have multiple colors, each color has its own photos
--- and its own set of size variants.
+-- PRODUCT ATTRIBUTES (EAV) — category-specific extra details only
+-- e.g. Pockets, Closure Type, Heel Height, Sleeve Cuff, etc.
+-- ─────────────────────────────────────────────────────────────────────────
+CREATE TABLE product_attributes (
+    attribute_id   SERIAL PRIMARY KEY,
+    product_id     INT NOT NULL REFERENCES products(product_id) ON DELETE CASCADE,
+    label          VARCHAR(50) NOT NULL,
+    value          VARCHAR(255) NOT NULL,
+    display_order  INT DEFAULT 1,
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- TAGS — for search & filter (e.g. "party wear", "summer collection")
+-- ─────────────────────────────────────────────────────────────────────────
+CREATE TABLE tags (
+    tag_id SERIAL PRIMARY KEY,
+    tag_name VARCHAR(50) UNIQUE NOT NULL
+);
+
+CREATE TABLE product_tags (
+    product_id INT NOT NULL REFERENCES products(product_id) ON DELETE CASCADE,
+    tag_id INT NOT NULL REFERENCES tags(tag_id) ON DELETE CASCADE,
+    PRIMARY KEY (product_id, tag_id)
+);
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- PRODUCT COLORS — each product can have multiple colors, each color has
+-- its own photos and its own set of size variants.
 -- ─────────────────────────────────────────────────────────────────────────
 CREATE TABLE product_colors (
     product_color_id SERIAL PRIMARY KEY,
@@ -183,7 +224,7 @@ CREATE TABLE product_colors (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────
--- PRODUCT IMAGES — tied to a specific color, not just the product
+-- PRODUCT IMAGES — tied to a specific color
 -- image_type: front | back | side | zoom
 -- ─────────────────────────────────────────────────────────────────────────
 CREATE TABLE product_images (
@@ -198,24 +239,25 @@ CREATE TABLE product_images (
 
 -- ─────────────────────────────────────────────────────────────────────────
 -- PRODUCT VARIANTS — stock per size, per color.
--- (fresh db, so the old plain-text `color` column is dropped — everything
--- goes through product_color_id now)
+-- color comes ONLY from product_colors (no duplicate text column).
+-- unique_variant prevents adding the same size twice under one color.
 -- ─────────────────────────────────────────────────────────────────────────
 CREATE TABLE product_variants (
     variant_id SERIAL PRIMARY KEY,
     product_id INT REFERENCES products(product_id) ON DELETE CASCADE,
     product_color_id INT REFERENCES product_colors(product_color_id) ON DELETE CASCADE,
     size VARCHAR(10) NOT NULL,
-    color VARCHAR(50) NOT NULL,
+    sku VARCHAR(50) UNIQUE,
+    -- Approach 1: NULL by default -> falls back to products.price / mrp.
+    -- Only set when this size+color combo needs a different price
+    -- (e.g. XXL costs more, or this color is a premium pick).
+    price NUMERIC(10,2),
+    mrp NUMERIC(10,2),
     stock_quantity INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_variant UNIQUE (product_color_id, size)
 );
-
--- ALTER TABLE product_variants
---     ADD COLUMN IF NOT EXISTS color VARCHAR(50) NOT NULL;
-
 
 -- ─────────────────────────────────────────────────────────────────────────
 -- WISHLIST
@@ -312,7 +354,7 @@ CREATE TABLE payout_items (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────
--- REVIEWS — ratings always averaged from here, never stored statically
+-- REVIEWS
 -- ─────────────────────────────────────────────────────────────────────────
 CREATE TABLE reviews (
     review_id SERIAL PRIMARY KEY,
@@ -339,14 +381,14 @@ CREATE TABLE notifications (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────
--- OTP VERIFICATIONS — forgot password / signup / login OTP flow
+-- OTP VERIFICATIONS
 -- ─────────────────────────────────────────────────────────────────────────
 CREATE TABLE otp_verifications (
     id              SERIAL PRIMARY KEY,
     email           VARCHAR(255) NOT NULL,
-    portal          VARCHAR(20)  NOT NULL,      -- 'customer', 'shop_owner', 'admin'
-    purpose         VARCHAR(30)  NOT NULL,      -- 'login', 'signup', 'password_reset'
-    otp_code        VARCHAR(255) NOT NULL,      -- bcrypt hashed
+    portal          VARCHAR(20)  NOT NULL,
+    purpose         VARCHAR(30)  NOT NULL,
+    otp_code        VARCHAR(255) NOT NULL,
     is_verified     BOOLEAN      DEFAULT false,
     attempts        INT          DEFAULT 0,
     expires_at      TIMESTAMP    NOT NULL,
@@ -356,9 +398,10 @@ CREATE TABLE otp_verifications (
 
 -- ============================================================================
 -- INDEXES
--- ========================================================
+-- ============================================================================
 CREATE INDEX idx_products_shop ON products(shop_id);
 CREATE INDEX idx_products_category ON products(category_id);
+CREATE INDEX idx_product_attributes_product ON product_attributes(product_id);
 CREATE INDEX idx_product_colors_product ON product_colors(product_id);
 CREATE INDEX idx_product_images_color ON product_images(product_color_id);
 CREATE INDEX idx_product_images_product ON product_images(product_id);
@@ -373,7 +416,7 @@ CREATE INDEX idx_reviews_product ON reviews(product_id);
 -- VIEWS — computed on the fly, never stored
 -- ============================================================================
 
--- Average rating per product
+-- -- Average rating per product
 -- CREATE VIEW product_ratings AS
 -- SELECT
 --     p.product_id,
@@ -401,6 +444,20 @@ CREATE INDEX idx_reviews_product ON reviews(product_id);
 --     COALESCE(SUM(stock_quantity), 0) AS total_stock
 -- FROM product_variants
 -- GROUP BY product_id;
+
+-- -- Effective price per variant — resolves the Approach 1 override:
+-- -- uses the variant's own price/mrp if set, otherwise falls back to
+-- -- the product's base price/mrp.
+-- CREATE VIEW variant_effective_price AS
+-- SELECT
+--     pv.variant_id,
+--     pv.product_id,
+--     pv.product_color_id,
+--     pv.size,
+--     COALESCE(pv.price, p.price) AS effective_price,
+--     COALESCE(pv.mrp, p.mrp) AS effective_mrp
+-- FROM product_variants pv
+-- JOIN products p ON p.product_id = pv.product_id;
 
 -- -- Per-shop summary stats — for Shop Detail stat cards / Shops grid
 -- CREATE VIEW shop_stats AS

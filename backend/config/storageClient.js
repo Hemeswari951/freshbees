@@ -20,4 +20,35 @@ async function uploadFile(file, folder, filename) {
   return `/uploads/${folder}/${fullFilename}`;
 }
 
-module.exports = { uploadFile };
+// url looks like "/uploads/products/3/1784803014006_0_front.jpeg" — this
+// is exactly what uploadFile() returns above, so deleteFile() just
+// reverses that same path-building logic to find the file on disk again.
+//
+// Swapping to Cloudflare R2/S3 later: keep this same function signature
+// (deleteFile(url) -> Promise<void>), just swap the body for
+// s3.deleteObject({ Key: ... }) — nothing that calls deleteFile needs to
+// change.
+async function deleteFile(url) {
+  if (!url) return;
+
+  try {
+    // Strip the leading "/uploads/" so we're left with the same
+    // "folder/filename.ext" shape uploadFile() was given.
+    const relative = url.replace(/^\/?uploads\//, '');
+    const fullPath = path.join(UPLOAD_ROOT, relative);
+
+    if (fs.existsSync(fullPath)) {
+      fs.unlinkSync(fullPath);
+    }
+    // If it doesn't exist, silently move on — the file's already gone
+    // (double-delete, manual cleanup, whatever), so this shouldn't fail
+    // the whole update just because of that.
+  } catch (err) {
+    // Don't let a storage cleanup failure block the DB update — log it
+    // and move on. Worst case: one orphaned file on disk, which is a lot
+    // less bad than a failed product update.
+    console.error('Failed to delete file:', url, err);
+  }
+}
+
+module.exports = { uploadFile, deleteFile };

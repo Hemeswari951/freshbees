@@ -62,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
               onRefresh: _refresh,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.all(isDesktop ? 10 : 5),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

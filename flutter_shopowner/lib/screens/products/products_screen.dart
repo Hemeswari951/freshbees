@@ -17,7 +17,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   String? _error;
   List<Map<String, dynamic>> _products = [];
 
-  static const _filters = ['All', 'In stock', 'Low stock', 'Out of stock'];
+  static const _filters = ['All', 'Low stock', 'Out of stock'];
 
   @override
   void initState() {
@@ -44,6 +44,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
     }
   }
 
+  // Pushes AddProductScreen and waits for its result. Note: on a
+  // successful "Review and publish", AddProductScreen no longer just
+  // pops back here — it does `pushReplacement` to ProductViewScreen and
+  // passes `result: true` for THIS push's future, so `added` becomes
+  // true and the list refreshes quietly while the owner is looking at
+  // the product they just published.
   Future<void> _openAddProduct() async {
     final added = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => const AddProductScreen()),
@@ -51,8 +57,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
     if (added == true) _loadProducts();
   }
 
-  // Opens the customer-facing preview (image slider, colors, sizes, price) —
-  // this is what the shop owner sees when they tap a product card/row.
   void _openProductView(Map<String, dynamic> product) {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => ProductViewScreen(productId: product['id'] as int)),
@@ -93,8 +97,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
     }
   }
 
-  // Stock badge is computed from live stock count, not just is_active,
-  // so "Low stock" / "Out of stock" always reflect the real numbers.
   (String, _StatusKind, Color) _stockDisplay(Map<String, dynamic> p) {
     final stock = (p['stock'] as num).toInt();
     final active = p['status'] == 'Active';
@@ -102,6 +104,21 @@ class _ProductsScreenState extends State<ProductsScreen> {
     if (stock == 0) return ('Out of stock', _StatusKind.cancelled, AppColors.red);
     if (stock < 10) return ('Low stock', _StatusKind.pending, AppColors.gold);
     return ('Active', _StatusKind.done, AppColors.green);
+  }
+
+  // Per-VARIANT stock badge — independent of the filter chips/total-stock
+  // logic above. Even if a product's total stock across all its
+  // color/size variants looks fine, a single variant hitting 0 or
+  // dropping under 5 still needs to be flagged on the card, since a
+  // customer could tap into that exact color/size and find it
+  // unavailable. Out-of-stock takes priority over low-stock when a
+  // product has both (e.g. one variant at 0, another at 3).
+  (String, Color)? _variantStockBadge(Map<String, dynamic> p) {
+    final hasOutOfStockVariant = p['hasOutOfStockVariant'] == true;
+    final hasLowStockVariant = p['hasLowStockVariant'] == true;
+    if (hasOutOfStockVariant) return ('Out of stock', AppColors.red);
+    if (hasLowStockVariant) return ('Low stock', AppColors.gold);
+    return null;
   }
 
   List<Map<String, dynamic>> get _filteredProducts {
@@ -118,38 +135,44 @@ class _ProductsScreenState extends State<ProductsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Toolbar
-        Wrap(
-          spacing: 14,
-          runSpacing: 10,
-          crossAxisAlignment: WrapCrossAlignment.center,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Wrap(
-              spacing: 8,
-              children: _filters.map((f) {
-                final active = f == _activeFilter;
-                return ChoiceChip(
-                  label: Text(f == 'All' ? 'All (${_products.length})' : f),
-                  selected: active,
-                  onSelected: (_) => setState(() => _activeFilter = f),
-                  selectedColor: AppColors.black,
-                  backgroundColor: AppColors.white,
-                  labelStyle: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: active ? Colors.white : AppColors.inkSoft,
+            Expanded(
+              child: Wrap(
+                spacing: 14,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    children: _filters.map((f) {
+                      final active = f == _activeFilter;
+                      return ChoiceChip(
+                        label: Text(f == 'All' ? 'All (${_products.length})' : f),
+                        selected: active,
+                        onSelected: (_) => setState(() => _activeFilter = f),
+                        selectedColor: AppColors.black,
+                        backgroundColor: AppColors.white,
+                        labelStyle: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: active ? Colors.white : AppColors.inkSoft,
+                        ),
+                        side: BorderSide(color: active ? AppColors.black : AppColors.line),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      );
+                    }).toList(),
                   ),
-                  side: BorderSide(color: active ? AppColors.black : AppColors.line),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                );
-              }).toList(),
+                  IconButton(
+                    onPressed: _loadProducts,
+                    icon: const Icon(Icons.refresh, size: 18, color: AppColors.inkSoft),
+                    tooltip: 'Refresh',
+                  ),
+                ],
+              ),
             ),
-            IconButton(
-              onPressed: _loadProducts,
-              icon: const Icon(Icons.refresh, size: 18, color: AppColors.inkSoft),
-              tooltip: 'Refresh',
-            ),
-            const Spacer(),
+            const SizedBox(width: 14),
             _AppButton(label: 'Add product', icon: Icons.add, onPressed: _openAddProduct),
           ],
         ),
@@ -192,219 +215,229 @@ class _ProductsScreenState extends State<ProductsScreen> {
         else
           LayoutBuilder(
             builder: (context, constraints) {
-              final bool narrow = constraints.maxWidth < 700;
+              const spacing = 14.0;
+              final width = constraints.maxWidth;
 
-              if (narrow) {
-                const spacing = 12.0;
-                final itemWidth = (constraints.maxWidth - spacing) / 2;
-                return Wrap(
-                  spacing: spacing,
-                  runSpacing: spacing,
-                  children: _filteredProducts
-                      .map((p) => SizedBox(
-                            width: itemWidth,
-                            child: _ProductGridCard(
-                              product: p,
-                              stockDisplay: _stockDisplay(p),
-                              onDelete: () => _confirmDelete(p),
-                              onTap: () => _openProductView(p),
-                            ),
-                          ))
-                      .toList(),
-                );
+              int columns;
+              if (width < 520) {
+                columns = 2;
+              } else if (width < 780) {
+                columns = 3;
+              } else if (width < 1040) {
+                columns = 4;
+              } else if (width < 1320) {
+                columns = 5;
+              } else {
+                columns = 6;
               }
 
-              return _SectionPanel(
-                padding: EdgeInsets.zero,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                    child: DataTable(
-                      columnSpacing: 24,
-                      horizontalMargin: 16,
-                      showCheckboxColumn: false,
-                      headingRowColor: WidgetStateProperty.all(AppColors.white),
-                      dataRowMinHeight: 60,
-                      dataRowMaxHeight: 68,
-                      columns: const [
-                        DataColumn(label: Text('PRODUCT', style: _headStyle)),
-                        DataColumn(label: Text('PRICE', style: _headStyle)),
-                        DataColumn(label: Text('STOCK', style: _headStyle)),
-                        DataColumn(label: Text('STATUS', style: _headStyle)),
-                        DataColumn(label: Text('', style: _headStyle)),
-                      ],
-                      rows: _filteredProducts.map((p) {
-                        final (label, kind, stockColor) = _stockDisplay(p);
-                        final thumbnail = p['thumbnail'] as String?;
-                        return DataRow(
-                          onSelectChanged: (_) => _openProductView(p),
-                          cells: [
-                          DataCell(Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _thumb(thumbnail),
-                              const SizedBox(width: 12),
-                              ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 220),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(p['name'] as String,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: AppColors.ink)),
-                                    Text(p['category'] as String? ?? 'Uncategorized',
-                                        style: const TextStyle(fontSize: 11.5, color: AppColors.inkSoft)),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          )),
-                          DataCell(Text('₹${(p['price'] as num).toStringAsFixed(0)}', style: const TextStyle(fontSize: 13.5))),
-                          DataCell(Text('${p['stock']} units',
-                              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: stockColor))),
-                          DataCell(_StatusBadge(text: label, kind: kind)),
-                          DataCell(Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _actionIcon(Icons.delete_outline, onTap: () => _confirmDelete(p)),
-                            ],
-                          )),
-                        ]);
-                      }).toList(),
-                    ),
-                  ),
-                ),
+              final itemWidth = (width - spacing * (columns - 1)) / columns;
+
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: _filteredProducts
+                    .map((p) => SizedBox(
+                          width: itemWidth,
+                          child: _ProductGridCard(
+                            product: p,
+                            stockDisplay: _stockDisplay(p),
+                            variantStockBadge: _variantStockBadge(p),
+                            onDelete: () => _confirmDelete(p),
+                            onTap: () => _openProductView(p),
+                          ),
+                        ))
+                    .toList(),
               );
             },
           ),
       ],
     );
   }
-
-  static const _headStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.6, color: AppColors.inkSoft);
 }
 
-Widget _thumb(String? relativePath) {
-  return Container(
-    width: 44,
-    height: 44,
-    decoration: BoxDecoration(color: AppColors.blush, borderRadius: BorderRadius.circular(10)),
-    clipBehavior: Clip.antiAlias,
-    alignment: Alignment.center,
-    child: relativePath != null
-        ? Image.network(
-            ProductService.fullImageUrl(relativePath),
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => const Icon(Icons.image_not_supported_outlined, size: 16, color: AppColors.inkSoft),
-          )
-        : const Icon(Icons.checkroom, size: 18, color: AppColors.inkSoft),
-  );
-}
-
-Widget _actionIcon(IconData icon, {VoidCallback? onTap}) {
-  return InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(8),
-    child: Container(
-      width: 30,
-      height: 30,
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        border: Border.all(color: AppColors.line),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Icon(icon, size: 14, color: AppColors.inkSoft),
-    ),
-  );
-}
-
-/// Mobile-width e-commerce style product card, same visual language as
-/// before but now backed by real API data.
 class _ProductGridCard extends StatelessWidget {
   final Map<String, dynamic> product;
   final (String, _StatusKind, Color) stockDisplay;
+  final (String, Color)? variantStockBadge;
   final VoidCallback onDelete;
   final VoidCallback onTap;
 
-  const _ProductGridCard({required this.product, required this.stockDisplay, required this.onDelete, required this.onTap});
+  const _ProductGridCard({
+    required this.product,
+    required this.stockDisplay,
+    required this.variantStockBadge,
+    required this.onDelete,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final (label, kind, stockColor) = stockDisplay;
+    final (_, _, stockColor) = stockDisplay;
     final thumbnail = product['thumbnail'] as String?;
+
+    // --- Price, MRP and Discount calculation logic ---
+    final double sellingPrice = (product['price'] as num?)?.toDouble() ?? 0.0;
+    // Fallback: If 'mrp' doesn't exist yet, we mock it by adding 50% to selling price so the UI works.
+    final double mrp = (product['mrp'] as num?)?.toDouble() ?? (sellingPrice * 1.5);
+    final int discountPercent = mrp > sellingPrice ? ((mrp - sellingPrice) / mrp * 100).toInt() : 0;
+    // --------------------------------------------------
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        border: Border.all(color: AppColors.line),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Stack(
-            children: [
-              AspectRatio(
-                aspectRatio: 1.05,
-                child: Container(
-                  color: AppColors.blush,
-                  alignment: Alignment.center,
-                  child: thumbnail != null
-                      ? Image.network(
-                          ProductService.fullImageUrl(thumbnail),
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          height: double.infinity,
-                          errorBuilder: (_, __, ___) => const Icon(Icons.checkroom, size: 40, color: AppColors.inkSoft),
-                        )
-                      : const Icon(Icons.checkroom, size: 40, color: AppColors.inkSoft),
-                ),
-              ),
-              Positioned(top: 8, left: 8, child: _StatusBadge(text: label, kind: kind)),
-              Positioned(
-                top: 6,
-                right: 6,
-                child: _roundIcon(Icons.delete_outline, onTap: onDelete),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(11, 10, 11, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          border: Border.all(color: AppColors.line),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
               children: [
-                Text(
-                  product['name'] as String,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.ink),
+                AspectRatio(
+                  aspectRatio: 1.05,
+                  child: Container(
+                    color: AppColors.blush,
+                    alignment: Alignment.center,
+                    child: thumbnail != null
+                        ? Image.network(
+                            ProductService.fullImageUrl(thumbnail),
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.checkroom, size: 40, color: AppColors.inkSoft),
+                          )
+                        : const Icon(Icons.checkroom, size: 40, color: AppColors.inkSoft),
+                  ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  product['category'] as String? ?? 'Uncategorized',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, color: AppColors.inkSoft),
+                // Rating badge — bottom-left.
+                Positioned(
+                  bottom: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          product['rating']?.toString() ?? '4.3',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87),
+                        ),
+                        const SizedBox(width: 2),
+                        const Icon(Icons.star, size: 11, color: Colors.teal),
+                        const SizedBox(width: 4),
+                        Container(width: 1, height: 10, color: Colors.grey.shade400),
+                        const SizedBox(width: 4),
+                        Text(
+                          product['reviews']?.toString() ?? '11.6k',
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  '₹${(product['price'] as num).toStringAsFixed(0)}',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.ink, fontFamily: 'JetBrainsMono'),
+                // Stock badge — bottom-right, opposite the rating badge.
+                // Only shown when at least one variant is out of stock
+                // or running low (< 5 units); otherwise the image stays
+                // clean with no badge here.
+                if (variantStockBadge != null)
+                  Positioned(
+                    bottom: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: variantStockBadge!.$2,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        variantStockBadge!.$1,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  top: 6,
+                  right: 6,
+                  child: _roundIcon(Icons.delete_outline, onTap: onDelete),
                 ),
-                const SizedBox(height: 4),
-                Text('${product['stock']} units', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: stockColor)),
               ],
             ),
-          ),
-        ],
-      ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(11, 10, 11, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    product['name'] as String,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.ink),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    product['sub_category'] as String,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: AppColors.inkSoft),
+                  ),
+                  const SizedBox(height: 6),
+
+                  // NEW MYNTRA-STYLE PRICING ROW
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 5, // space between price elements
+                    children: [
+                      Text(
+                        'Rs. ${sellingPrice.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.ink,
+                          fontFamily: 'JetBrainsMono',
+                        ),
+                      ),
+                      if (discountPercent > 0) ...[
+                        Text(
+                          'Rs. ${mrp.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade500,
+                            decoration: TextDecoration.lineThrough,
+                          ),
+                        ),
+                        Text(
+                          '($discountPercent% OFF)',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFFF39C12), // Or deep orange/red to match the offer text
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  //const SizedBox(height: 4),
+
+                  // Text('${product['stock']} units', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: stockColor)),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -421,8 +454,7 @@ class _ProductGridCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Local replacements for what used to come from common_widgets.dart.
-// Kept private (_prefixed) since only this file needs them.
+// Local Status / Panel Classes
 // ─────────────────────────────────────────────────────────────
 
 enum _StatusKind { pending, preparing, ready, outForDelivery, done, cancelled }
