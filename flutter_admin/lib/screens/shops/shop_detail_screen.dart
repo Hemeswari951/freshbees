@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../widgets/t_colors.dart';
 import '../../services/api_service.dart';
 import '../../services/shop_service.dart';
+import '../products/product_view_screen.dart';
+
 import '../../screens/shops/dialogs/edit_shop_info_dialog.dart';
 import '../../screens/shops/dialogs/edit_owner_dialog.dart';
 import '../../screens/shops/dialogs/edit_bank_dialog.dart';
@@ -932,7 +934,8 @@ class _ShopDetailBodyState extends State<_ShopDetailBody>
     final int stock = (p['stock'] as num?)?.toInt() ?? 0;
     final bool outOfStock = stock == 0;
     final bool lowStock = stock > 0 && stock <= 5;
-    final double rating = (p['avgRating'] as num?)?.toDouble() ?? 0;
+    final double rating = (p['avgRating'] as num?)?.toDouble() ?? 4.3;
+    final String reviews = p['reviews']?.toString() ?? '11.6k';
     final double price = (p['price'] as num?)?.toDouble() ?? 0;
     final double mrp = (p['mrp'] as num?)?.toDouble() ?? 0;
     final int discount = mrp > price
@@ -943,58 +946,50 @@ class _ShopDetailBodyState extends State<_ShopDetailBody>
         ? '${ApiService.serverUrl}$imagePath'
         : '';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: TColors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: outOfStock ? const Color(0xFFE05656) : TColors.border,
-          width: outOfStock ? 1.4 : 1,
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ProductViewScreen(productId: p['productId']),
+          ),
+        );
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: TColors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: outOfStock ? const Color(0xFFE05656) : TColors.border,
+            width: outOfStock ? 1.4 : 1,
+          ),
         ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                imagePath == null
-                    ? Container(
-                        color: TColors.cream,
-                        child: const Icon(
-                          Icons.checkroom_outlined,
-                          size: 30,
-                          color: TColors.brownLight,
-                        ),
-                      )
-                    : ColorFiltered(
-                        colorFilter: outOfStock
-                            ? ColorFilter.mode(
-                                Colors.white.withValues(alpha: 0.55),
-                                BlendMode.lighten,
-                              )
-                            : const ColorFilter.mode(
-                                Colors.transparent,
-                                BlendMode.multiply,
-                              ),
-                        child: Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            color: TColors.cream,
-                            child: const Icon(
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Base image
+                  Container(
+                    color: TColors.cream,
+                    alignment: Alignment.center,
+                    child: imagePath != null
+                        ? Image.network(
+                            imageUrl,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                            errorBuilder: (_, __, ___) => const Icon(
                               Icons.checkroom_outlined,
-                              size: 30,
+                              size: 40,
                               color: TColors.brownLight,
                             ),
-                          ),
-                          loadingBuilder: (context, child, progress) {
-                            if (progress == null) return child;
-                            return Container(
-                              color: TColors.cream,
-                              child: const Center(
+                            loadingBuilder: (context, child, progress) {
+                              if (progress == null) return child;
+                              return const Center(
                                 child: SizedBox(
                                   width: 18,
                                   height: 18,
@@ -1002,190 +997,176 @@ class _ShopDetailBodyState extends State<_ShopDetailBody>
                                     strokeWidth: 2,
                                   ),
                                 ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                if (discount > 0 && !outOfStock)
+                              );
+                            },
+                          )
+                        : const Icon(
+                            Icons.checkroom_outlined,
+                            size: 40,
+                            color: TColors.brownLight,
+                          ),
+                  ),
+
+                  // Rating + reviews pill
                   Positioned(
-                    top: 6,
-                    left: 6,
+                    bottom: 8,
+                    left: 8,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 6,
-                        vertical: 2,
+                        vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1D9E75),
+                        color: Colors.white.withOpacity(0.9),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: Text(
-                        '$discount% OFF',
-                        style: const TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          color: TColors.white,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            rating.toStringAsFixed(1),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          const Icon(Icons.star, size: 11, color: Colors.teal),
+                          const SizedBox(width: 4),
+                          Container(
+                            width: 1,
+                            height: 10,
+                            color: Colors.grey.shade400,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            reviews,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                if ((p['category'] as String?) != null)
-                  Positioned(
-                    top: 6,
-                    right: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
+
+                  // Low stock tag
+                  if (lowStock)
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE05656),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'Only $stock left',
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: TColors.white,
+                          ),
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        color: TColors.white.withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(4),
+                    ),
+
+                  // Out of stock overlay
+                  if (outOfStock)
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        color: const Color(0xFFE05656),
+                        child: const Text(
+                          'OUT OF STOCK',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: TColors.white,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                       ),
-                      child: Text(
-                        p['category'] as String,
+                    ),
+                ],
+              ),
+            ),
+
+            // Text details
+            Padding(
+              padding: const EdgeInsets.fromLTRB(11, 10, 11, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    p['productName'] as String? ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: TColors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    p['subCategory'] as String? ?? 'Uncategorized',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: TColors.brownLight,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 5,
+                    children: [
+                      Text(
+                        'Rs. ${price.toStringAsFixed(0)}',
                         style: const TextStyle(
-                          fontSize: 8,
+                          fontSize: 13,
                           fontWeight: FontWeight.w700,
                           color: TColors.black,
                         ),
                       ),
-                    ),
-                  ),
-                if (outOfStock)
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 5),
-                      color: const Color(0xFFE05656),
-                      child: const Text(
-                        'OUT OF STOCK',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          color: TColors.white,
-                          letterSpacing: 0.4,
-                        ),
-                      ),
-                    ),
-                  ),
-                if (lowStock)
-                  Positioned(
-                    bottom: 6,
-                    left: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE05656),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'Only $stock left',
-                        style: const TextStyle(
-                          fontSize: 8,
-                          fontWeight: FontWeight.w700,
-                          color: TColors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 7, 8, 9),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  p['productName'] as String? ?? '',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    height: 1.25,
-                    color: TColors.black,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  p['subCategory'] as String? ?? '',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 9.5,
-                    color: TColors.brownLight,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Row(
-                  children: [
-                    Text(
-                      '₹${price.toStringAsFixed(0)}',
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: TColors.black,
-                      ),
-                    ),
-                    if (discount > 0) ...[
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          '₹${mrp.toStringAsFixed(0)}',
-                          overflow: TextOverflow.ellipsis,
+                      if (discount > 0) ...[
+                        Text(
+                          'Rs. ${mrp.toStringAsFixed(0)}',
                           style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey.shade400,
+                            fontSize: 11,
+                            color: Colors.grey.shade500,
                             decoration: TextDecoration.lineThrough,
                           ),
                         ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1D9E75),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        rating.toStringAsFixed(1),
-                        style: const TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          color: TColors.white,
+                        Text(
+                          '($discount% OFF)',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Color.fromARGB(255, 46, 114, 52),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 1),
-                      const Icon(
-                        Icons.star_rounded,
-                        size: 9,
-                        color: TColors.white,
-                      ),
+                      ],
                     ],
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1819,8 +1800,9 @@ class _ShopDetailBodyState extends State<_ShopDetailBody>
   }
 
   String _formatRevenue(dynamic raw) {
-    final num value =
-        (raw is num) ? raw : num.tryParse(raw?.toString() ?? '') ?? 0;
+    final num value = (raw is num)
+        ? raw
+        : num.tryParse(raw?.toString() ?? '') ?? 0;
     if (value >= 100000) {
       return '₹${(value / 100000).toStringAsFixed(1)}L';
     }

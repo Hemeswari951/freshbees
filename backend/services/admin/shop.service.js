@@ -6,25 +6,25 @@ const mailService = require('../shared/shopowner_welcomemail.service');
 // ── Format DB row → Flutter shape ─────────────────────────────────────────
 function formatShop(row) {
   return {
-    shopId:        row.shop_id,
-    shopName:      row.shop_name,
-    shopLogo:      row.shop_logo    || null,
-    shopBanner:    row.shop_banner  || null,
-    ownerName:     row.owner_name   || '',
-    ownerEmail:    row.owner_email  || '',
-    ownerPhone:    row.owner_phone  || '',
-    location:      row.city         || '',
+    shopId: row.shop_id,
+    shopName: row.shop_name,
+    shopLogo: row.shop_logo || null,
+    shopBanner: row.shop_banner || null,
+    ownerName: row.owner_name || '',
+    ownerEmail: row.owner_email || '',
+    ownerPhone: row.owner_phone || '',
+    location: row.city || '',
     categories: row.category_names
-    ? row.category_names.split(", ")
-    : [],
-    status:        row.is_blocked ? 'Blocked' : 'Active',
-    isBlocked:     row.is_blocked,
-    isActive:      row.is_active,
+      ? row.category_names.split(", ")
+      : [],
+    status: row.is_blocked ? 'Blocked' : 'Active',
+    isBlocked: row.is_blocked,
+    isActive: row.is_active,
     totalProducts: Number(row.total_products || 0),
-    totalOrders:   Number(row.total_orders   || 0),
-    totalRevenue:  Number(row.total_revenue  || 0),
-    avgRating:     Number(row.avg_rating     || 0),
-    createdAt:     row.created_at,
+    totalOrders: Number(row.total_orders || 0),
+    totalRevenue: Number(row.total_revenue || 0),
+    avgRating: Number(row.avg_rating || 0),
+    createdAt: row.created_at,
   };
 }
 
@@ -49,59 +49,59 @@ async function getShopDetail(shopId) {
 
   return {
     ...formatShop(shop),
-    address:        shop.address          || '',
-    state:          shop.state            || '',
-    pincode:        shop.pincode          || '',
-    description:    shop.shop_description || '',
+    address: shop.address || '',
+    state: shop.state || '',
+    pincode: shop.pincode || '',
+    description: shop.shop_description || '',
     ownerLastLogin: shop.owner_last_login,
-    ownerImage:     shop.owner_image,
-    blockedReason:  shop.blocked_reason,
-    blockedAt:      shop.blocked_at,
+    ownerImage: shop.owner_image,
+    blockedReason: shop.blocked_reason,
+    blockedAt: shop.blocked_at,
 
     bankDetails: bank ? {
       accountNumber: bank.account_number,
-      bankName:      bank.bank_name,
-      ifscCode:      bank.ifsc_code,
-      gstNumber:     bank.gst_number || '',
+      bankName: bank.bank_name,
+      ifscCode: bank.ifsc_code,
+      gstNumber: bank.gst_number || '',
     } : null,
 
     settings: settings ? {
-      commissionRate:       Number(settings.commission_rate),
-      activateImmediately:  settings.activate_immediately,
-      sendWelcomeEmail:     settings.send_welcome_email,
-      allowProductUploads:  settings.allow_product_uploads,
+      commissionRate: Number(settings.commission_rate),
+      activateImmediately: settings.activate_immediately,
+      sendWelcomeEmail: settings.send_welcome_email,
+      allowProductUploads: settings.allow_product_uploads,
       enablePayoutRequests: settings.enable_payout_requests,
     } : null,
 
     products: products.map(p => ({
-      productId:   p.product_id,
+      productId: p.product_id,
       productName: p.product_name,
       subCategory: p.sub_category,
-      category:    p.category,
-      price:       Number(p.price),
-      mrp:         p.mrp != null ? Number(p.mrp) : 0,
-      stock:       p.stock,
-      avgRating:   Number(p.avg_rating),
-      image:       p.image,
+      category: p.category,
+      price: Number(p.price),
+      mrp: p.mrp != null ? Number(p.mrp) : 0,
+      stock: p.stock,
+      avgRating: Number(p.avg_rating),
+      image: p.image,
     })),
 
     orders: orders.map(o => ({
-      orderItemId:  o.order_item_id,
-      orderId:      o.order_id,
-      quantity:     o.quantity,
-      price:        Number(o.price),
-      itemStatus:   o.item_status,
-      createdAt:    o.created_at,
-      productName:  o.product_name,
+      orderItemId: o.order_item_id,
+      orderId: o.order_id,
+      quantity: o.quantity,
+      price: Number(o.price),
+      itemStatus: o.item_status,
+      createdAt: o.created_at,
+      productName: o.product_name,
       customerName: o.customer_name,
     })),
 
     payouts: payouts.map(p => ({
-      payoutId:    p.payout_id,
-      amount:      Number(p.amount),
-      method:      p.method,
-      status:      p.status,
-      orderCount:  p.order_count,
+      payoutId: p.payout_id,
+      amount: Number(p.amount),
+      method: p.method,
+      status: p.status,
+      orderCount: p.order_count,
       requestedAt: p.requested_at,
       completedAt: p.completed_at,
     })),
@@ -111,14 +111,14 @@ async function getShopDetail(shopId) {
 // ── Create shop ────────────────────────────────────────────────────────────
 async function createShop(payload, files) {
   // 1. Generate temporary password
-  const rawPassword  = Math.random().toString(36).slice(-8); // e.g. "kx7mz3qw"
+  const rawPassword = Math.random().toString(36).slice(-8); // e.g. "kx7mz3qw"
   const passwordHash = await bcrypt.hash(rawPassword, 10);
 
   // 2. Save everything to DB
   const { shopId } = await shopModel.createShop({
     ...payload,
     passwordHash,
-    logoFile:   files.logo   ? files.logo[0]   : null,
+    logoFile: files.logo ? files.logo[0] : null,
     bannerFile: files.banner ? files.banner[0] : null,
   });
 
@@ -130,9 +130,9 @@ async function createShop(payload, files) {
   if (shouldMail) {
     try {
       await mailService.sendShopOwnerWelcomeMail({
-        ownerName:  payload.ownerName,
+        ownerName: payload.ownerName,
         ownerEmail: payload.ownerEmail,
-        shopName:   payload.shopName,
+        shopName: payload.shopName,
         rawPassword,  // plain text — owner uses this for first login only
       });
     } catch (mailErr) {
@@ -212,4 +212,4 @@ async function updateSettings(shopId, body) {
 }
 
 
-module.exports = { getAllShops, createShop, getShopDetail, updateShopStatus, updateBasicInfo, updateOwnerInfo,updateBankInfo, updateSettings };
+module.exports = { getAllShops, createShop, getShopDetail, updateShopStatus, updateBasicInfo, updateOwnerInfo, updateBankInfo, updateSettings };
