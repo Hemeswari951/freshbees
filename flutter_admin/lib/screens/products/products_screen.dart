@@ -21,6 +21,7 @@ class ProductsScreen extends StatefulWidget {
 class _ProductsScreenState extends State<ProductsScreen> {
   bool _isLoading = true;
   String? _error;
+  int? _hoveredIndex;
 
   // Every product, every shop — already flat, already tagged with shop
   // context (shopId/shopName) by the backend.
@@ -147,8 +148,21 @@ class _ProductsScreenState extends State<ProductsScreen> {
       onRefresh: _loadAllProducts,
       child: CustomScrollView(
         slivers: [
-          SliverToBoxAdapter(child: _statsRow()),
-          SliverToBoxAdapter(child: _controlsRow()),
+          SliverToBoxAdapter(
+            child: Container(
+              decoration: BoxDecoration(
+                color: TColors.cream,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 12,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Column(children: [_statsRow(), _controlsRow()]),
+            ),
+          ),
           if (products.isEmpty)
             SliverFillRemaining(
               hasScrollBody: false,
@@ -166,7 +180,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
               sliver: SliverLayoutBuilder(
                 builder: (context, constraints) {
                   final width = constraints.crossAxisExtent;
@@ -175,22 +189,18 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     columns = 2;
                   } else if (width < 780) {
                     columns = 3;
-                  } else if (width < 1040) {
-                    columns = 4;
-                  } else if (width < 1320) {
-                    columns = 5;
                   } else {
-                    columns = 6;
+                    columns = 4;
                   }
                   return SliverGrid(
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: columns,
                       childAspectRatio: 0.62,
-                      crossAxisSpacing: 14,
-                      mainAxisSpacing: 14,
+                      crossAxisSpacing: 30,
+                      mainAxisSpacing: 30,
                     ),
                     delegate: SliverChildBuilderDelegate(
-                      (context, i) => _productCard(products[i]),
+                      (context, i) => _productCard(products[i], i),
                       childCount: products.length,
                     ),
                   );
@@ -205,7 +215,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   // ── Header stats ────────────────────────────────────────────────────────
   Widget _statsRow() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
       child: Row(
         children: [
           _statCard(
@@ -296,7 +306,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   // ── Search + filters ────────────────────────────────────────────────────
   Widget _controlsRow() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -349,11 +359,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
               IconButton(
                 onPressed: _loadAllProducts,
-                icon: const Icon(
-                  Icons.refresh,
-                  size: 18,
-                  color: TColors.brownLight,
-                ),
+                icon: const Icon(Icons.refresh, size: 18, color: TColors.black),
                 tooltip: 'Refresh',
               ),
             ],
@@ -438,7 +444,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   // ── Product card (Matches ShopOwner styling + Right-aligned stock tag) ──
-  Widget _productCard(Map<String, dynamic> p) {
+  Widget _productCard(Map<String, dynamic> p, int index) {
     final int stock = (p['stock'] as num?)?.toInt() ?? 0;
     final bool outOfStock = p['hasOutOfStock'] == true;
     final bool lowStock = !outOfStock && p['hasLowStock'] == true;
@@ -463,197 +469,215 @@ class _ProductsScreenState extends State<ProductsScreen> {
     final String shopName = p['shopName'] as String? ?? 'Unknown Shop';
     final int shopId = p['shopId'] as int? ?? 0;
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ProductViewScreen(productId: p['productId']),
-          ),
-        );
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) {
+        setState(() => _hoveredIndex = index);
       },
+      onExit: (_) {
+        setState(() => _hoveredIndex = null);
+      },
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ProductViewScreen(productId: p['productId']),
+            ),
+          );
+        },
 
-      child: Container(
-        decoration: BoxDecoration(
-          color: TColors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: outOfStock ? const Color(0xFFE05656) : TColors.border,
-            width: outOfStock ? 1.4 : 1,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          decoration: BoxDecoration(
+            boxShadow: _hoveredIndex == index
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 2,
+                      spreadRadius: 1,
+                      offset: const Offset(0, 8),
+                    ),
+                  ]
+                : [],
           ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // Base Image
-                  Container(
-                    color: TColors.cream,
-                    alignment: Alignment.center,
-                    child: imagePath != null
-                        ? Image.network(
-                            imageUrl,
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
-                            errorBuilder: (_, __, ___) => const Icon(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Base Image
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(10, 18, 10, 10),
+                      // color: TColors.cream,
+                      alignment: Alignment.center,
+                      child: imagePath != null
+                          ? Image.network(
+                              imageUrl,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                Icons.checkroom_outlined,
+                                size: 40,
+                                color: TColors.brownLight,
+                              ),
+                              loadingBuilder: (context, child, progress) {
+                                if (progress == null) return child;
+                                return const Center(
+                                  child: SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                );
+                              },
+                            )
+                          : const Icon(
                               Icons.checkroom_outlined,
                               size: 40,
                               color: TColors.brownLight,
                             ),
-                            loadingBuilder: (context, child, progress) {
-                              if (progress == null) return child;
-                              return const Center(
-                                child: SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              );
-                            },
-                          )
-                        : const Icon(
-                            Icons.checkroom_outlined,
-                            size: 40,
-                            color: TColors.brownLight,
-                          ),
-                  ),
-
-                  // White Rating & Reviews pill
-                  Positioned(
-                    bottom: 8,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            rating.toStringAsFixed(1),
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          const SizedBox(width: 2),
-                          const Icon(Icons.star, size: 11, color: Colors.teal),
-                          const SizedBox(width: 4),
-                          Container(
-                            width: 1,
-                            height: 10,
-                            color: Colors.grey.shade400,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            reviews,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
-                  ),
 
-                  // Low Stock Tag
-                  if (lowStock)
+                    // White Rating & Reviews pill
                     Positioned(
-                      bottom: 8,
-                      right: 8,
+                      bottom: 15,
+                      left: 15,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 6,
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE05656),
+                          color: Colors.white.withOpacity(0.9),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: Text(
-                          'Only $stock left',
-                          style: const TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: TColors.white,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              rating.toStringAsFixed(1),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            const Icon(
+                              Icons.star,
+                              size: 11,
+                              color: Colors.teal,
+                            ),
+                            const SizedBox(width: 4),
+                            Container(
+                              width: 1,
+                              height: 10,
+                              color: Colors.grey.shade400,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              reviews,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
 
-                  // Out of Stock Overlay
-                  if (outOfStock)
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        color: const Color(0xFFE05656),
-                        child: const Text(
-                          'OUT OF STOCK',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: TColors.white,
-                            letterSpacing: 0.5,
+                    // Low Stock Tag
+                    if (lowStock)
+                      Positioned(
+                        bottom: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE05656),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Only $stock left',
+                            style: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: TColors.white,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                ],
+
+                    // Out of Stock Overlay
+                    if (outOfStock)
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          color: const Color(0xFFE05656),
+                          child: const Text(
+                            'OUT OF STOCK',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: TColors.white,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
 
-            // Text Details Section
-            Padding(
-              padding: const EdgeInsets.fromLTRB(11, 10, 11, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Product Name
-                  Text(
-                    p['productName'] as String? ?? '',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: TColors.black,
+              // Text Details Section
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Product Name
+                    Text(
+                      p['productName'] as String? ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: TColors.black,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
+                    const SizedBox(height: 2),
 
-                  // Product Category
-                  Text(
-                    p['subCategory'] as String? ?? 'Uncategorized',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: TColors.brownLight,
+                    // Product Category
+                    Text(
+                      p['subCategory'] as String? ?? 'Uncategorized',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: TColors.black,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
+                    const SizedBox(height: 4),
 
-                  // Shop Name (Restored - highly recommended for Admin screen)
-                  /*Row(
+                    // Shop Name (Restored - highly recommended for Admin screen)
+                    /*Row(
                     children: [
                       const Icon(Icons.storefront_outlined, size: 11, color: TColors.brownLight),
                       const SizedBox(width: 3),
@@ -669,43 +693,44 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   ),
                   const SizedBox(height: 6),*/
 
-                  // Myntra-style Pricing Row
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 5,
-                    children: [
-                      Text(
-                        'Rs. ${sellingPrice.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: TColors.black,
-                        ),
-                      ),
-                      if (discountPercent > 0) ...[
+                    // Myntra-style Pricing Row
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 5,
+                      children: [
                         Text(
-                          'Rs. ${mrp.toStringAsFixed(0)}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade500,
-                            decoration: TextDecoration.lineThrough,
-                          ),
-                        ),
-                        Text(
-                          '($discountPercent% OFF)',
+                          'Rs. ${sellingPrice.toStringAsFixed(0)}',
                           style: const TextStyle(
-                            fontSize: 11,
+                            fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: Color.fromARGB(255, 46, 114, 52),
+                            color: TColors.black,
                           ),
                         ),
+                        if (discountPercent > 0) ...[
+                          Text(
+                            'Rs. ${mrp.toStringAsFixed(0)}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade500,
+                              decoration: TextDecoration.lineThrough,
+                            ),
+                          ),
+                          Text(
+                            '($discountPercent% OFF)',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color.fromARGB(255, 46, 114, 52),
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -305,110 +305,130 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     final items = _galleryItems;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(10),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 900),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back),
-                    label: const Text("Back"),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            decoration: BoxDecoration(
+              color: TColors.cream,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5), // bottom shadow
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                _ShadowIconButton(
+                  icon: Icons.arrow_back,
+                  onTap: () => Navigator.pop(context),
+                ),
+
+                const Spacer(),
+
+                Text(
+                  _isActive ? "Active" : "Inactive",
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: _isActive ? TColors.green : Colors.red,
                   ),
+                ),
 
-                  Row(
-                    children: [
-                      Text(
-                        _isActive ? "Active" : "Inactive",
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: _isActive ? TColors.green : Colors.red,
-                        ),
-                      ),
+                const SizedBox(width: 15),
 
-                      const SizedBox(width: 10),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _isActive
-                              ? Colors.red
-                              : Colors.green,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 18,
-                            vertical: 14,
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isActive ? Colors.red : Colors.green,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 14,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: Icon(_isActive ? Icons.block : Icons.check_circle),
+                  label: Text(
+                    _isActive ? 'Deactivate Product' : 'Activate Product',
+                  ),
+                  onPressed: () async {
+                    final confirmed = await _showStatusDialog(!_isActive);
+
+                    if (confirmed != true) return;
+                    try {
+                      await ProductService.updateProductStatus(
+                        widget.productId,
+                        !_isActive,
+                      );
+
+                      if (!mounted) return;
+
+                      setState(() {
+                        _isActive = !_isActive;
+                      });
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            _isActive
+                                ? 'Product activated successfully'
+                                : 'Product deactivated successfully',
                           ),
                         ),
-                        icon: Icon(
-                          _isActive ? Icons.block : Icons.check_circle,
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(e.toString()),
+                          backgroundColor: Colors.red,
                         ),
-                        label: Text(
-                          _isActive ? 'Deactivate Product' : 'Activate Product',
-                        ),
-                        onPressed: () async {
-                          final confirmed = await _showStatusDialog(!_isActive);
-
-                          if (confirmed != true) return;
-
-                          await ProductService.updateProductStatus(
-                            widget.productId,
-                            !_isActive,
-                          );
-
-                          setState(() {
-                            _isActive = !_isActive;
-                          });
-
-                          if (!mounted) return;
-
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                _isActive
-                                    ? 'Product activated successfully'
-                                    : 'Product deactivated successfully',
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 30),
-
-              LayoutBuilder(
-                builder: (context, c) {
-                  final wide = c.maxWidth >= 640;
-                  final gallery = wide
-                      ? _desktopGallery(items)
-                      : _mobileGallery(items);
-                  final details = _detailsSection(price, mrp, discountPercent);
-
-                  if (wide) {
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(width: 380, child: gallery),
-                        const SizedBox(width: 32),
-                        Expanded(child: details),
-                      ],
-                    );
-                  }
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [gallery, const SizedBox(height: 24), details],
-                  );
-                },
-              ),
-            ],
+                      );
+                    }
+                  },
+                ),
+              ],
+            ),
           ),
-        ),
+
+          const SizedBox(height: 30),
+
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: MediaQuery.of(context).size.width >= 640 ? 32 : 16,
+              vertical: 10,
+            ),
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final wide = c.maxWidth >= 640;
+                final gallery = wide
+                    ? _desktopGallery(items)
+                    : _mobileGallery(items);
+                final details = _detailsSection(price, mrp, discountPercent);
+
+                if (wide) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 480, child: gallery),
+                      const SizedBox(width: 32),
+                      Expanded(child: details),
+                    ],
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [gallery, const SizedBox(height: 24), details],
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -714,7 +734,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
         // Colors — shown as each color's own product photo, not a dot
         if (_colors.isNotEmpty) ...[
           Text(
-            'MORE COLORS',
+            'COLORS',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
@@ -738,7 +758,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                   child: Column(
                     children: [
                       Container(
-                        width: 56,
+                        width: 65,
                         height: 70,
                         decoration: BoxDecoration(
                           boxShadow: active
@@ -813,7 +833,9 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
   // ── Size chart (read-only for stock) ──────────────────────────────────
   // Tap the size itself to SELECT it (updates price above if this size has
   // its own price/mrp). Size 0 is selected by default, exactly like the
-  // color swatch above defaults to index 0.
+  // color swatch above defaults to index 0. Every chip carries its own
+  // border now — selected gets a bolder/darker one, the rest get a soft
+  // neutral outline so unselected sizes still read as tappable chips.
   Widget _sizeSection() {
     final variants = _activeVariants;
     if (variants.isEmpty) return const SizedBox.shrink();
@@ -876,12 +898,12 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                               243,
                               241,
                             ).withOpacity(0.5),
-                      border: selected
-                          ? Border.all(
-                              color: const Color.fromARGB(93, 15, 12, 10),
-                              width: 1.6,
-                            )
-                          : null,
+                      border: Border.all(
+                        color: selected
+                            ? const Color.fromARGB(93, 15, 12, 10)
+                            : TColors.ink.withOpacity(0.18),
+                        width: selected ? 1.6 : 1.0,
+                      ),
                     ),
                     child: Text(
                       v['size'] as String,
@@ -1118,6 +1140,30 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Small reusable icon-only button with a soft shadow — used for the
+// back button so it doesn't carry an outline or text label.
+// ─────────────────────────────────────────────────────────────
+class _ShadowIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _ShadowIconButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      customBorder: const CircleBorder(),
+      onTap: onTap,
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: Center(child: Icon(icon, color: TColors.ink, size: 22)),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Gallery item model — a photo, or a collapsed group of 360° frames.
 // ─────────────────────────────────────────────────────────────
 
@@ -1162,9 +1208,11 @@ class _Product360AutoViewerState extends State<Product360AutoViewer> {
   @override
   void initState() {
     super.initState();
-    for (final url in widget.imageUrls) {
-      precacheImage(NetworkImage(url), context);
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final url in widget.imageUrls) {
+        precacheImage(NetworkImage(url), context);
+      }
+    });
     if (widget.autoPlay) _startAuto();
   }
 
