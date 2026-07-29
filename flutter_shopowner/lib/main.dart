@@ -26,7 +26,7 @@ import '../screens/profile/profile_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await ApiService.loadToken(); // <-- ADD THIS
+  await ApiService.loadToken();
 
   runApp(const ThiraaShopOwner());
 }
