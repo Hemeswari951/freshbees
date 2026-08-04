@@ -86,8 +86,14 @@ class _ShopsBodyState extends State<_ShopsBody> {
 
   // ── Initials from shop name  "Ravi's Fashion" → "RF" ─────────────────────
   String _initials(String name) {
-    final parts = name.trim().split(' ');
-    if (parts.length == 1) return parts[0][0].toUpperCase();
+    if (name.trim().isEmpty) return "?";
+
+    final parts = name.trim().split(" ");
+
+    if (parts.length == 1) {
+      return parts[0][0].toUpperCase();
+    }
+
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
 
@@ -414,10 +420,10 @@ class _ShopsBodyState extends State<_ShopsBody> {
   Widget _buildCard(Map<String, dynamic> shop, int index) {
     final hovered = hoveredCard == index;
     final isBlocked = shop['status'] == 'Blocked';
-    final int shopId = shop['shopId'] as int;
+    final int shopId = (shop['shopId'] ?? 0) as int;
     final avatarColor = _avatarColor(shopId);
     final bannerColor = _bannerColor(shopId);
-    final initials = _initials(shop['shopName'] as String);
+    final initials = _initials(shop['shopName']?.toString() ?? '');
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -507,7 +513,9 @@ class _ShopsBodyState extends State<_ShopsBody> {
                           ),
                           const SizedBox(width: 2),
                           Text(
-                            (shop['avgRating'] as num).toStringAsFixed(1),
+                            ((shop['avgRating'] ?? 0) as num).toStringAsFixed(
+                              1,
+                            ),
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -634,7 +642,7 @@ class _ShopsBodyState extends State<_ShopsBody> {
                         const SizedBox(width: 3),
                         Expanded(
                           child: Text(
-                             (shop['categories'] as List).join(", "),
+                            (shop['categories'] as List).join(", "),
                             style: const TextStyle(
                               fontSize: 12,
                               color: TColors.brownLight,

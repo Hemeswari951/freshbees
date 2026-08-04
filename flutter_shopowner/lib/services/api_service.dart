@@ -1,10 +1,31 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:io';
+
+class AppConfig {
+  static const bool isDevelopment = true;
+
+  static String get serverUrl {
+    if (isDevelopment) {
+      if (kIsWeb) return 'http://localhost:3000';
+
+      if (Platform.isAndroid) {
+        return 'http://10.0.2.2:3000';
+      }
+
+      return 'http://localhost:3000';
+    }
+
+    // Production
+    return 'https://api.thiraa.com';
+  }
+}
 
 class ApiService {
-  static const String serverUrl = 'http://localhost:3000';
-  static const String baseUrl = '$serverUrl/api/shop-owner';
+  static String get serverUrl => AppConfig.serverUrl;
+  static String get baseUrl => '$serverUrl/api/shop-owner';
 
   static String? _token;
 

@@ -78,7 +78,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           /// Background
           Positioned.fill(
             child: Image.asset(
-              "assets/images/forgot_bg.png",
+              "assets/images/forgot.jpeg",
               fit: BoxFit.cover,
             ),
           ),

@@ -9,6 +9,7 @@ class ShopService {
   // ── Get all shops (ShopsScreen) ──────────────────────────────────────────
   static Future<List<Map<String, dynamic>>> getAllShops() async {
     final res = await ApiService.get('/shops');
+
     return List<Map<String, dynamic>>.from(res['data']);
   }
 

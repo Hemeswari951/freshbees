@@ -20,7 +20,7 @@ const DISCOUNT_SQL = `
 // product grid. Thumbnail picks the FRONT image of the FIRST color a shop
 // owner added (falls back to any image if front wasn't uploaded), so cards
 // always show a consistent angle instead of a random photo.
-async function findAllProducts(shopId) {
+async function findAllByShop(shopId) {
   const { rows } = await pool.query(
     `SELECT
        p.product_id, p.product_name, p.sku, p.description, p.sub_category,
@@ -66,7 +66,7 @@ async function findAllProducts(shopId) {
 // front/back/side/zoom) and its own size/stock rows, PLUS tags and
 // category-specific extra attributes. Powers the product detail screen
 // (owner side) and the customer PDP.
-async function findProductById(productId, shopId) {
+async function findByIdAndShop(productId, shopId) {
   const { rows } = await pool.query(
     `SELECT p.*,
        ${DISCOUNT_SQL.replace(/mrp/g, 'p.mrp').replace(/price/g, 'p.price')} AS discount_percent,
@@ -366,7 +366,7 @@ async function adjustVariantStock(variantId, shopId, delta) {
 // variant diffing, color diffing, tag/attribute full-replace).
 // ─────────────────────────────────────────────────────────────────────
 
-// Same shape as the color-loop inside findProductById, but standalone
+// Same shape as the color-loop inside findByIdAndShop, but standalone
 // (no shop_id re-check — caller already confirmed productId belongs to
 // this shop via updateByShop's WHERE clause) and returns raw image rows
 // (image_id + image_url) so updateForShop can diff old vs. kept URLs.
@@ -474,8 +474,8 @@ async function replaceProductAttributes(productId, attributes) {
 
 module.exports = {
   IMAGE_TYPES,
-  findAllProducts,
-  findProductById,
+  findAllByShop,
+  findByIdAndShop,
   create,
   generateAndSetSku,
   addColor,
