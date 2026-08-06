@@ -16,14 +16,11 @@ router.get('/:id', shopOwnerAuth, productsController.getProductById);
 // field names ahead of time — they depend on how many colors the owner adds.
 router.post('/', shopOwnerAuth, upload.any(), validateProductImageFields, handleUploadError, productsController.createProduct);
 
-router.put(
-    '/:id',
-    shopOwnerAuth,
-    upload.any(),
-    validateProductImageFields,
-    handleUploadError,
-    productsController.updateProduct
-);
+// Edit flow — ALSO multipart now, same as POST, since the owner may
+// replace/add photos while editing (new file fields color_<index>_<angle>
+// / color_<index>_360_<frame>) alongside the JSON `colors` field that
+// carries existingImages/existingSpin360 (which photos to keep).
+router.put('/:id', shopOwnerAuth, upload.any(), validateProductImageFields, handleUploadError, productsController.updateProduct);
 
 router.patch('/:id/status', shopOwnerAuth, productsController.updateProductStatus);
 

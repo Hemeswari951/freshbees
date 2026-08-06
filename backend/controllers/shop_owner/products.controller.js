@@ -21,7 +21,7 @@ async function getMeta(req, res) {
 // GET /api/shop/products  (shopId comes from the logged-in owner's JWT, NOT the URL)
 async function getAllProducts(req, res) {
   try {
-    const products = await productService.getAllProducts(req.shopOwner.shopId);
+    const products = await productService.getAllForShop(req.shopOwner.shopId);
     res.json({ success: true, data: products });
   } catch (err) {
     console.error(err);
@@ -33,7 +33,7 @@ async function getAllProducts(req, res) {
 async function getProductById(req, res) {
   try {
     const id = Number(req.params.id);
-    const product = await productService.getProductById(id, req.shopOwner.shopId);
+    const product = await productService.getOneForShop(id, req.shopOwner.shopId);
     if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
     res.json({ success: true, data: product });
   } catch (err) {
@@ -206,66 +206,6 @@ async function createProduct(req, res) {
   }
 }
 
-// PUT /api/shop/products/:id
-// ⚠️ This is the endpoint AddProductScreen's edit flow (_submitEdit) is
-// meant to call once its "BACKEND TODO" comment is wired up
-// (ProductService.updateProduct(...) on the Flutter side). This currently
-// only updates the fixed product columns — it does NOT touch colors,
-// since the edit form's color section is disabled until colors are
-// prefilled from a real full-detail response (see _isEditing comments
-// in AddProductScreen).
-
-// PATCH /api/shop/products/:id/status  body: { status: "Active" | "Inactive" }
-async function updateProductStatus(req, res) {
-  try {
-    const id = Number(req.params.id);
-    const { status } = req.body;
-    if (!['Active', 'Inactive'].includes(status)) {
-      return res.status(400).json({ success: false, message: "status must be 'Active' or 'Inactive'" });
-    }
-    const product = await productService.setActiveForShop(id, req.shopOwner.shopId, status === 'Active');
-    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
-    res.json({ success: true, data: product });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Failed to update status' });
-  }
-}
-
-// PATCH /api/shop/products/variants/:variantId/stock  body: { delta: 5 } or { delta: -2 }
-// This is the "Manage stock" screen endpoint — restock (positive delta) or
-// manual correction (negative delta). Never creates a new product/variant.
-// Matches Flutter's ProductService.adjustVariantStock(variantId, delta),
-// called from ProductViewScreen._openStockEditor.
-async function adjustStock(req, res) {
-  try {
-    const variantId = Number(req.params.variantId);
-    const delta = Number(req.body.delta);
-    if (!Number.isFinite(delta) || delta === 0) {
-      return res.status(400).json({ success: false, message: 'delta must be a non-zero number' });
-    }
-    const variant = await productService.adjustStockForShop(variantId, req.shopOwner.shopId, delta);
-    if (!variant) return res.status(404).json({ success: false, message: 'Variant not found' });
-    res.json({ success: true, data: variant });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Failed to adjust stock' });
-  }
-}
-
-// DELETE /api/shop/products/:id
-async function deleteProduct(req, res) {
-  try {
-    const id = Number(req.params.id);
-    const deleted = await productService.deleteForShop(id, req.shopOwner.shopId);
-    if (!deleted) return res.status(404).json({ success: false, message: 'Product not found' });
-    res.json({ success: true, message: 'Product deleted' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Failed to delete product' });
-  }
-}
-
 // PUT /api/shop/products/:id  (multipart/form-data — same shape as createProduct)
 //
 // colors[] here can have:
@@ -277,6 +217,11 @@ async function deleteProduct(req, res) {
 // New files use the SAME field-name convention as createProduct:
 //   color_<index>_<front|back|side|zoom>   -> replaces that angle
 //   color_<index>_360_<frame>              -> appended after existingSpin360
+//
+// The actual diff logic (which old images/variants/colors get deleted
+// from storage + DB vs. kept/updated) lives in productService.updateForShop
+// — this controller's job is just: parse multipart body, upload any new
+// files, and hand a clean payload to the service.
 async function updateProduct(req, res) {
   try {
     const id = Number(req.params.id);
@@ -318,10 +263,13 @@ async function updateProduct(req, res) {
 
     const shopId = req.shopOwner.shopId;
 
-    // newImages[type] / newSpin[] collected per color, same pattern as createProduct
+    // newImages[]/newSpin[] collected per color, same pattern as
+    // createProduct — but kept SEPARATE from existingImages/existingSpin360
+    // (which arrive already inside each color object from the JSON body)
+    // so the service layer can tell "freshly uploaded" apart from "kept".
     for (const color of colors) {
-      color.newImages = [];    // [{ url, type }]  — freshly uploaded angle photos
-      color.newSpin = [];      // [{ url, frameIndex }] — freshly uploaded 360 frames
+      color.newImages = []; // [{ url, type }] — freshly uploaded angle photos
+      color.newSpin = [];   // [{ url, type: '360' }] — freshly uploaded 360 frames
     }
 
     const spinByColor = {};
@@ -391,6 +339,57 @@ async function updateProduct(req, res) {
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: 'Failed to update product' });
+  }
+}
+
+// PATCH /api/shop/products/:id/status  body: { status: "Active" | "Inactive" }
+async function updateProductStatus(req, res) {
+  try {
+    const id = Number(req.params.id);
+    const { status } = req.body;
+    if (!['Active', 'Inactive'].includes(status)) {
+      return res.status(400).json({ success: false, message: "status must be 'Active' or 'Inactive'" });
+    }
+    const product = await productService.setActiveForShop(id, req.shopOwner.shopId, status === 'Active');
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+    res.json({ success: true, data: product });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Failed to update status' });
+  }
+}
+
+// PATCH /api/shop/products/variants/:variantId/stock  body: { delta: 5 } or { delta: -2 }
+// This is the "Manage stock" screen endpoint — restock (positive delta) or
+// manual correction (negative delta). Never creates a new product/variant.
+// Matches Flutter's ProductService.adjustVariantStock(variantId, delta),
+// called from ProductViewScreen._openStockEditor.
+async function adjustStock(req, res) {
+  try {
+    const variantId = Number(req.params.variantId);
+    const delta = Number(req.body.delta);
+    if (!Number.isFinite(delta) || delta === 0) {
+      return res.status(400).json({ success: false, message: 'delta must be a non-zero number' });
+    }
+    const variant = await productService.adjustStockForShop(variantId, req.shopOwner.shopId, delta);
+    if (!variant) return res.status(404).json({ success: false, message: 'Variant not found' });
+    res.json({ success: true, data: variant });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Failed to adjust stock' });
+  }
+}
+
+// DELETE /api/shop/products/:id
+async function deleteProduct(req, res) {
+  try {
+    const id = Number(req.params.id);
+    const deleted = await productService.deleteForShop(id, req.shopOwner.shopId);
+    if (!deleted) return res.status(404).json({ success: false, message: 'Product not found' });
+    res.json({ success: true, message: 'Product deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Failed to delete product' });
   }
 }
 

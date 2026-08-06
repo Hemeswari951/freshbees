@@ -222,6 +222,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                                       if (!mounted) return;
                                       if (response.firstLogin) {
+                                        print("OwnerId = ${response.ownerId}");
                                         context.go(
                                           '/reset-password',
                                           extra: response.ownerId,

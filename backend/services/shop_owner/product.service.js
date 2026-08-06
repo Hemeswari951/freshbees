@@ -8,6 +8,7 @@ function stockStatus(totalStock) {
   return 'In stock';
 }
 
+// Shape consumed by ProductsScreen's grid cards (Flutter).
 function toListItem(row) {
   const stock = Number(row.total_stock);
   return {
@@ -23,9 +24,9 @@ function toListItem(row) {
     stockStatus: stockStatus(stock),
     status: row.is_active ? 'Active' : 'Inactive',
     thumbnail: row.thumbnail,
-    // NEW — per-variant flags, independent of the total stock number.
-    // Even if total stock across all variants is healthy, one variant
-    // being 0 (or under 5) still needs to be surfaced on the card.
+    // Per-variant flags, independent of total stock — even if the total
+    // across all variants looks healthy, ONE variant hitting 0 (or
+    // dropping under 5) still needs to be surfaced on the product card.
     hasOutOfStockVariant: row.has_out_of_stock === true,
     hasLowStockVariant: row.has_low_stock === true,
   };
@@ -95,13 +96,13 @@ function toDetail(row) {
   };
 }
 
-async function getAllProducts(shopId) {
-  const rows = await productModel.findAllProducts(shopId);
+async function getAllForShop(shopId) {
+  const rows = await productModel.findAllByShop(shopId);
   return rows.map(toListItem);
 }
 
-async function getProductById(productId, shopId) {
-  const row = await productModel.findProductById(productId, shopId);
+async function getOneForShop(productId, shopId) {
+  const row = await productModel.findByIdAndShop(productId, shopId);
   if (!row) return null;
   return toDetail(row);
 }
@@ -123,7 +124,7 @@ async function getProductById(productId, shopId) {
 // new product: the product row itself, its SKU (backend-generated, never
 // typed by the owner), its colors + images + size/stock variants, its
 // tags, and its category-specific extra attributes. Returns the SAME
-// shape as getProductById (toDetail) so AddProductScreen's `created['id']`
+// shape as getOneForShop (toDetail) so AddProductScreen's `created['id']`
 // works and can navigate straight into ProductViewScreen with it.
 async function createProductForShop(shopId, payload) {
   const product = await productModel.create(shopId, payload);
@@ -160,70 +161,89 @@ async function createProductForShop(shopId, payload) {
     await productModel.addProductAttributes(product.product_id, payload.attributes);
   }
 
-  return getProductById(product.product_id, shopId);
+  return getOneForShop(product.product_id, shopId);
 }
 
+// ── EDIT flow ──────────────────────────────────────────────────────────
+//
+// payload.colors[] here (as built by products.controller.js#updateProduct)
+// looks like:
+//   {
+//     colorId: 3 | null,           // null = brand-new color
+//     colorName, colorHex,
+//     existingImages: { front: url|null, back: url|null, ... },  // KEPT angle photos
+//     existingSpin360: [url, ...],                                // KEPT 360 photos
+//     newImages: [{ url, type }],   // freshly uploaded angle photos this request
+//     newSpin: [{ url, type: '360' }], // freshly uploaded 360 frames this request
+//     sizes: [{ variantId: 7 | null, size, stockQuantity, price, mrp }],
+//   }
+//
+// Diffing logic:
+//  1. Colors that exist in DB but are missing from payload entirely →
+//     the owner removed that whole color. Delete its images from
+//     STORAGE first, then its variants, then the color row.
+//  2. For each color still present:
+//     - update name/hex
+//     - build the "kept" URL set from existingImages + existingSpin360
+//     - any OLD image whose URL isn't in that kept set was either
+//       replaced (new file uploaded for that angle) or removed by the
+//       owner → delete it from storage + DB
+//     - insert newImages/newSpin as new rows, continuing display_order
+//       after however many are being kept
+//     - variants: update ones with a variantId, insert ones without,
+//       delete any old variant whose id isn't in the payload anymore
+//  3. Colors with no colorId are brand-new — just insert them.
+//  4. Tags/attributes are a full replace every time (edit form always
+//     sends the complete current list, not a diff).
 async function updateForShop(productId, shopId, payload) {
   const product = await productModel.updateByShop(productId, shopId, payload);
   if (!product) return null;
 
-  // Existing colors on this product, WITH their current images/variants —
-  // needed to diff against the incoming payload.
   const existingColors = await productModel.findColorsWithDetailByProduct(productId);
-  const existingColorIds = new Set(existingColors.map((c) => c.product_color_id));
   const payloadColorIds = new Set(
     (payload.colors || []).filter((c) => c.colorId).map((c) => c.colorId)
   );
 
-  // 1) Colors removed entirely (present in DB, missing from payload) —
-  //    delete their images from STORAGE first, then delete DB rows.
+  // 1) Colors removed entirely.
   for (const existing of existingColors) {
     if (!payloadColorIds.has(existing.product_color_id)) {
       await productModel.deleteImagesFromStorageAndDb(existing.images);
-      await productModel.deleteColor(existing.product_color_id); // cascades variants
+      await productModel.deleteColor(existing.product_color_id); // variants first, then color
     }
   }
 
-  // 2) Walk each color in the payload — update or insert.
+  // 2) Walk each color in the payload — update existing or insert new.
   for (const color of payload.colors || []) {
-    let productColorId = color.colorId;
+    if (color.colorId) {
+      // ── Existing color ──
+      await productModel.updateColor(color.colorId, color.colorName, color.colorHex);
 
-    if (productColorId) {
-      // ── Existing color: update name/hex ──
-      await productModel.updateColor(productColorId, color.colorName, color.colorHex);
-
-      const existing = existingColors.find((c) => c.product_color_id === productColorId);
+      const existing = existingColors.find((c) => c.product_color_id === color.colorId);
       const oldImages = existing ? existing.images : [];
 
-      // existingImages = { front: url|null, back: url|null, ... } sent from Flutter.
-      // Any angle where existingImages[angle] is null/missing AND no new
-      // file was uploaded for that angle = the owner removed that photo.
       const keptFixedUrls = Object.values(color.existingImages || {}).filter(Boolean);
       const keptSpinUrls = color.existingSpin360 || [];
       const keptUrls = new Set([...keptFixedUrls, ...keptSpinUrls]);
 
-      // Old images NOT in the kept set = replaced or removed → delete
-      // from storage + DB.
+      // Old images not in the kept set = replaced or removed → delete.
       const toDelete = oldImages.filter((img) => !keptUrls.has(img.image_url));
       if (toDelete.length) {
         await productModel.deleteImagesFromStorageAndDb(toDelete);
       }
 
-      // Add newly uploaded angle photos + newly uploaded 360 frames.
-      // display_order continues after however many images are being kept,
-      // so 360 frames still play back after front/back/side/zoom.
+      // Newly uploaded angle photos + 360 frames get appended after
+      // whatever's being kept, so spin order/display order stays correct.
       const newImages = [...(color.newImages || []), ...(color.newSpin || [])];
       if (newImages.length) {
-        const keptCount = keptUrls.size;
-        await productModel.addColorImages(productId, productColorId, newImages, keptCount);
+        await productModel.addColorImages(productId, color.colorId, newImages, keptUrls.size);
       }
 
-      // ── Sizes: update existing variants, insert new ones, delete removed ──
+      // ── Sizes: update / insert / delete ──
       const payloadVariantIds = new Set(
         (color.sizes || []).filter((s) => s.variantId).map((s) => s.variantId)
       );
       const existingVariantIds = existing ? existing.variants.map((v) => v.variant_id) : [];
-      const removedVariantIds = existingVariantIds.filter((id) => !payloadVariantIds.has(id));
+      const removedVariantIds = existingVariantIds.filter((vid) => !payloadVariantIds.has(vid));
       if (removedVariantIds.length) {
         await productModel.deleteVariantsByIds(removedVariantIds);
       }
@@ -232,7 +252,7 @@ async function updateForShop(productId, shopId, payload) {
         if (size.variantId) {
           await productModel.updateVariant(size.variantId, size);
         } else {
-          await productModel.addColorVariants(productId, productColorId, [size]);
+          await productModel.addColorVariants(productId, color.colorId, [size]);
         }
       }
     } else {
@@ -248,18 +268,17 @@ async function updateForShop(productId, shopId, payload) {
     }
   }
 
-  // Tags/attributes: full replace every time (matches Flutter comment).
+  // Tags/attributes: full replace every time.
   await productModel.replaceProductTags(productId, payload.tags || []);
   await productModel.replaceProductAttributes(productId, payload.attributes || []);
 
-  return getProductById(productId, shopId);
+  return getOneForShop(productId, shopId);
 }
-
 
 async function setActiveForShop(productId, shopId, isActive) {
   const product = await productModel.setActiveByShop(productId, shopId, isActive);
   if (!product) return null;
-  return getProductById(productId, shopId);
+  return getOneForShop(productId, shopId);
 }
 
 async function deleteForShop(productId, shopId) {
@@ -280,8 +299,8 @@ async function adjustStockForShop(variantId, shopId, delta) {
 }
 
 module.exports = {
-  getAllProducts,
-  getProductById,
+  getAllForShop,
+  getOneForShop,
   createProductForShop,
   updateForShop,
   setActiveForShop,
