@@ -473,3 +473,22 @@ CREATE INDEX idx_customers_phone ON customers(phone);
 -- LEFT JOIN products p ON p.shop_id = s.shop_id
 -- LEFT JOIN order_items oi ON oi.shop_id = s.shop_id
 -- GROUP BY s.shop_id;
+
+
+//Cart_items
+
+CREATE TABLE IF NOT EXISTS cart_items (
+    cart_item_id SERIAL PRIMARY KEY,
+    customer_id  INTEGER NOT NULL REFERENCES customers(customer_id) ON DELETE CASCADE,
+    product_id   INTEGER NOT NULL REFERENCES products(product_id) ON DELETE CASCADE,
+    variant_id   INTEGER REFERENCES product_variants(variant_id) ON DELETE CASCADE,
+    quantity     INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Speeds up "get my cart" and stops one customer building duplicate rows
+-- for the exact same product + size.
+CREATE INDEX IF NOT EXISTS idx_cart_items_customer ON cart_items(customer_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cart_items_customer_product_variant
+    ON cart_items(customer_id, product_id, COALESCE(variant_id, -1));
