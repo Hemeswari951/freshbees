@@ -154,7 +154,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 color: TColors.cream,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
+                    color: Colors.black.withValues(alpha: 0.08),
                     blurRadius: 12,
                     offset: const Offset(0, 5),
                   ),
@@ -493,7 +493,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
             boxShadow: _hoveredIndex == index
                 ? [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
+                      color: Colors.black.withValues(alpha: 0.08),
                       blurRadius: 2,
                       spreadRadius: 1,
                       offset: const Offset(0, 8),
@@ -520,7 +520,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                               fit: BoxFit.cover,
                               width: double.infinity,
                               height: double.infinity,
-                              errorBuilder: (_, __, ___) => const Icon(
+                              errorBuilder: (_, _, _) => const Icon(
                                 Icons.checkroom_outlined,
                                 size: 40,
                                 color: TColors.brownLight,
@@ -555,7 +555,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Row(

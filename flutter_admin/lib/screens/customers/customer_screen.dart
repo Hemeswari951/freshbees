@@ -348,7 +348,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.14),
+                      color: Colors.black.withValues(alpha: 0.14),
                       blurRadius: 32,
                       offset: const Offset(-8, 12),
                     ),
@@ -414,7 +414,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: TColors.black.withOpacity(sel ? 0.08 : 0.04),
+                        color: TColors.black.withValues(alpha: sel ? 0.08 : 0.04),
                         blurRadius: sel ? 16 : 8,
                         offset: Offset(0, sel ? 4 : 2),
                       ),
@@ -429,7 +429,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                           Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: TColors.brown.withOpacity(0.15),
+                              color: TColors.brown.withValues(alpha: 0.15),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
@@ -604,14 +604,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
     if (u.profileImage != null && u.profileImage!.isNotEmpty) {
       return CircleAvatar(
         radius: radius,
-        backgroundColor: TColors.brown.withOpacity(0.18),
+        backgroundColor: TColors.brown.withValues(alpha: 0.18),
         backgroundImage: NetworkImage(u.profileImage!),
-        onBackgroundImageError: (_, __) {}, // falls back silently
+        onBackgroundImageError: (_, _) {}, // falls back silently
       );
     }
     return CircleAvatar(
       radius: radius,
-      backgroundColor: TColors.brown.withOpacity(0.18),
+      backgroundColor: TColors.brown.withValues(alpha: 0.18),
       child: Text(
         u.initials,
         style: TextStyle(
@@ -627,7 +627,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final hover = hoveredIndex == i;
     final isBlocked = u.isBlocked;
     Color c = isBlocked ? Colors.red : Colors.green.shade700;
-    Color bg = isBlocked ? Colors.red.withOpacity(0.1) : Colors.green.shade50;
+    Color bg = isBlocked ? Colors.red.withValues(alpha: 0.1) : Colors.green.shade50;
 
     return MouseRegion(
       onEnter: (_) => setState(() => hoveredIndex = i),
@@ -645,12 +645,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
             color: TColors.white,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: hover ? TColors.brown.withOpacity(0.6) : TColors.border,
+              color: hover ? TColors.brown.withValues(alpha: 0.6) : TColors.border,
               width: hover ? 1.5 : 1,
             ),
             boxShadow: [
               BoxShadow(
-                color: TColors.black.withOpacity(hover ? 0.14 : 0.05),
+                color: TColors.black.withValues(alpha: hover ? 0.14 : 0.05),
                 blurRadius: hover ? 22 : 8,
                 offset: Offset(0, hover ? 10 : 3),
               ),
@@ -904,7 +904,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                       ),
                                       decoration: BoxDecoration(
                                         color: isBlocked
-                                            ? Colors.red.withOpacity(0.1)
+                                            ? Colors.red.withValues(alpha: 0.1)
                                             : Colors.green.shade50,
                                         borderRadius: BorderRadius.circular(
                                           12,
@@ -1028,7 +1028,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                       : TColors.border,
                                 ),
                                 backgroundColor: isBlocked
-                                    ? Colors.red.withOpacity(0.1)
+                                    ? Colors.red.withValues(alpha: 0.1)
                                     : TColors.white,
                               ),
                               child: Text(
@@ -1135,7 +1135,7 @@ Widget _staticAddressCard({
         color: isPrimary ? TColors.cream : TColors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: isPrimary ? TColors.brown.withOpacity(0.5) : TColors.border,
+          color: isPrimary ? TColors.brown.withValues(alpha: 0.5) : TColors.border,
           width: isPrimary ? 1.5 : 1,
         ),
       ),
@@ -1170,7 +1170,7 @@ Widget _staticAddressCard({
                           vertical: 1.5,
                         ),
                         decoration: BoxDecoration(
-                          color: TColors.brown.withOpacity(0.15),
+                          color: TColors.brown.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Text(

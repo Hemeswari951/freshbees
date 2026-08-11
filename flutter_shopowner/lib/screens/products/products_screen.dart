@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
 import '../../widgets/app_colors.dart';
 import '../../services/product_service.dart';
 import 'add_product_screen.dart';
-import 'product_view_screen.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key});
@@ -67,11 +68,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   void _openProductView(Map<String, dynamic> product) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ProductViewScreen(productId: product['id'] as int),
-      ),
-    );
+    context.go('/products/${product['id']}');
   }
 
   Future<void> _confirmDelete(Map<String, dynamic> product) async {
@@ -189,7 +186,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     .blush, // page background colour — keeps header flush, shadow does the separating
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
+                    color: Colors.black.withValues(alpha: 0.06),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -631,7 +628,7 @@ class _ProductGridCard extends StatelessWidget {
             boxShadow: isHovered
                 ? [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
+                      color: Colors.black.withValues(alpha: 0.08),
                       blurRadius: 12,
                       offset: const Offset(0, 8),
                     ),
@@ -669,7 +666,7 @@ class _ProductGridCard extends StatelessWidget {
                                     fit: BoxFit.cover,
                                     width: double.infinity,
                                     height: double.infinity,
-                                    errorBuilder: (_, __, ___) => const Center(
+                                    errorBuilder: (_, _, _) => const Center(
                                       child: Icon(
                                         Icons.checkroom,
                                         size: 40,
@@ -697,7 +694,7 @@ class _ProductGridCard extends StatelessWidget {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Row(
@@ -865,7 +862,7 @@ class _ProductGridCard extends StatelessWidget {
       width: 32,
       height: 32,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.92),
+        color: Colors.white.withValues(alpha: 0.92),
         shape: BoxShape.circle,
       ),
       child: Icon(icon, size: 18, color: AppColors.inkSoft),
@@ -935,8 +932,7 @@ class _SectionPanel extends StatelessWidget {
 
   const _SectionPanel({
     required this.child,
-    this.padding = const EdgeInsets.all(22),
-  });
+  }) : padding = const EdgeInsets.all(22);
 
   @override
   Widget build(BuildContext context) {

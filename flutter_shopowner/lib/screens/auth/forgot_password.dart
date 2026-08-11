@@ -30,7 +30,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
           /// White Overlay
           Positioned.fill(
-            child: Container(color: Colors.white.withOpacity(.18)),
+            child: Container(color: Colors.white.withValues(alpha: .18)),
           ),
 
           /// Center Card
@@ -44,11 +44,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   vertical: 45,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(.96),
+                  color: Colors.white.withValues(alpha: .96),
                   borderRadius: BorderRadius.circular(28),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(.12),
+                      color: Colors.black.withValues(alpha: .12),
                       blurRadius: 30,
                       offset: const Offset(0, 15),
                     ),

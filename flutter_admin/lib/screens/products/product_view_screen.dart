@@ -127,8 +127,9 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
   Map<String, dynamic>? get _selectedVariant {
     if (_selectedSizeIndex == null) return null;
     final variants = _activeVariants;
-    if (_selectedSizeIndex! < 0 || _selectedSizeIndex! >= variants.length)
+    if (_selectedSizeIndex! < 0 || _selectedSizeIndex! >= variants.length) {
       return null;
+    }
     return variants[_selectedSizeIndex!];
   }
 
@@ -265,7 +266,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
               Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: TColors.ink.withOpacity(0.7)),
+                style: TextStyle(color: TColors.ink.withValues(alpha: 0.7)),
               ),
               const SizedBox(height: 12),
               ElevatedButton(onPressed: _load, child: const Text('Retry')),
@@ -313,7 +314,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
               color: TColors.cream,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
+                  color: Colors.black.withValues(alpha: 0.08),
                   blurRadius: 15,
                   offset: const Offset(0, 5), // bottom shadow
                 ),
@@ -447,7 +448,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
               : ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: items.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
                   itemBuilder: (context, i) =>
                       _thumbnail(items[i], i, i == selected),
                 ),
@@ -503,7 +504,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                                 decoration: BoxDecoration(
                                   color: active
                                       ? TColors.ink
-                                      : TColors.ink.withOpacity(0.3),
+                                      : TColors.ink.withValues(alpha: 0.3),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                               );
@@ -521,7 +522,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (context, i) =>
                   _thumbnail(items[i], i, i == _selectedIndex),
             ),
@@ -556,7 +557,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           boxShadow: active
               ? [
                   BoxShadow(
-                    color: TColors.terracotta.withOpacity(0.45),
+                    color: TColors.terracotta.withValues(alpha: 0.45),
                     blurRadius: 0,
                     spreadRadius: 2,
                   ),
@@ -567,7 +568,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
         child: Image.network(
           thumbUrl,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(color: TColors.blush),
+          errorBuilder: (_, _, _) => Container(color: TColors.blush),
         ),
       ),
     );
@@ -611,7 +612,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           product['subCategory'] as String? ?? '',
           style: TextStyle(
             fontSize: 14.5,
-            color: TColors.ink.withOpacity(0.6),
+            color: TColors.ink.withValues(alpha: 0.6),
             fontWeight: FontWeight.w400,
             height: 1.35,
           ),
@@ -658,7 +659,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                 '$_reviewCount ${_reviewCount == 1 ? 'Rating' : 'Ratings'}',
                 style: TextStyle(
                   fontSize: 13,
-                  color: TColors.ink.withOpacity(0.55),
+                  color: TColors.ink.withValues(alpha: 0.55),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -669,10 +670,10 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
             'No ratings yet',
             style: TextStyle(
               fontSize: 12.5,
-              color: TColors.ink.withOpacity(0.5),
+              color: TColors.ink.withValues(alpha: 0.5),
             ),
           ),
-        Divider(color: Colors.grey.withOpacity(0.45), thickness: 1, height: 20),
+        Divider(color: Colors.grey.withValues(alpha: 0.45), thickness: 1, height: 20),
         const SizedBox(height: 10),
 
         // Price — reflects the selected size's own price if it has one
@@ -697,7 +698,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                   'MRP ₹${mrp.toStringAsFixed(0)}',
                   style: TextStyle(
                     fontSize: 15,
-                    color: TColors.ink.withOpacity(0.4),
+                    color: TColors.ink.withValues(alpha: 0.4),
                     fontWeight: FontWeight.w500,
                     decoration: TextDecoration.lineThrough,
                   ),
@@ -725,7 +726,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           'inclusive of all taxes',
           style: TextStyle(
             fontSize: 12.5,
-            color: const Color.fromARGB(255, 2, 103, 41).withOpacity(0.85),
+            color: const Color.fromARGB(255, 2, 103, 41).withValues(alpha: 0.85),
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -748,7 +749,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: _colors.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
               itemBuilder: (context, i) {
                 final c = _colors[i];
                 final active = i == _activeColorIndex;
@@ -764,7 +765,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                           boxShadow: active
                               ? [
                                   BoxShadow(
-                                    color: TColors.terracotta.withOpacity(0.45),
+                                    color: TColors.terracotta.withValues(alpha: 0.45),
                                     blurRadius: 0,
                                     spreadRadius: 2,
                                   ),
@@ -776,7 +777,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                             ? Image.network(
                                 coverUrl,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
+                                errorBuilder: (_, _, _) =>
                                     Container(color: TColors.blush),
                               )
                             : Container(color: TColors.blush),
@@ -786,7 +787,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                         c['colorName'] as String? ?? '',
                         style: TextStyle(
                           fontSize: 10,
-                          color: TColors.ink.withOpacity(active ? 0.9 : 0.5),
+                          color: TColors.ink.withValues(alpha: active ? 0.9 : 0.5),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -800,7 +801,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
         ],
 
         _sizeSection(),
-        Divider(color: Colors.grey.withOpacity(0.45), thickness: 1, height: 20),
+        Divider(color: Colors.grey.withValues(alpha: 0.45), thickness: 1, height: 20),
         const SizedBox(height: 24),
 
         _sectionTitle('PRODUCT DETAILS'),
@@ -863,7 +864,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
               'Total: $totalStock pcs',
               style: TextStyle(
                 fontSize: 11.5,
-                color: TColors.ink.withOpacity(0.5),
+                color: TColors.ink.withValues(alpha: 0.5),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -891,17 +892,17 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: selected
-                          ? TColors.terracotta.withOpacity(0.18)
+                          ? TColors.terracotta.withValues(alpha: 0.18)
                           : const Color.fromARGB(
                               255,
                               246,
                               243,
                               241,
-                            ).withOpacity(0.5),
+                            ).withValues(alpha: 0.5),
                       border: Border.all(
                         color: selected
                             ? const Color.fromARGB(93, 15, 12, 10)
-                            : TColors.ink.withOpacity(0.18),
+                            : TColors.ink.withValues(alpha: 0.18),
                         width: selected ? 1.6 : 1.0,
                       ),
                     ),
@@ -924,7 +925,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                       fontSize: 8.5,
                       fontWeight: FontWeight.w700,
                       color: outOfStock
-                          ? TColors.ink.withOpacity(0.4)
+                          ? TColors.ink.withValues(alpha: 0.4)
                           : (lowStock ? TColors.gold : TColors.green),
                     ),
                   ),
@@ -1024,7 +1025,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           entry.key,
           style: TextStyle(
             fontSize: 11.5,
-            color: TColors.ink.withOpacity(0.45),
+            color: TColors.ink.withValues(alpha: 0.45),
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -1037,7 +1038,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
             fontWeight: FontWeight.w500,
           ),
         ),
-        Divider(color: Colors.grey.withOpacity(0.45), thickness: 1, height: 20),
+        Divider(color: Colors.grey.withValues(alpha: 0.45), thickness: 1, height: 20),
       ],
     );
   }
@@ -1054,7 +1055,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
         if (reviews.isEmpty)
           Text(
             'No reviews yet.',
-            style: TextStyle(fontSize: 13, color: TColors.ink.withOpacity(0.5)),
+            style: TextStyle(fontSize: 13, color: TColors.ink.withValues(alpha: 0.5)),
           )
         else
           Column(
@@ -1103,7 +1104,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                         date,
                         style: TextStyle(
                           fontSize: 10.5,
-                          color: TColors.ink.withOpacity(0.4),
+                          color: TColors.ink.withValues(alpha: 0.4),
                         ),
                       ),
                     ],
@@ -1264,7 +1265,7 @@ class _Product360AutoViewerState extends State<Product360AutoViewer> {
           key: ValueKey(_frame),
           fit: BoxFit.cover,
           width: double.infinity,
-          errorBuilder: (_, __, ___) => const Center(
+          errorBuilder: (_, _, _) => const Center(
             child: Icon(Icons.broken_image_outlined, color: TColors.inkSoft),
           ),
         ),
@@ -1291,7 +1292,7 @@ class _ZoomableNetworkImageState extends State<_ZoomableNetworkImage> {
       PageRouteBuilder(
         opaque: false,
         barrierColor: Colors.black,
-        pageBuilder: (_, __, ___) =>
+        pageBuilder: (_, _, _) =>
             _FullscreenZoomView(imageUrl: widget.imageUrl),
       ),
     );
@@ -1316,7 +1317,7 @@ class _ZoomableNetworkImageState extends State<_ZoomableNetworkImage> {
             widget.imageUrl,
             fit: BoxFit.cover,
             width: double.infinity,
-            errorBuilder: (_, __, ___) => Container(
+            errorBuilder: (_, _, _) => Container(
               color: TColors.blush,
               alignment: Alignment.center,
               child: const Icon(

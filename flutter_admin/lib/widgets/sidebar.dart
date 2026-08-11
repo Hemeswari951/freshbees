@@ -197,9 +197,9 @@ class _SidebarState extends State<Sidebar> {
 
     // active = black bg, hovered = card bg, else transparent
     Color bg = Colors.transparent;
-    if (active)
+    if (active) {
       bg = TColors.black;
-    else if (hovered)
+    } else if (hovered)
       bg = TColors.cardBg;
 
     return MouseRegion(

@@ -86,7 +86,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           /// Light Overlay
           Positioned.fill(
             child: Container(
-              color: Colors.white.withOpacity(.18),
+              color: Colors.white.withValues(alpha: .18),
             ),
           ),
 
@@ -101,11 +101,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   vertical: 45,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(.97),
+                  color: Colors.white.withValues(alpha: .97),
                   borderRadius: BorderRadius.circular(28),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(.12),
+                      color: Colors.black.withValues(alpha: .12),
                       blurRadius: 35,
                       offset: const Offset(0, 15),
                     )

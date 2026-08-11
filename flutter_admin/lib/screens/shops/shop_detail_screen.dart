@@ -982,7 +982,7 @@ class _ShopDetailBodyState extends State<_ShopDetailBody>
                             fit: BoxFit.cover,
                             width: double.infinity,
                             height: double.infinity,
-                            errorBuilder: (_, __, ___) => const Icon(
+                            errorBuilder: (_, _, _) => const Icon(
                               Icons.checkroom_outlined,
                               size: 40,
                               color: TColors.brownLight,
@@ -1017,7 +1017,7 @@ class _ShopDetailBodyState extends State<_ShopDetailBody>
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Row(

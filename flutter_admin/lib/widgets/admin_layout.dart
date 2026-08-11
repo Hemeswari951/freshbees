@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'sidebar.dart';
 import 'header.dart';
 import 't_colors.dart';
+import '../core/responsive.dart';
 
 class AppShell extends StatelessWidget {
   final String currentPath;
@@ -47,12 +48,21 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    
+    final isMobile = Responsive.isMobile(context);
+    print("isMobile = $isMobile");
     return Scaffold(
       backgroundColor: TColors.cream,
+      drawer: isMobile
+      ? const Drawer(
+          child: Sidebar(),
+        )
+      : null,
       body: Row(
         children: [
           // Sidebar — never rebuilds
-          const Sidebar(),
+          if (!isMobile)
+      const Sidebar(),
 
           // Right side
           Expanded(

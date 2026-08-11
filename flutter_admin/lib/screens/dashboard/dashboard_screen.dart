@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/shop_service.dart';
 import '../../services/customer_service.dart';
+import '../../core/responsive.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -40,13 +41,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = Responsive.isMobile(context);
     return Scaffold(
       backgroundColor: const Color(0xffF8F6F1), // Ivory
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(
+  isMobile ? 12 : 24,
+),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            isMobile
+    ? Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Super Admin Dashboard",
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 5),
+          const Text(
+            "Manage your entire platform",
+            style: TextStyle(
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 15),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 18,
+              vertical: 10,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.calendar_month_outlined),
+                SizedBox(width: 8),
+                Text("Today"),
+              ],
+            ),
+          ),
+        ],
+      ):
 
             /// Header
             Row(
@@ -96,10 +139,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
             /// KPI CARDS
       GridView.count(
-  crossAxisCount: 4,
+  crossAxisCount: Responsive.isDesktop(context)
+      ? 4
+      : Responsive.isTablet(context)
+          ? 2
+          : 1,
+
   shrinkWrap: true,
-  childAspectRatio: 1.7,
   physics: const NeverScrollableScrollPhysics(),
+
+  childAspectRatio: Responsive.isMobile(context)
+    ? 2.3
+    : Responsive.isTablet(context)
+        ? 1.8
+        : 1.7,
+
   crossAxisSpacing: 18,
   mainAxisSpacing: 18,
   children: [
@@ -159,99 +213,186 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 30),
 
             /// ANALYTICS
-            Row(
+            isMobile
+    ? Column(
+        children: [
+          // Revenue Analytics
+          Container(
+            height: 350,
+            padding: const EdgeInsets.all(20),
+            decoration: _boxDecoration(),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
-                Expanded(
-                  flex: 3,
-                  child: Container(
-                    height: 350,
-                    padding: const EdgeInsets.all(20),
-                    decoration: _boxDecoration(),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Revenue Analytics",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 20,
-                          ),
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        Expanded(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xffF8F6F1),
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            child: const Center(
-                              child: Text(
-                                "Revenue Chart Here\n(fl_chart)",
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                const Text(
+                  "Revenue Analytics",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
                   ),
                 ),
 
-                const SizedBox(width: 20),
+                const SizedBox(height: 20),
 
                 Expanded(
                   child: Container(
-                    height: 450,
-                    padding: const EdgeInsets.all(20),
-                    decoration: _boxDecoration(),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-
-                        const Text(
-                          "System Health",
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-
-                        const SizedBox(height: 25),
-
-                        _statusTile("API Server", true),
-                        _statusTile("Database", true),
-                        _statusTile("Payment Gateway", true),
-                        _statusTile("Storage", true),
-                        _statusTile("Notification Service", false),
-
-                        const Spacer(),
-
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Row(
-                            children: [
-                              Icon(Icons.check_circle,
-                                  color: Colors.green),
-                              SizedBox(width: 10),
-                              Text("98.8% Uptime"),
-                            ],
-                          ),
-                        ),
-                      ],
+                    decoration: BoxDecoration(
+                      color: const Color(0xffF8F6F1),
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        "Revenue Chart Here\n(fl_chart)",
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
+          ),
 
+          const SizedBox(height: 20),
+
+          // System Health
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: _boxDecoration(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "System Health",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                const SizedBox(height: 25),
+
+                _statusTile("API Server", true),
+                _statusTile("Database", true),
+                _statusTile("Payment Gateway", true),
+                _statusTile("Storage", true),
+                _statusTile("Notification Service", false),
+
+                const SizedBox(height: 20),
+
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.check_circle,
+                        color: Colors.green,
+                      ),
+                      SizedBox(width: 10),
+                      Text("98.8% Uptime"),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      )
+    : Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 3,
+            child: Container(
+              height: 350,
+              padding: const EdgeInsets.all(20),
+              decoration: _boxDecoration(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Revenue Analytics",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xffF8F6F1),
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: const Center(
+                        child: Text(
+                          "Revenue Chart Here\n(fl_chart)",
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 20),
+
+          Expanded(
+            child: Container(
+              height: 450,
+              padding: const EdgeInsets.all(20),
+              decoration: _boxDecoration(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "System Health",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 25),
+
+                  _statusTile("API Server", true),
+                  _statusTile("Database", true),
+                  _statusTile("Payment Gateway", true),
+                  _statusTile("Storage", true),
+                  _statusTile("Notification Service", false),
+
+                  const Spacer(),
+
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(
+                          Icons.check_circle,
+                          color: Colors.green,
+                        ),
+                        SizedBox(width: 10),
+                        Text("98.8% Uptime"),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
             const SizedBox(height: 30),
 
             /// QUICK ACTIONS
@@ -281,97 +422,180 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
             const SizedBox(height: 30),
 
-            Row(
+            isMobile
+    ? Column(
+        children: [
+          // Recent Activities
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: _boxDecoration(),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: _boxDecoration(),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-
-                        Text(
-                          "Recent Activities",
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-
-                        SizedBox(height: 20),
-
-                        ActivityTile(
-                          title: "New shop approved",
-                          subtitle: "Fashion Hub",
-                        ),
-
-                        ActivityTile(
-                          title: "Admin created",
-                          subtitle: "Rahul Sharma",
-                        ),
-
-                        ActivityTile(
-                          title: "Product reported",
-                          subtitle: "iPhone 15 Pro",
-                        ),
-
-                        ActivityTile(
-                          title: "Large payout processed",
-                          subtitle: "₹85,000",
-                        ),
-                      ],
-                    ),
+              children: const [
+                Text(
+                  "Recent Activities",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
 
-                const SizedBox(width: 20),
+                SizedBox(height: 20),
 
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: _boxDecoration(),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
+                ActivityTile(
+                  title: "New shop approved",
+                  subtitle: "Fashion Hub",
+                ),
 
-                        Text(
-                          "Platform Insights",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 20,
-                          ),
-                        ),
+                ActivityTile(
+                  title: "Admin created",
+                  subtitle: "Rahul Sharma",
+                ),
 
-                        SizedBox(height: 20),
+                ActivityTile(
+                  title: "Product reported",
+                  subtitle: "iPhone 15 Pro",
+                ),
 
-                        InsightTile(
-                          title: "Top Category",
-                          value: "Electronics",
-                        ),
-
-                        InsightTile(
-                          title: "Top Seller",
-                          value: "Mobile World",
-                        ),
-
-                        InsightTile(
-                          title: "Highest Revenue",
-                          value: "₹4.2L Today",
-                        ),
-
-                        InsightTile(
-                          title: "New Customers Today",
-                          value: "+482",
-                        ),
-                      ],
-                    ),
-                  ),
+                ActivityTile(
+                  title: "Large payout processed",
+                  subtitle: "₹85,000",
                 ),
               ],
             ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Platform Insights
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: _boxDecoration(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  "Platform Insights",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
+                ),
+
+                SizedBox(height: 20),
+
+                InsightTile(
+                  title: "Top Category",
+                  value: "Electronics",
+                ),
+
+                InsightTile(
+                  title: "Top Seller",
+                  value: "Mobile World",
+                ),
+
+                InsightTile(
+                  title: "Highest Revenue",
+                  value: "₹4.2L Today",
+                ),
+
+                InsightTile(
+                  title: "New Customers Today",
+                  value: "+482",
+                ),
+              ],
+            ),
+          ),
+        ],
+      )
+    : Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: _boxDecoration(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text(
+                    "Recent Activities",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  SizedBox(height: 20),
+
+                  ActivityTile(
+                    title: "New shop approved",
+                    subtitle: "Fashion Hub",
+                  ),
+
+                  ActivityTile(
+                    title: "Admin created",
+                    subtitle: "Rahul Sharma",
+                  ),
+
+                  ActivityTile(
+                    title: "Product reported",
+                    subtitle: "iPhone 15 Pro",
+                  ),
+
+                  ActivityTile(
+                    title: "Large payout processed",
+                    subtitle: "₹85,000",
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 20),
+
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: _boxDecoration(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text(
+                    "Platform Insights",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                    ),
+                  ),
+
+                  SizedBox(height: 20),
+
+                  InsightTile(
+                    title: "Top Category",
+                    value: "Electronics",
+                  ),
+
+                  InsightTile(
+                    title: "Top Seller",
+                    value: "Mobile World",
+                  ),
+
+                  InsightTile(
+                    title: "Highest Revenue",
+                    value: "₹4.2L Today",
+                  ),
+
+                  InsightTile(
+                    title: "New Customers Today",
+                    value: "+482",
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
           ],
         ),
       ),
@@ -384,7 +608,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       borderRadius: BorderRadius.circular(18),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(.04),
+          color: Colors.black.withValues(alpha: .04),
           blurRadius: 15,
           offset: const Offset(0, 5),
         ),
@@ -422,7 +646,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     },
     child: Container(
-      width: 180,
+      width: Responsive.isMobile(context) ? double.infinity : 180,
       padding: const EdgeInsets.all(18),
       decoration: _boxDecoration(),
       child: Column(

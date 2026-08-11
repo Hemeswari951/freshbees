@@ -123,7 +123,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             child: Image.asset("assets/images/forgot_bg.png", fit: BoxFit.cover),
           ),
           Positioned.fill(
-            child: Container(color: Colors.white.withOpacity(.18)),
+            child: Container(color: Colors.white.withValues(alpha: .18)),
           ),
           Center(
             child: SingleChildScrollView(
@@ -132,11 +132,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 width: isMobile ? double.infinity : 560,
                 padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 45),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(.97),
+                  color: Colors.white.withValues(alpha: .97),
                   borderRadius: BorderRadius.circular(28),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(.12),
+                      color: Colors.black.withValues(alpha: .12),
                       blurRadius: 35,
                       offset: const Offset(0, 15),
                     )

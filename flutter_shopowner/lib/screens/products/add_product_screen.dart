@@ -3,11 +3,30 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../widgets/app_colors.dart';
 import '../../services/product_service.dart';
+import 'utils/image_enhancer.dart';
+import 'utils/camera_capture_screen.dart';
+import 'utils/photo_edit_screen.dart';
+
 import 'product_view_screen.dart';
 
 /// Add/Edit Product screen — Flipkart/Amazon seller style, where each color
 /// of a product gets its OWN front/back/side/zoom photos and its OWN
 /// per-size stock, instead of one shared photo set for the whole product.
+///
+/// PHOTO PIPELINE (camera + gallery + auto-enhance + manual edit):
+///  - Tapping any "add photo" slot (angle tile or 360 spin strip) opens a
+///    bottom sheet: "Take photo" (custom live in-app camera, see
+///    CameraCaptureScreen) or "Choose from gallery" (image_picker).
+///  - Every photo — camera or gallery — is run through
+///    ImageEnhancer.enhance() automatically (auto levels, small
+///    brightness/contrast/saturation lift, resize+compress) before it's
+///    placed in a slot. This is silent; the owner doesn't have to do
+///    anything.
+///  - A pencil icon appears on any freshly-added LOCAL photo (this
+///    session) to open PhotoEditScreen for manual brightness/contrast/
+///    saturation/rotate adjustments. Existing server photos (from a
+///    previous save) aren't editable in place — replace them with a new
+///    photo instead, which goes through the same pipeline.
 ///
 /// SCHEMA ALIGNMENT:
 ///  - products table: sub_category, fabric, pattern, fit_type, sleeve_type,
@@ -88,6 +107,9 @@ const List<String> _kOccasions = [
   'Ethnic Wear',
   'Daily Wear',
 ];
+
+// Where a picked photo came from — drives the bottom sheet choice.
+enum _PhotoSource { camera, gallery }
 
 // Approach 1: variant price is NULL by default (falls back to the
 // product's base price/mrp on the backend via COALESCE). Only filled in
@@ -203,6 +225,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
   bool _loadingDetail = false;
   bool _submitting = false;
   String? _error;
+
+  // Keys of photo slots currently being auto-enhanced (e.g.
+  // "front_<blockHash>" or "spin_<blockHash>") — used to show a small
+  // spinner over just that slot instead of blocking the whole screen.
+  final Set<String> _busyKeys = {};
 
   // True whenever this screen was opened for an existing product
   // (AddProductScreen(product: someProduct)) instead of a blank add.
@@ -418,8 +445,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
             if (v is String && v.isNotEmpty) block.existingImageUrls[angle] = v;
           }
           final spin = _pick(imagesRaw, ['360', 'spin', 'spin360']);
-          if (spin is List)
+          if (spin is List) {
             block.existingSpin360Urls.addAll(spin.whereType<String>());
+          }
         }
 
         // Backend key is `variants`, not `sizes`.
@@ -504,25 +532,163 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
   }
 
-  Future<void> _pickAngleImage(_ColorBlock block, String angle) async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
+  // ── Camera vs gallery chooser ───────────────────────────────────────
+  //
+  // Shows a bottom sheet with "Take photo" (custom live in-app camera —
+  // see CameraCaptureScreen) and "Choose from gallery" (image_picker).
+  Future<_PhotoSource?> _showPhotoSourceSheet() {
+    return showModalBottomSheet<_PhotoSource>(
+      context: context,
+      backgroundColor: AppColors.cream,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.camera_alt_outlined,
+                  color: AppColors.terracotta,
+                ),
+                title: const Text('Take photo'),
+                onTap: () => Navigator.of(ctx).pop(_PhotoSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.photo_library_outlined,
+                  color: AppColors.terracotta,
+                ),
+                title: const Text('Choose from gallery'),
+                onTap: () => Navigator.of(ctx).pop(_PhotoSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
-    if (picked == null) return;
-    setState(() => block.images[angle] = picked);
   }
 
-  // Multi-select — owner picks all their turntable shots in one go, in
-  // the same order they'll play back in the 360 viewer. Appends to
-  // whatever's already there (existing + newly added) so they can add in
-  // batches if needed.
+  // Single angle photo (front/back/side/zoom): pick (camera or gallery),
+  // then silently auto-enhance before it lands in the slot.
+  Future<void> _pickAngleImage(_ColorBlock block, String angle) async {
+    final source = await _showPhotoSourceSheet();
+    if (source == null) return;
+
+    XFile? picked;
+    if (source == _PhotoSource.camera) {
+      final result = await Navigator.of(context).push<List<XFile>>(
+        MaterialPageRoute(builder: (_) => const CameraCaptureScreen()),
+      );
+      if (result != null && result.isNotEmpty) picked = result.first;
+    } else {
+      picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+    }
+    if (picked == null) return;
+
+    final key = '${angle}_${block.hashCode}';
+    setState(() => _busyKeys.add(key));
+    try {
+      final enhanced = await ImageEnhancer.enhance(picked);
+      if (!mounted) return;
+      setState(() {
+        block.images[angle] = enhanced;
+        // This angle is being REPLACED — clear the old server URL so it's
+        // not submitted alongside the new upload. Without this, both the
+        // stale existing photo and the freshly picked one got sent on
+        // save, and the backend kept both as separate rows — that's what
+        // was showing up as an extra/wrong photo on the Product view
+        // gallery after editing.
+        block.existingImageUrls[angle] = null;
+      });
+    } finally {
+      if (mounted) setState(() => _busyKeys.remove(key));
+    }
+  }
+
+  // Multi-select — owner picks all their turntable shots in one go (from
+  // the gallery), or uses the in-app camera's burst mode to shoot them
+  // live in order. Appends to whatever's already there (existing + newly
+  // added) so they can add in batches if needed. Every photo goes through
+  // the same auto-enhance pass as the angle photos.
   Future<void> _pickSpinImages(_ColorBlock block) async {
-    final picker = ImagePicker();
-    final picked = await picker.pickMultiImage(imageQuality: 85);
+    final source = await _showPhotoSourceSheet();
+    if (source == null) return;
+
+    List<XFile> picked = [];
+    if (source == _PhotoSource.camera) {
+      final result = await Navigator.of(context).push<List<XFile>>(
+        MaterialPageRoute(
+          builder: (_) => const CameraCaptureScreen(burstMode: true),
+        ),
+      );
+      if (result != null) picked = result;
+    } else {
+      picked = await ImagePicker().pickMultiImage(imageQuality: 85);
+    }
     if (picked.isEmpty) return;
-    setState(() => block.spin360.addAll(picked));
+
+    final key = 'spin_${block.hashCode}';
+    setState(() => _busyKeys.add(key));
+    try {
+      final enhanced = await Future.wait(picked.map(ImageEnhancer.enhance));
+      if (!mounted) return;
+      setState(() => block.spin360.addAll(enhanced));
+    } finally {
+      if (mounted) setState(() => _busyKeys.remove(key));
+    }
+  }
+
+  // Opens the manual editor (brightness/contrast/saturation/rotate) for a
+  // freshly-picked LOCAL angle photo. Existing server photos aren't
+  // editable in place — pick a new photo for that angle instead.
+  Future<void> _editAngleImage(_ColorBlock block, String angle) async {
+    final file = block.images[angle];
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+    final edited = await Navigator.of(context).push<XFile>(
+      MaterialPageRoute(
+        builder: (_) =>
+            PhotoEditScreen(initialBytes: bytes, fileName: file.name),
+      ),
+    );
+    if (edited != null) setState(() => block.images[angle] = edited);
+  }
+
+  // Same idea for a freshly-picked LOCAL spin photo. `index` is over the
+  // combined existing-then-new sequence, same convention as the rest of
+  // the spin-photo helpers.
+  Future<void> _editSpinImage(_ColorBlock block, int index) async {
+    if (index < block.existingSpin360Urls.length) return; // server photo
+    final localIndex = index - block.existingSpin360Urls.length;
+    final file = block.spin360[localIndex];
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+    final edited = await Navigator.of(context).push<XFile>(
+      MaterialPageRoute(
+        builder: (_) =>
+            PhotoEditScreen(initialBytes: bytes, fileName: file.name),
+      ),
+    );
+    if (edited != null) {
+      setState(() => block.spin360[localIndex] = edited);
+    }
   }
 
   // Index is over the combined existing-then-new sequence shown in the UI.
@@ -819,7 +985,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
     _washCareCtrl.dispose();
     _countryCtrl.dispose();
     _tagInputCtrl.dispose();
-    for (final b in _colors) b.nameCtrl.dispose();
+    for (final b in _colors) {
+      b.nameCtrl.dispose();
+    }
     super.dispose();
   }
 
@@ -1029,10 +1197,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: AppColors.red.withOpacity(0.08),
+                              color: AppColors.red.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
-                                color: AppColors.red.withOpacity(0.3),
+                                color: AppColors.red.withValues(alpha: 0.3),
                               ),
                             ),
                             child: Text(
@@ -1420,6 +1588,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   // one continuous ordered strip.
   Widget _spin360Section(_ColorBlock block) {
     final totalCount = block.existingSpin360Urls.length + block.spin360.length;
+    final busy = _busyKeys.contains('spin_${block.hashCode}');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1490,7 +1659,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   ),
                 ),
               GestureDetector(
-                onTap: () => _pickSpinImages(block),
+                onTap: busy ? null : () => _pickSpinImages(block),
                 child: Container(
                   width: 74,
                   height: 90,
@@ -1499,25 +1668,33 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: AppColors.line),
                   ),
-                  child: const Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.add_a_photo_outlined,
-                        size: 18,
-                        color: AppColors.inkSoft,
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Add photos',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          color: AppColors.inkSoft,
+                  child: busy
+                      ? const Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.add_a_photo_outlined,
+                              size: 18,
+                              color: AppColors.inkSoft,
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Add photos',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                color: AppColors.inkSoft,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ],
@@ -1529,7 +1706,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   // `index`/`totalCount` are over the combined existing-then-new sequence.
   // Pass either `networkUrl` (existing server photo) or `file` (freshly
-  // picked local photo), never both.
+  // picked local photo), never both. A pencil icon (edit) only shows for
+  // local `file` photos — existing server photos aren't editable in place.
   Widget _spinThumb(
     _ColorBlock block,
     int index,
@@ -1551,7 +1729,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       ? Image.network(
                           ProductService.fullImageUrl(networkUrl),
                           fit: BoxFit.cover,
-                          errorBuilder: (_, error, __) {
+                          errorBuilder: (_, error, _) {
                             debugPrint('IMAGE LOAD ERROR: $error');
                             return Container(
                               color: Colors.red,
@@ -1590,6 +1768,27 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     ),
                   ),
                 ),
+                if (file != null)
+                  Positioned(
+                    top: 3,
+                    left: 3,
+                    child: GestureDetector(
+                      onTap: () => _editSpinImage(block, index),
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.edit,
+                          size: 9,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                    ),
+                  ),
                 Positioned(
                   top: 3,
                   right: 3,
@@ -1599,7 +1798,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       width: 16,
                       height: 16,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -1648,14 +1847,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   // Shows the newly picked local photo if there is one, otherwise falls
   // back to the existing server photo for this angle, otherwise the empty
-  // "tap to add" placeholder.
+  // "tap to add" placeholder. A pencil (edit) icon appears only for a
+  // freshly-picked local photo (`file != null`).
   Widget _angleTile(_ColorBlock block, String angle, String label) {
     final file = block.images[angle];
     final existingUrl = block.existingImageUrls[angle];
     final hasPhoto = file != null || existingUrl != null;
+    final busy = _busyKeys.contains('${angle}_${block.hashCode}');
 
     return GestureDetector(
-      onTap: () => _pickAngleImage(block, angle),
+      onTap: busy ? null : () => _pickAngleImage(block, angle),
       child: AspectRatio(
         aspectRatio: 1,
         child: Container(
@@ -1665,7 +1866,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
             border: Border.all(color: AppColors.line),
           ),
           clipBehavior: Clip.antiAlias,
-          child: !hasPhoto
+          child: busy
+              ? const Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : !hasPhoto
               ? Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -1703,7 +1912,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         : Image.network(
                             ProductService.fullImageUrl(existingUrl!),
                             fit: BoxFit.cover,
-                            errorBuilder: (_, error, __) {
+                            errorBuilder: (_, error, _) {
                               debugPrint('IMAGE LOAD ERROR: $error');
                               return Container(
                                 color: Colors.red,
@@ -1732,6 +1941,27 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         ),
                       ),
                     ),
+                    if (file != null)
+                      Positioned(
+                        top: 4,
+                        left: 4,
+                        child: GestureDetector(
+                          onTap: () => _editAngleImage(block, angle),
+                          child: Container(
+                            width: 18,
+                            height: 18,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.edit,
+                              size: 10,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                        ),
+                      ),
                     Positioned(
                       top: 4,
                       right: 4,
@@ -1744,7 +1974,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           width: 18,
                           height: 18,
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withValues(alpha: 0.9),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
@@ -1791,7 +2021,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         ),
         Switch(
           value: block.useCustomPricing,
-          activeColor: AppColors.terracotta,
+          activeThumbColor: AppColors.terracotta,
           onChanged: (v) => setState(() => block.useCustomPricing = v),
         ),
       ],
@@ -1873,19 +2103,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 const SizedBox(width: 4),
                 Expanded(
                   child: TextFormField(
-                    key: ValueKey('price_${row.variantId}_$index'),
-                    initialValue: row.price,
-                    onChanged: (v) => row.price = v,
-                    keyboardType: TextInputType.number,
-                    decoration: _variantDecoration(
-                      'Price override (₹) — optional',
-                    ),
-                    style: const TextStyle(fontSize: 12.5),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextFormField(
                     key: ValueKey('mrp_${row.variantId}_$index'),
                     initialValue: row.mrp,
                     onChanged: (v) => row.mrp = v,
@@ -1896,6 +2113,22 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     style: const TextStyle(fontSize: 12.5),
                   ),
                 ),
+
+                const SizedBox(width: 8),
+
+                Expanded(
+                  child: TextFormField(
+                    key: ValueKey('price_${row.variantId}_$index'),
+                    initialValue: row.price,
+                    onChanged: (v) => row.price = v,
+                    keyboardType: TextInputType.number,
+                    decoration: _variantDecoration(
+                      'Price override (₹) — optional',
+                    ),
+                    style: const TextStyle(fontSize: 12.5),
+                  ),
+                ),
+
                 const SizedBox(width: 34), // aligns with delete icon above
               ],
             ),
@@ -2143,8 +2376,7 @@ class _SectionPanel extends StatelessWidget {
 
   const _SectionPanel({
     required this.child,
-    this.padding = const EdgeInsets.all(22),
-  });
+  }) : padding = const EdgeInsets.all(22);
 
   @override
   Widget build(BuildContext context) {
@@ -2171,8 +2403,7 @@ class _AppButton extends StatelessWidget {
     required this.label,
     this.icon,
     this.onPressed,
-    this.outline = false,
-  });
+  }) : outline = false;
 
   @override
   Widget build(BuildContext context) {

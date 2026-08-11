@@ -70,7 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(.05),
+                                  color: Colors.black.withValues(alpha: .05),
 
                                   blurRadius: 20,
 
@@ -207,8 +207,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             onPressed: isLoading
                                 ? null
                                 : () async {
-                                    if (!_formKey.currentState!.validate())
+                                    if (!_formKey.currentState!.validate()) {
                                       return;
+                                    }
 
                                     setState(() {
                                       isLoading = true;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 't_colors.dart';
+import '../core/responsive.dart';
 
 class AdminHeader extends StatefulWidget {
   final String title;
@@ -23,29 +24,47 @@ class _AdminHeaderState extends State<AdminHeader> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 58,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+    final isMobile = Responsive.isMobile(context);
+    debugPrint("Header isMobile: $isMobile");
+
+    return SafeArea(
+  bottom: false,
+  child: Container(
+      height: isMobile ? 70 : 58,
+      padding: EdgeInsets.symmetric(
+  horizontal: isMobile ? 16 : 24,
+),
       decoration: const BoxDecoration(
         color: TColors.white,
         border: Border(bottom: BorderSide(color: TColors.border)),
       ),
       child: Row(
         children: [
+          
+  if (isMobile)
+  IconButton(
+    icon: const Icon(Icons.menu),
+    onPressed: () {
+      Scaffold.maybeOf(context)?.openDrawer();
+    },
+  ),
+
+    if (isMobile)
+      const SizedBox(width: 12),
           // Title + subtitle
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(widget.title,
-                  style: const TextStyle(
-                      fontSize: 15,
+                  style: TextStyle(
+                      fontSize: isMobile ? 18 : 15,
                       fontWeight: FontWeight.w600,
                       color: TColors.black)),
               if (widget.subtitle.isNotEmpty)
                 Text(widget.subtitle,
-                    style: const TextStyle(
-                        fontSize: 11, color: TColors.brownLight)),
+                    style: TextStyle(
+                        fontSize: isMobile ? 12 : 11, color: TColors.brownLight)),
             ],
           ),
 
@@ -59,6 +78,7 @@ class _AdminHeaderState extends State<AdminHeader> {
           _profileBtn(context),
         ],
       ),
+  ),
     );
   }
 
@@ -104,6 +124,8 @@ class _AdminHeaderState extends State<AdminHeader> {
 
   // ── Profile avatar only — no dropdown ────────────────────────────────────
   Widget _profileBtn(BuildContext context) {
+    final isMobile = Responsive.isMobile(context);
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _profileHovered = true),
@@ -113,14 +135,17 @@ class _AdminHeaderState extends State<AdminHeader> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(
+    isMobile ? 19 : 17,
+),
             border: Border.all(
               color: _profileHovered ? TColors.border : Colors.transparent,
               width: 2,
             ),
           ),
           child: Container(
-            width: 34, height: 34,
+            width: isMobile ? 38 : 34,
+height: isMobile ? 38 : 34,
             decoration: BoxDecoration(
               color: TColors.black,
               borderRadius: BorderRadius.circular(17),
