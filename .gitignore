@@ -1,1 +1,4 @@
-backend/uploads/
+backend/uploads/backend/node_modules/
+flutter_customer/.dart_tool/
+flutter_customer/build/
+backend/node_modules/

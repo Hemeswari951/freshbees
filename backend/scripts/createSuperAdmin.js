@@ -5,7 +5,7 @@ const pool = require("../config/db");
 async function createSuperAdmin() {
   try {
 
-    const email = "jayasuryaparasu@gmail.com";
+    const email = "prasad@gmail.com";
 
     // Already exists? 
     const existing = await pool.query(
@@ -18,7 +18,7 @@ async function createSuperAdmin() {
       process.exit();
     }
 
-    const passwordHash = await bcrypt.hash("Admin@123", 10);
+    const passwordHash = await bcrypt.hash("hari@123", 10);
 
     await pool.query(
       `

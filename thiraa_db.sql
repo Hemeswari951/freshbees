@@ -31,9 +31,9 @@ CREATE TABLE customers (
     customer_id SERIAL PRIMARY KEY,
     first_name VARCHAR(150) NOT NULL,
     last_name VARCHAR(150) NOT NULL,
-    email VARCHAR(150) UNIQUE NOT NULL,
+    email VARCHAR(150) UNIQUE,  -- Removed NOT NULL for flexible authentication
+    phone VARCHAR(20) UNIQUE,   -- Removed NOT NULL for flexible authentication
     password VARCHAR(255) NOT NULL,
-    phone VARCHAR(20) UNIQUE NOT NULL,
     profile_image TEXT,
     gender VARCHAR(20),
     city VARCHAR(100),
@@ -385,7 +385,7 @@ CREATE TABLE notifications (
 -- ─────────────────────────────────────────────────────────────────────────
 CREATE TABLE otp_verifications (
     id              SERIAL PRIMARY KEY,
-    email           VARCHAR(255) NOT NULL,
+    identifier VARCHAR(150) NOT NULL,
     portal          VARCHAR(20)  NOT NULL,
     purpose         VARCHAR(30)  NOT NULL,
     otp_code        VARCHAR(255) NOT NULL,
@@ -393,7 +393,7 @@ CREATE TABLE otp_verifications (
     attempts        INT          DEFAULT 0,
     expires_at      TIMESTAMP    NOT NULL,
     created_at      TIMESTAMP    DEFAULT NOW(),
-    CONSTRAINT unique_active_otp UNIQUE (email, portal)
+    CONSTRAINT unique_active_otp UNIQUE (identifier, portal)
 );
 
 -- ============================================================================
@@ -411,6 +411,9 @@ CREATE INDEX idx_order_items_shop ON order_items(shop_id);
 CREATE INDEX idx_order_items_status ON order_items(item_status);
 CREATE INDEX idx_payouts_shop ON payouts(shop_id);
 CREATE INDEX idx_reviews_product ON reviews(product_id);
+CREATE INDEX idx_otp_identifier ON otp_verifications(identifier);
+CREATE INDEX idx_customers_email ON customers(email);
+CREATE INDEX idx_customers_phone ON customers(phone);
 
 -- ============================================================================
 -- VIEWS — computed on the fly, never stored

@@ -18,22 +18,22 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
 
     if (token == null || token.isEmpty) {
-      await prefs.remove('admin_token');
+      await prefs.remove('shopowner_token');
     } else {
-      await prefs.setString('admin_token', token);
+      await prefs.setString('shopowner_token', token);
     }
   }
 
   static Future<void> loadToken() async {
     final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('admin_token');
+    _token = prefs.getString('shopowner_token');
   }
 
   static Future<void> clearToken() async {
     _token = null;
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('admin_token');
+    await prefs.remove('shopowner_token');
   }
 
   static String? getToken() => _token;

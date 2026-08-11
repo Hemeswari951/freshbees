@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_shopowner/main.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:shopowner_portal/main.dart';
-
 void main() {
   testWidgets('ShopOwner Portal loads Overview screen', (
     WidgetTester tester,
