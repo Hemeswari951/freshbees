@@ -53,41 +53,41 @@ class ThiraaAdminApp extends StatelessWidget {
           routes: [
             GoRoute(
               path: '/dashboard',
-              builder: (_, __) => const DashboardScreen(),
+              builder: (_, _) => const DashboardScreen(),
             ),
-            GoRoute(path: '/shops', builder: (_, __) => const ShopsScreen()),
+            GoRoute(path: '/shops', builder: (_, _) => const ShopsScreen()),
             GoRoute(
               path: '/customers',
-              builder: (_, __) => const CustomersScreen(),
+              builder: (_, _) => const CustomersScreen(),
             ),
             GoRoute(
               path: '/products',
-              builder: (_, __) => const ProductsScreen(),
+              builder: (_, _) => const ProductsScreen(),
             ),
-            GoRoute(path: '/orders', builder: (_, __) => const OrdersScreen()),
+            GoRoute(path: '/orders', builder: (_, _) => const OrdersScreen()),
             GoRoute(
               path: '/categories',
-              builder: (_, __) => const CategoriesScreen(),
+              builder: (_, _) => const CategoriesScreen(),
             ),
             GoRoute(
               path: '/payouts',
-              builder: (_, __) => const PayoutsScreen(),
+              builder: (_, _) => const PayoutsScreen(),
             ),
             GoRoute(
               path: '/banners',
-              builder: (_, __) => const BannersScreen(),
+              builder: (_, _) => const BannersScreen(),
             ),
             GoRoute(
               path: '/reports',
-              builder: (_, __) => const ReportsScreen(),
+              builder: (_, _) => const ReportsScreen(),
             ),
             GoRoute(
               path: '/settings',
-              builder: (_, __) => const SettingsScreen(),
+              builder: (_, _) => const SettingsScreen(),
             ),
             GoRoute(
               path: '/add-admin',
-              builder: (_, __) => const AddAdminScreen(),
+              builder: (_, _) => const AddAdminScreen(),
             ),
           ],
         ),

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../widgets/t_colors.dart';
 import '../../models/create_admin.dart';
 import '../../services/dashboard_service.dart';
+import '../../core/responsive.dart';
 
 class AddAdminScreen extends StatefulWidget {
   const AddAdminScreen({super.key});
@@ -29,10 +30,12 @@ class _AddAdminScreenState extends State<AddAdminScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = Responsive.isMobile(context);
+
     return Scaffold(
       backgroundColor: TColors.cream,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(30),
+        padding: EdgeInsets.all(isMobile ? 16 : 30),
         child: Form(
           key: _formKey,
           child: Column(
@@ -44,47 +47,88 @@ class _AddAdminScreenState extends State<AddAdminScreen> {
               //------------------------------------------------
               // HEADER
               //------------------------------------------------
-              Row(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: TColors.border),
-                    ),
-                    child: IconButton(
-                      onPressed: () {
-                        context.go('/dashboard');
-                      },
-                      icon: const Icon(Icons.arrow_back),
-                    ),
-                  ),
+             if (isMobile)
+  Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: TColors.border),
+        ),
+        child: IconButton(
+          onPressed: () {
+            context.go('/dashboard');
+          },
+          icon: const Icon(Icons.arrow_back),
+        ),
+      ),
 
-                  const SizedBox(width: 16),
+      const SizedBox(height: 16),
 
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Add Administrator",
-                        style: TextStyle(
-                          fontSize: 30,
-                          fontWeight: FontWeight.bold,
-                          color: TColors.black,
-                        ),
-                      ),
-                      SizedBox(height: 5),
-                      Text(
-                        "Create a new administrator account",
-                        style: TextStyle(
-                          color: TColors.brownLight,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+      const Text(
+        "Add Administrator",
+        style: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.bold,
+          color: TColors.black,
+        ),
+      ),
+
+      const SizedBox(height: 4),
+
+      Text(
+        "Create a new administrator account",
+        style: TextStyle(
+          color: TColors.brownLight,
+          fontSize: 13,
+        ),
+      ),
+    ],
+  )
+else
+  Row(
+    children: [
+      Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: TColors.border),
+        ),
+        child: IconButton(
+          onPressed: () {
+            context.go('/dashboard');
+          },
+          icon: const Icon(Icons.arrow_back),
+        ),
+      ),
+
+      const SizedBox(width: 16),
+
+      const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Add Administrator",
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.bold,
+              color: TColors.black,
+            ),
+          ),
+          SizedBox(height: 5),
+          Text(
+            "Create a new administrator account",
+            style: TextStyle(
+              color: TColors.brownLight,
+              fontSize: 15,
+            ),
+          ),
+        ],
+      ),
+    ],
+  ),
 
               const SizedBox(height: 30),
               //------------------------------------------------
@@ -94,6 +138,7 @@ class _AddAdminScreenState extends State<AddAdminScreen> {
                 title: "Personal Information",
                 child: Column(
                   children: [
+                    
                     Row(
                       children: [
                         Expanded(
@@ -132,7 +177,7 @@ class _AddAdminScreenState extends State<AddAdminScreen> {
 
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: selectedRole,
+                            initialValue: selectedRole,
                             decoration: _inputDecoration(
                               "Role",
                               Icons.admin_panel_settings_outlined,

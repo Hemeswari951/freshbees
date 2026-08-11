@@ -178,6 +178,14 @@ async function createProductForShop(shopId, payload) {
 //     sizes: [{ variantId: 7 | null, size, stockQuantity, price, mrp }],
 //   }
 //
+// ⚠️ CLIENT CONTRACT for a clean replace: when the owner picks a NEW photo
+// for an angle that already had one, the client MUST send that angle as
+// `null` in `existingImages` (not omit it, not leave the old URL in
+// there) — otherwise this diff below sees the old URL as "still kept"
+// and you end up with BOTH the old and the new photo saved for the same
+// angle. (Flutter AddProductScreen._pickAngleImage does this correctly —
+// it clears existingImageUrls[angle] the moment a replacement is picked.)
+//
 // Diffing logic:
 //  1. Colors that exist in DB but are missing from payload entirely →
 //     the owner removed that whole color. Delete its images from
@@ -281,7 +289,40 @@ async function setActiveForShop(productId, shopId, isActive) {
   return getOneForShop(productId, shopId);
 }
 
+// ── DELETE flow ──────────────────────────────────────────────────────
+//
+// Deleting a product now cleans up EVERYTHING that belongs to it, not
+// just the `products` row:
+//   1. every image FILE in storage (all colors, all angles + 360 frames)
+//   2. every product_images DB row (done as part of step 1, via the same
+//      helper the edit flow uses)
+//   3. every variant + color row
+//   4. tags + attributes
+//   5. the product row itself
+//
+// Steps 3-4 are done explicitly here rather than relying on an FK
+// ON DELETE CASCADE — this way the cleanup is correct regardless of how
+// (or whether) cascades are set up in the schema; if cascades ARE
+// configured, these calls just delete 0 already-gone rows, which is
+// harmless.
 async function deleteForShop(productId, shopId) {
+  const row = await productModel.findByIdAndShop(productId, shopId);
+  if (!row) return null; // not found, or belongs to a different shop — nothing to clean up
+
+  // 1) + 2) Storage files + product_images rows, across every color.
+  const allImages = row.colors.flatMap((c) => c.images);
+  await productModel.deleteImagesFromStorageAndDb(allImages);
+
+  // 3) Variants + color rows.
+  for (const color of row.colors) {
+    await productModel.deleteColor(color.product_color_id);
+  }
+
+  // 4) Tags + attributes — replace with an empty list = full clear.
+  await productModel.replaceProductTags(productId, []);
+  await productModel.replaceProductAttributes(productId, []);
+
+  // 5) The product row itself.
   return productModel.deleteByShop(productId, shopId);
 }
 

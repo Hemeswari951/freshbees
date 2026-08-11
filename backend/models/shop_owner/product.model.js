@@ -363,7 +363,8 @@ async function adjustVariantStock(variantId, shopId, delta) {
 
 // ─────────────────────────────────────────────────────────────────────
 // NEW — supporting the update-product edit flow (image replace/delete,
-// variant diffing, color diffing, tag/attribute full-replace).
+// variant diffing, color diffing, tag/attribute full-replace) AND the
+// delete-product flow (full cascade including storage files).
 // ─────────────────────────────────────────────────────────────────────
 
 // Same shape as the color-loop inside findByIdAndShop, but standalone
@@ -410,11 +411,21 @@ async function updateColor(productColorId, colorName, colorHex) {
 // left pointing at it to clean it up later.
 //
 // images: [{ image_id, image_url, ... }] — the exact rows to remove.
+//
+// A single missing/already-deleted file (or a transient storage error)
+// no longer aborts the whole cleanup — it's logged and skipped, so the
+// DB rows (and, when this is called from deleteForShop, the rest of the
+// product deletion) still go through. Silently losing an image row while
+// leaving its file behind would be worse than the reverse.
 async function deleteImagesFromStorageAndDb(images) {
   if (!images || !images.length) return;
 
   for (const img of images) {
-    await deleteFile(img.image_url);
+    try {
+      await deleteFile(img.image_url);
+    } catch (err) {
+      console.error(`Could not delete file from storage: ${img.image_url}`, err);
+    }
   }
 
   const ids = images.map((i) => i.image_id);
@@ -461,7 +472,8 @@ async function deleteColor(productColorId) {
 
 // Full replace — simplest correct approach for an edit form. Avoids
 // having to diff individual tag adds/removes; the edit screen always
-// sends the complete current tag list.
+// sends the complete current tag list. Also reused by deleteForShop with
+// an empty list to fully clear a product's tags before it's deleted.
 async function replaceProductTags(productId, tagNames) {
   await pool.query(`DELETE FROM product_tags WHERE product_id = $1`, [productId]);
   await addProductTags(productId, tagNames);

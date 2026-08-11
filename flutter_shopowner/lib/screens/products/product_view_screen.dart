@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
 import '../../widgets/app_colors.dart';
 import '../../services/product_service.dart';
 import 'add_product_screen.dart';
@@ -134,8 +136,9 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
   Map<String, dynamic>? get _selectedVariant {
     if (_selectedSizeIndex == null) return null;
     final variants = _activeVariants;
-    if (_selectedSizeIndex! < 0 || _selectedSizeIndex! >= variants.length)
+    if (_selectedSizeIndex! < 0 || _selectedSizeIndex! >= variants.length) {
       return null;
+    }
     return variants[_selectedSizeIndex!];
   }
 
@@ -304,8 +307,9 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
         initialStock: originalStock,
       ),
     );
-    if (result == null || result == originalStock)
+    if (result == null || result == originalStock) {
       return; // cancelled or unchanged
+    }
 
     final delta = result - originalStock;
 
@@ -333,86 +337,39 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.white,
-      appBar: AppBar(
-        backgroundColor: AppColors.white,
-        elevation: 3,
-        shadowColor: Colors.black.withOpacity(0.15),
-        surfaceTintColor: Colors.transparent,
-        iconTheme: const IconThemeData(color: AppColors.ink),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Text(
-              'Product view',
-              style: TextStyle(
-                fontFamily: 'Fraunces',
-                fontWeight: FontWeight.w600,
-                color: AppColors.ink,
-                fontSize: 16,
+    return _loading
+        ? const Center(child: CircularProgressIndicator())
+        : _error != null
+        ? Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _error!,
+                    style: const TextStyle(color: AppColors.inkSoft),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 14),
+                  _AppButton(label: 'Try again', onPressed: _load),
+                ],
               ),
             ),
-            Text(
-              'This is how customers see it',
-              style: TextStyle(
-                fontSize: 11.5,
-                color: AppColors.inkSoft,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          if (!_loading && _error == null && _product != null)
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: 'Edit product',
-              onPressed: _onEditTap,
-            ),
-          const SizedBox(width: 6),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _error!,
-                      style: const TextStyle(color: AppColors.inkSoft),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 14),
-                    _AppButton(label: 'Try again', onPressed: _load),
-                  ],
-                ),
-              ),
-            )
-          : _buildContent(),
-    );
+          )
+        : _buildContent();
   }
 
   Widget _buildContent() {
     final product = _product!;
     final overallStatus = product['stockStatus'] as String? ?? 'In stock';
 
-    // Base product price/mrp/discount.
     double price = (product['price'] as num).toDouble();
     double? mrp = product['mrp'] != null
         ? (product['mrp'] as num).toDouble()
         : null;
     int discountPercent = product['discountPercent'] as int? ?? 0;
 
-    // The selected size (default = first size) may carry its own
-    // effective price/mrp — see Approach 1 in the backend. When present,
-    // it overrides the base price shown, same as tapping a size on a
-    // real customer product page can change the shown price.
     final selected = _selectedVariant;
     if (selected != null) {
       final effPrice = selected['effectivePrice'];
@@ -422,49 +379,117 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
       if (effMrp != null) {
         mrp = (effMrp as num).toDouble();
       } else if (selected['effectivePrice'] != null) {
-        mrp = null; // effective price given but no mrp -> no strike-through
+        mrp = null;
       }
       if (effDiscount != null) discountPercent = effDiscount as int;
     }
 
     final items = _galleryItems;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 900),
-          child: LayoutBuilder(
-            builder: (context, c) {
-              final wide = c.maxWidth >= 640;
-              final gallery = wide
-                  ? _desktopGallery(items)
-                  : _mobileGallery(items);
-              final details = _detailsSection(
-                price,
-                mrp,
-                discountPercent,
-                overallStatus,
-              );
-
-              if (wide) {
-                return Row(
+    return Column(
+      children: [
+        // ── Custom back header — context.go() doesn't push to the stack,
+        // so we can't rely on Navigator.pop(); go back to the list route
+        // directly instead. ──
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back, color: AppColors.ink),
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/products');
+                  }
+                },
+              ),
+              const SizedBox(width: 4),
+              const Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    SizedBox(width: 380, child: gallery),
-                    const SizedBox(width: 32),
-                    Expanded(child: details),
+                    Text(
+                      'Product view',
+                      style: TextStyle(
+                        fontFamily: 'Fraunces',
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.ink,
+                        fontSize: 16,
+                      ),
+                    ),
+                    Text(
+                      'This is how customers see it',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.inkSoft,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
                   ],
-                );
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [gallery, const SizedBox(height: 24), details],
-              );
-            },
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, color: AppColors.ink),
+                tooltip: 'Edit product',
+                onPressed: _onEditTap,
+              ),
+            ],
           ),
         ),
-      ),
+
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 900),
+                child: LayoutBuilder(
+                  builder: (context, c) {
+                    final wide = c.maxWidth >= 640;
+                    final gallery = wide
+                        ? _desktopGallery(items)
+                        : _mobileGallery(items);
+                    final details = _detailsSection(
+                      price,
+                      mrp,
+                      discountPercent,
+                      overallStatus,
+                    );
+
+                    if (wide) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(width: 380, child: gallery),
+                          const SizedBox(width: 32),
+                          Expanded(child: details),
+                        ],
+                      );
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [gallery, const SizedBox(height: 24), details],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -482,7 +507,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
               : ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: items.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
                   itemBuilder: (context, i) =>
                       _thumbnail(items[i], i, i == selected),
                 ),
@@ -538,7 +563,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                                 decoration: BoxDecoration(
                                   color: active
                                       ? AppColors.ink
-                                      : AppColors.ink.withOpacity(0.3),
+                                      : AppColors.ink.withValues(alpha: 0.3),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                               );
@@ -556,7 +581,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (context, i) =>
                   _thumbnail(items[i], i, i == _selectedIndex),
             ),
@@ -591,7 +616,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           boxShadow: active
               ? [
                   BoxShadow(
-                    color: AppColors.terracotta.withOpacity(0.45),
+                    color: AppColors.terracotta.withValues(alpha: 0.45),
                     blurRadius: 0,
                     spreadRadius: 2,
                   ),
@@ -602,7 +627,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
         child: Image.network(
           thumbUrl,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(color: AppColors.blush),
+          errorBuilder: (_, _, _) => Container(color: AppColors.blush),
         ),
       ),
     );
@@ -652,7 +677,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           product['subCategory'] as String,
           style: TextStyle(
             fontSize: 14.5,
-            color: AppColors.ink.withOpacity(0.6),
+            color: AppColors.ink.withValues(alpha: 0.6),
             fontWeight: FontWeight.w400,
             height: 1.35,
           ),
@@ -697,7 +722,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                 '$_reviewCount ${_reviewCount == 1 ? 'Rating' : 'Ratings'}',
                 style: TextStyle(
                   fontSize: 13,
-                  color: AppColors.ink.withOpacity(0.55),
+                  color: AppColors.ink.withValues(alpha: 0.55),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -708,10 +733,10 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
             'No ratings yet',
             style: TextStyle(
               fontSize: 12.5,
-              color: AppColors.ink.withOpacity(0.5),
+              color: AppColors.ink.withValues(alpha: 0.5),
             ),
           ),
-        Divider(color: Colors.grey.withOpacity(0.45), thickness: 1, height: 20),
+        Divider(color: Colors.grey.withValues(alpha: 0.45), thickness: 1, height: 20),
         const SizedBox(height: 10),
 
         // Price — reflects the selected size's own price if it has one
@@ -736,7 +761,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                   'MRP ₹${mrp.toStringAsFixed(0)}',
                   style: TextStyle(
                     fontSize: 15,
-                    color: AppColors.ink.withOpacity(0.4),
+                    color: AppColors.ink.withValues(alpha: 0.4),
                     fontWeight: FontWeight.w500,
                     decoration: TextDecoration.lineThrough,
                   ),
@@ -764,7 +789,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           'inclusive of all taxes',
           style: TextStyle(
             fontSize: 12.5,
-            color: const Color.fromARGB(255, 2, 103, 41).withOpacity(0.85),
+            color: const Color.fromARGB(255, 2, 103, 41).withValues(alpha: 0.85),
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -789,7 +814,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: _colors.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
               itemBuilder: (context, i) {
                 final c = _colors[i];
                 final active = i == _activeColorIndex;
@@ -806,8 +831,8 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                           boxShadow: active
                               ? [
                                   BoxShadow(
-                                    color: AppColors.terracotta.withOpacity(
-                                      0.45,
+                                    color: AppColors.terracotta.withValues(
+                                      alpha: 0.45,
                                     ),
                                     blurRadius: 0,
                                     spreadRadius: 2,
@@ -820,7 +845,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                             ? Image.network(
                                 coverUrl,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
+                                errorBuilder: (_, _, _) =>
                                     Container(color: AppColors.blush),
                               )
                             : Container(color: AppColors.blush),
@@ -830,7 +855,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                         c['colorName'] as String? ?? '',
                         style: TextStyle(
                           fontSize: 10,
-                          color: AppColors.ink.withOpacity(active ? 0.9 : 0.5),
+                          color: AppColors.ink.withValues(alpha: active ? 0.9 : 0.5),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -844,7 +869,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
         ],
 
         _sizeStockSection(),
-        Divider(color: Colors.grey.withOpacity(0.45), thickness: 1, height: 20),
+        Divider(color: Colors.grey.withValues(alpha: 0.45), thickness: 1, height: 20),
         const SizedBox(height: 24),
 
         _sectionTitle('PRODUCT DETAILS'),
@@ -907,7 +932,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
               'Total: $totalStock pcs',
               style: TextStyle(
                 fontSize: 11.5,
-                color: AppColors.ink.withOpacity(0.5),
+                color: AppColors.ink.withValues(alpha: 0.5),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -918,7 +943,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           'Tap a size to select it · tap the pencil to update stock',
           style: TextStyle(
             fontSize: 10.5,
-            color: AppColors.ink.withOpacity(0.65),
+            color: AppColors.ink.withValues(alpha: 0.65),
           ),
         ),
         const SizedBox(height: 10),
@@ -946,13 +971,13 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: selected
-                              ? AppColors.terracotta.withOpacity(0.18)
+                              ? AppColors.terracotta.withValues(alpha: 0.18)
                               : const Color.fromARGB(
                                   255,
                                   246,
                                   243,
                                   241,
-                                ).withOpacity(0.5),
+                                ).withValues(alpha: 0.5),
                           border: selected
                               ? Border.all(
                                   color: const Color.fromARGB(93, 15, 12, 10),
@@ -1008,7 +1033,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                       fontSize: 8.5,
                       fontWeight: FontWeight.w700,
                       color: outOfStock
-                          ? AppColors.ink.withOpacity(0.4)
+                          ? AppColors.ink.withValues(alpha: 0.4)
                           : (lowStock ? AppColors.gold : AppColors.green),
                     ),
                   ),
@@ -1080,7 +1105,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           entry.key,
           style: TextStyle(
             fontSize: 11.5,
-            color: AppColors.ink.withOpacity(0.45),
+            color: AppColors.ink.withValues(alpha: 0.45),
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -1093,7 +1118,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
             fontWeight: FontWeight.w500,
           ),
         ),
-        Divider(color: Colors.grey.withOpacity(0.45), thickness: 1, height: 20),
+        Divider(color: Colors.grey.withValues(alpha: 0.45), thickness: 1, height: 20),
       ],
     );
   }
@@ -1112,7 +1137,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
             'No reviews yet.',
             style: TextStyle(
               fontSize: 13,
-              color: AppColors.ink.withOpacity(0.5),
+              color: AppColors.ink.withValues(alpha: 0.5),
             ),
           )
         else
@@ -1162,7 +1187,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                         date,
                         style: TextStyle(
                           fontSize: 10.5,
-                          color: AppColors.ink.withOpacity(0.4),
+                          color: AppColors.ink.withValues(alpha: 0.4),
                         ),
                       ),
                     ],
@@ -1271,7 +1296,7 @@ class _StockEditorSheetState extends State<_StockEditorSheet> {
             'Update stock for this size',
             style: TextStyle(
               fontSize: 12.5,
-              color: AppColors.ink.withOpacity(0.5),
+              color: AppColors.ink.withValues(alpha: 0.5),
             ),
           ),
           const SizedBox(height: 22),
@@ -1353,13 +1378,13 @@ class _StepButton extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: enabled
-              ? AppColors.blush.withOpacity(0.6)
-              : AppColors.blush.withOpacity(0.25),
+              ? AppColors.blush.withValues(alpha: 0.6)
+              : AppColors.blush.withValues(alpha: 0.25),
         ),
         child: Icon(
           icon,
           size: 18,
-          color: enabled ? AppColors.ink : AppColors.ink.withOpacity(0.3),
+          color: enabled ? AppColors.ink : AppColors.ink.withValues(alpha: 0.3),
         ),
       ),
     );
@@ -1465,7 +1490,7 @@ class _Product360AutoViewerState extends State<Product360AutoViewer> {
           key: ValueKey(_frame),
           fit: BoxFit.cover,
           width: double.infinity,
-          errorBuilder: (_, __, ___) => const Center(
+          errorBuilder: (_, _, _) => const Center(
             child: Icon(Icons.broken_image_outlined, color: AppColors.inkSoft),
           ),
         ),
@@ -1492,7 +1517,7 @@ class _ZoomableNetworkImageState extends State<_ZoomableNetworkImage> {
       PageRouteBuilder(
         opaque: false,
         barrierColor: Colors.black,
-        pageBuilder: (_, __, ___) =>
+        pageBuilder: (_, _, _) =>
             _FullscreenZoomView(imageUrl: widget.imageUrl),
       ),
     );
@@ -1517,7 +1542,7 @@ class _ZoomableNetworkImageState extends State<_ZoomableNetworkImage> {
             widget.imageUrl,
             fit: BoxFit.cover,
             width: double.infinity,
-            errorBuilder: (_, __, ___) => Container(
+            errorBuilder: (_, _, _) => Container(
               color: AppColors.blush,
               alignment: Alignment.center,
               child: const Icon(
@@ -1652,7 +1677,7 @@ class _AppButton extends StatelessWidget {
   final IconData? icon;
   final VoidCallback? onPressed;
 
-  const _AppButton({required this.label, this.icon, this.onPressed});
+  const _AppButton({required this.label, this.onPressed}) : icon = null;
 
   @override
   Widget build(BuildContext context) {

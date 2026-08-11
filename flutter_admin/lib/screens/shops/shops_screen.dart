@@ -4,6 +4,7 @@ import '../../services/shop_service.dart';
 import '../../services/api_service.dart';
 import 'add_shop_screen.dart';
 import 'shop_detail_screen.dart';
+import '../../core/responsive.dart';
 
 class ShopsScreen extends StatelessWidget {
   const ShopsScreen({super.key});
@@ -86,14 +87,8 @@ class _ShopsBodyState extends State<_ShopsBody> {
 
   // ── Initials from shop name  "Ravi's Fashion" → "RF" ─────────────────────
   String _initials(String name) {
-    if (name.trim().isEmpty) return "?";
-
-    final parts = name.trim().split(" ");
-
-    if (parts.length == 1) {
-      return parts[0][0].toUpperCase();
-    }
-
+    final parts = name.trim().split(' ');
+    if (parts.length == 1) return parts[0][0].toUpperCase();
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
 
@@ -128,6 +123,7 @@ class _ShopsBodyState extends State<_ShopsBody> {
   // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    
     // Loading state
     if (_isLoading) {
       return const Center(
@@ -188,6 +184,7 @@ class _ShopsBodyState extends State<_ShopsBody> {
     }
 
     final shops = filteredShops;
+    final isMobile = Responsive.isMobile(context);
     return Container(
       color: TColors.cream,
       child: RefreshIndicator(
@@ -195,7 +192,9 @@ class _ShopsBodyState extends State<_ShopsBody> {
         onRefresh: _loadShops,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(
+  isMobile ? 12 : 24,
+),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -216,7 +215,10 @@ class _ShopsBodyState extends State<_ShopsBody> {
 
   // ── Stat cards ────────────────────────────────────────────────────────────
   Widget _buildStatCards() {
-    return Row(
+  final isMobile = Responsive.isMobile(context);
+
+  if (isMobile) {
+    return Column(
       children: [
         _statCard(
           'Total Shops',
@@ -225,7 +227,9 @@ class _ShopsBodyState extends State<_ShopsBody> {
           const Color(0xFFE6F1FB),
           const Color(0xFF185FA5),
         ),
-        const SizedBox(width: 12),
+
+        const SizedBox(height: 12),
+
         _statCard(
           'Active Shops',
           activeShops.toString(),
@@ -233,7 +237,9 @@ class _ShopsBodyState extends State<_ShopsBody> {
           const Color(0xFFE1F5EE),
           const Color(0xFF085041),
         ),
-        const SizedBox(width: 12),
+
+        const SizedBox(height: 12),
+
         _statCard(
           'Blocked Shops',
           blockedShops.toString(),
@@ -245,59 +251,98 @@ class _ShopsBodyState extends State<_ShopsBody> {
     );
   }
 
+  return Row(
+    children: [
+      _statCard(
+        'Total Shops',
+        totalShops.toString(),
+        Icons.store_outlined,
+        const Color(0xFFE6F1FB),
+        const Color(0xFF185FA5),
+      ),
+
+      const SizedBox(width: 12),
+
+      _statCard(
+        'Active Shops',
+        activeShops.toString(),
+        Icons.check_circle_outline,
+        const Color(0xFFE1F5EE),
+        const Color(0xFF085041),
+      ),
+
+      const SizedBox(width: 12),
+
+      _statCard(
+        'Blocked Shops',
+        blockedShops.toString(),
+        Icons.block_outlined,
+        const Color(0xFFFCEBEB),
+        const Color(0xFF791F1F),
+      ),
+    ],
+  );
+}
+
   Widget _statCard(
-    String label,
-    String value,
-    IconData icon,
-    Color bg,
-    Color color,
-  ) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: TColors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: TColors.border),
+  String label,
+  String value,
+  IconData icon,
+  Color bg,
+  Color color,
+) {
+  final isMobile = Responsive.isMobile(context);
+
+  Widget card = Container(
+    width: isMobile ? double.infinity : null,
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    decoration: BoxDecoration(
+      color: TColors.white,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: TColors.border),
+    ),
+    child: Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: color, size: 18),
         ),
-        child: Row(
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: bg,
-                borderRadius: BorderRadius.circular(8),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: TColors.black,
               ),
-              child: Icon(icon, color: color, size: 18),
             ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: TColors.black,
-                  ),
-                ),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: TColors.brownLight,
-                  ),
-                ),
-              ],
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11,
+                color: TColors.brownLight,
+              ),
             ),
           ],
         ),
-      ),
-    );
+      ],
+    ),
+  );
+
+  if (isMobile) {
+    return card;
   }
 
+  return Expanded(child: card);
+}
   // ── Search bar ────────────────────────────────────────────────────────────
   Widget _buildSearchBar() {
     return SizedBox(
@@ -329,52 +374,100 @@ class _ShopsBodyState extends State<_ShopsBody> {
   }
 
   // ── Filter chips + Add shop ───────────────────────────────────────────────
-  Widget _buildFilterRow() {
-    return Row(
-      children: [
-        _chip('All', totalShops),
-        const SizedBox(width: 8),
-        _chip('Active', activeShops),
-        const SizedBox(width: 8),
-        _chip('Blocked', blockedShops),
-        const Spacer(),
-        MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            onTap: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AddShopScreen()),
-              );
-              // Refresh list when returning from AddShopScreen
-              _loadShops();
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: TColors.black,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.add, size: 15, color: TColors.white),
-                  SizedBox(width: 5),
-                  Text(
-                    'Add shop',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: TColors.white,
-                    ),
-                  ),
-                ],
+ Widget _buildFilterRow() {
+  final isMobile = Responsive.isMobile(context);
+
+  // Add Shop Button
+  Widget addShopButton = MouseRegion(
+    cursor: SystemMouseCursors.click,
+    child: GestureDetector(
+      onTap: () async {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const AddShopScreen(),
+          ),
+        );
+
+        // Refresh list after returning
+        _loadShops();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 8,
+        ),
+        decoration: BoxDecoration(
+          color: TColors.black,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.add,
+              size: 15,
+              color: TColors.white,
+            ),
+            SizedBox(width: 5),
+            Text(
+              "Add Shop",
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: TColors.white,
               ),
             ),
-          ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  // Mobile Layout
+  if (isMobile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _chip('All', totalShops),
+            _chip('Active', activeShops),
+            _chip('Blocked', blockedShops),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        Align(
+          alignment: Alignment.centerRight,
+          child: addShopButton,
         ),
       ],
     );
   }
+
+  // Desktop / Tablet Layout
+  return Row(
+    children: [
+      _chip('All', totalShops),
+
+      const SizedBox(width: 8),
+
+      _chip('Active', activeShops),
+
+      const SizedBox(width: 8),
+
+      _chip('Blocked', blockedShops),
+
+      const Spacer(),
+
+      addShopButton,
+    ],
+  );
+}
 
   Widget _chip(String label, int count) {
     final active = selectedFilter == label;
@@ -402,28 +495,37 @@ class _ShopsBodyState extends State<_ShopsBody> {
 
   // ── Grid ──────────────────────────────────────────────────────────────────
   Widget _buildGrid(List<Map<String, dynamic>> shops) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        childAspectRatio: 1.55,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-      ),
-      itemCount: shops.length,
-      itemBuilder: (_, i) => _buildCard(shops[i], i),
-    );
-  }
+  final crossAxisCount = Responsive.isDesktop(context)
+      ? 3
+      : Responsive.isTablet(context)
+          ? 2
+          : 1;
 
+  final childAspectRatio = Responsive.isMobile(context)
+      ? 1.35
+      : 1.55;
+
+  return GridView.builder(
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount: crossAxisCount,
+      childAspectRatio: childAspectRatio,
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+    ),
+    itemCount: shops.length,
+    itemBuilder: (_, i) => _buildCard(shops[i], i),
+  );
+}
   // ── Shop card ─────────────────────────────────────────────────────────────
   Widget _buildCard(Map<String, dynamic> shop, int index) {
     final hovered = hoveredCard == index;
     final isBlocked = shop['status'] == 'Blocked';
-    final int shopId = (shop['shopId'] ?? 0) as int;
+    final int shopId = shop['shopId'] as int;
     final avatarColor = _avatarColor(shopId);
     final bannerColor = _bannerColor(shopId);
-    final initials = _initials(shop['shopName']?.toString() ?? '');
+    final initials = _initials(shop['shopName'] as String);
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -513,9 +615,7 @@ class _ShopsBodyState extends State<_ShopsBody> {
                           ),
                           const SizedBox(width: 2),
                           Text(
-                            ((shop['avgRating'] ?? 0) as num).toStringAsFixed(
-                              1,
-                            ),
+                            (shop['avgRating'] as num).toStringAsFixed(1),
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -642,7 +742,7 @@ class _ShopsBodyState extends State<_ShopsBody> {
                         const SizedBox(width: 3),
                         Expanded(
                           child: Text(
-                            (shop['categories'] as List).join(", "),
+                             (shop['categories'] as List).join(", "),
                             style: const TextStyle(
                               fontSize: 12,
                               color: TColors.brownLight,
