@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:async';
 
-import '../../services/api_service.dart';
 import 'tabs/all_tab.dart';
 import 'tabs/men_tab.dart';
 import 'tabs/women_tab.dart';
@@ -27,18 +24,10 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin {
-  String _userName = 'User';
-  bool _isLoggedIn = false;
-
+class _HomeScreenState extends State<HomeScreen> {
   // Location shown in the header. Wire this up to a real location
   // service / picker later if needed.
-  String _location = 'Chennai, Tamil Nadu';
-
-  bool _showLoginNotification = false;
-  late AnimationController _shakeController;
-  late Animation<double> _shakeAnimation;
+  final String _location = 'Chennai, Tamil Nadu';
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -55,73 +44,9 @@ class _HomeScreenState extends State<HomeScreen>
   ];
 
   @override
-  void initState() {
-    super.initState();
-    _checkLoginStatus();
-
-    _shakeController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
-
-    _shakeAnimation = Tween<double>(
-      begin: -10,
-      end: 10,
-    ).chain(CurveTween(curve: Curves.elasticIn)).animate(_shakeController);
-  }
-
-  @override
   void dispose() {
-    _shakeController.dispose();
     _searchController.dispose();
     super.dispose();
-  }
-
-  Future<void> _checkLoginStatus() async {
-    await ApiService.loadToken();
-    final prefs = await SharedPreferences.getInstance();
-    final token = ApiService.getToken();
-
-    final name1 = prefs.getString('userName');
-    final name2 = prefs.getString('user_name');
-
-    String displayName = 'Guest';
-
-    if (name1 != null && name1.trim().isNotEmpty) {
-      displayName = name1.trim();
-    } else if (name2 != null && name2.trim().isNotEmpty) {
-      displayName = name2.trim();
-    }
-
-    setState(() {
-      _isLoggedIn = (token != null && token.isNotEmpty);
-      _userName = displayName;
-    });
-  }
-
-  void _triggerGuestPopUp() {
-    setState(() {
-      _showLoginNotification = true;
-    });
-    _shakeController.forward(from: 0.0);
-
-    Timer(const Duration(seconds: 4), () {
-      if (mounted) {
-        setState(() {
-          _showLoginNotification = false;
-        });
-      }
-    });
-  }
-
-  void _handleShoppingAction() {
-    if (!_isLoggedIn) {
-      _triggerGuestPopUp();
-    } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Opening details...')));
-    }
   }
 
   void _selectCategory(String label) {
@@ -143,94 +68,16 @@ class _HomeScreenState extends State<HomeScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFFAF7F2),
       body: SafeArea(
-        child: Stack(
+        child: Column(
           children: [
-            SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (isMobile) ...[
-                    _buildLocationRow(),
-                    const SizedBox(height: 14),
-                    _buildSearchRow(),
-                    const SizedBox(height: 18),
-                    _buildCategoryToggle(),
-                    const SizedBox(height: 24),
-                  ],
-                  _buildSelectedCategoryContent(),
-                  const SizedBox(height: 40),
-                ],
+            if (isMobile) _buildHeader(),
+            Expanded(
+              child: SingleChildScrollView(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                child: _buildSelectedCategoryContent(),
               ),
             ),
-            if (_showLoginNotification)
-              Positioned(
-                bottom: 16,
-                right: 16,
-                child: AnimatedBuilder(
-                  animation: _shakeAnimation,
-                  builder: (context, child) {
-                    return Transform.translate(
-                      offset: Offset(_shakeAnimation.value, 0),
-                      child: child,
-                    );
-                  },
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _showLoginNotification = false;
-                      });
-                      context.push('/login');
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1A1A1A),
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                        border: Border.all(
-                          color: const Color(0xFFB8956A),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(
-                            Icons.lock_outline,
-                            color: Color(0xFFB8956A),
-                            size: 18,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'Please continue to login',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          SizedBox(width: 6),
-                          Icon(
-                            Icons.arrow_forward_ios,
-                            color: Colors.white70,
-                            size: 12,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -260,8 +107,35 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   // ---------------------------------------------------------------------
-  // HEADER: location row
+  // HEADER — sits above the scrollable content, with a bottom shadow so
+  // it visually separates from whatever's below it.
   // ---------------------------------------------------------------------
+  Widget _buildHeader() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAF7F2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildLocationRow(),
+          const SizedBox(height: 14),
+          _buildSearchRow(),
+          const SizedBox(height: 14),
+          _buildCategoryToggle(),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLocationRow() {
     return GestureDetector(
       onTap: () {
@@ -298,9 +172,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ---------------------------------------------------------------------
-  // HEADER: search bar + notification/bag icons
-  // ---------------------------------------------------------------------
   Widget _buildSearchRow() {
     return Row(
       children: [
@@ -333,13 +204,14 @@ class _HomeScreenState extends State<HomeScreen>
                       isDense: true,
                     ),
                     style: const TextStyle(fontSize: 13, color: Colors.black87),
-                    onSubmitted: (_) => _handleShoppingAction(),
+                    onSubmitted: (_) {
+                      // TODO: point this at your actual search route.
+                    },
                   ),
                 ),
                 GestureDetector(
                   onTap: () {
                     // TODO: hook up voice search.
-                    _handleShoppingAction();
                   },
                   child: const Icon(
                     Icons.mic_none_rounded,
@@ -351,7 +223,6 @@ class _HomeScreenState extends State<HomeScreen>
                 GestureDetector(
                   onTap: () {
                     // TODO: hook up visual/camera search.
-                    _handleShoppingAction();
                   },
                   child: const Icon(
                     Icons.camera_alt_outlined,
@@ -366,19 +237,15 @@ class _HomeScreenState extends State<HomeScreen>
         const SizedBox(width: 8),
         _buildHeaderIconButton(
           icon: Icons.notifications_none_outlined,
-          onTap: _handleShoppingAction,
+          onTap: () {
+            // TODO: point this at your actual notifications route.
+          },
         ),
         const SizedBox(width: 8),
         _buildHeaderIconButton(
           icon: Icons.shopping_bag_outlined,
           showBadge: true,
-          onTap: () {
-            if (!_isLoggedIn) {
-              _triggerGuestPopUp();
-            } else {
-              context.push('/cart');
-            }
-          },
+          onTap: () => context.go('/bag'),
         ),
       ],
     );
@@ -422,15 +289,15 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   // ---------------------------------------------------------------------
-  // HEADER: category toggle
+  // Category toggle — plain, no boxed pills. Selected item gets a very
+  // light background fill and a bottom border under just that item.
   // ---------------------------------------------------------------------
   Widget _buildCategoryToggle() {
     return SizedBox(
-      height: 74,
-      child: ListView.separated(
+      height: 58,
+      child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: _categories.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
           final cat = _categories[index];
           final label = cat['label'] as String;
@@ -440,31 +307,43 @@ class _HomeScreenState extends State<HomeScreen>
           return GestureDetector(
             onTap: () => _selectCategory(label),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 68,
-              padding: const EdgeInsets.symmetric(vertical: 10),
+              duration: const Duration(milliseconds: 150),
+              margin: const EdgeInsets.only(right: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: isSelected ? Colors.black : const Color(0xFFF2ECE4),
-                borderRadius: BorderRadius.circular(16),
-                border: isSelected
-                    ? Border.all(color: const Color(0xFFB8956A), width: 1.5)
-                    : null,
+                // Very light fill only when selected — plain otherwise.
+                color: isSelected
+                    ? const Color(0xFFB8956A).withOpacity(0.08)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                border: Border(
+                  bottom: BorderSide(
+                    color: isSelected
+                        ? const Color(0xFFB8956A)
+                        : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
                     icon,
-                    size: 20,
-                    color: isSelected ? Colors.white : Colors.black87,
+                    size: 17,
+                    color: isSelected
+                        ? const Color(0xFF8B7355)
+                        : Colors.black54,
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(width: 6),
                   Text(
                     label,
                     style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected ? Colors.white : Colors.black87,
+                      fontSize: 13,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isSelected
+                          ? const Color(0xFF3A2E22)
+                          : Colors.black54,
                     ),
                   ),
                 ],

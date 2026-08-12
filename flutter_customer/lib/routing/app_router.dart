@@ -1,6 +1,6 @@
 import 'package:go_router/go_router.dart';
 import '../widgets/customer_layout.dart';
-import '../screens/splash/splash_screen.dart';
+import '../widgets/splash_screen.dart';
 import '../screens/auth/login_screen.dart';
 // import '../screens/auth/otp_verify_screen.dart';
 // import '../screens/auth/password_screen.dart';
@@ -20,6 +20,9 @@ class _LayoutVisibility {
 
 _LayoutVisibility _visibilityFor(String path) {
   if (path.startsWith('/products/')) {
+    return const _LayoutVisibility(showFooterOnMobile: false);
+  }
+  if (path.startsWith('/wishlist/')) {
     return const _LayoutVisibility(showFooterOnMobile: false);
   }
   return const _LayoutVisibility();
