@@ -10,4 +10,8 @@ router.get('/', shopController.listShops);
 // GET /api/customer/shops/:id    → single shop detail
 router.get('/:id', shopController.getShop);
 
+// GET /api/customer/shops/:id/products → products under this shop
+router.get('/:id/products', shopController.getShopProducts);
+
 module.exports = router;
+

@@ -166,8 +166,59 @@ async function findPublicProductById(productId) {
   };
 }
 
+// ── Product grid scoped to one shop (customer Shop Detail screen) ─────────
+// Same active-product / unblocked-shop rule as findAllPublicProducts,
+// plus a shop_id filter — the same products already visible under this
+// shop in the Admin Portal.
+async function findPublicProductsByShop(shopId) {
+  const { rows } = await pool.query(
+    `
+    SELECT
+      p.product_id,
+      p.product_name,
+      p.description,
+      p.mrp,
+      p.price,
+      ${DISCOUNT_SQL} AS discount_percent,
+      p.shop_id,
+      s.shop_name,
+      p.category_id,
+      cat.category_name,
+      b.brand_name,
+      COALESCE(img.image_url, NULL) AS thumbnail,
+      COALESCE(v.total_stock, 0) AS total_stock
+    FROM products p
+    JOIN shops s ON s.shop_id = p.shop_id
+    LEFT JOIN categories cat ON cat.category_id = p.category_id
+    LEFT JOIN brands b ON b.brand_id = p.brand_id
+    LEFT JOIN LATERAL (
+      SELECT pi.image_url
+      FROM product_images pi
+      JOIN product_colors pc ON pc.product_color_id = pi.product_color_id
+      WHERE pc.product_id = p.product_id
+      ORDER BY pc.created_at ASC,
+               CASE pi.image_type WHEN 'front' THEN 0 ELSE 1 END,
+               pi.display_order ASC
+      LIMIT 1
+    ) img ON true
+    LEFT JOIN (
+      SELECT product_id, SUM(stock_quantity) AS total_stock
+      FROM product_variants
+      GROUP BY product_id
+    ) v ON v.product_id = p.product_id
+    WHERE p.is_active = true
+      AND s.is_blocked = false
+      AND p.shop_id = $1
+    ORDER BY p.created_at DESC
+    `,
+    [shopId]
+  );
+  return rows;
+}
+
 module.exports = {
   stockStatus,
   findAllPublicProducts,
+  findPublicProductsByShop,
   findPublicProductById,
 };

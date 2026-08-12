@@ -4,23 +4,6 @@ import '../../services/cart_service.dart';
 import '../address/address_screen.dart';
 
 /// Bag / Cart screen.
-/// Lists everything the customer added with "ADD TO BAG" on the product
-/// details screen, lets them adjust quantity or remove an item, and offers
-/// a "Buy Now" checkout that places one order for everything shown here.
-///
-/// FIX (this version):
-/// The old `_buildCheckoutBar()` Row had no bounded height of its own —
-/// on Flutter Web that let it stretch to fill the *entire* Scaffold instead
-/// of sitting as a slim bar at the bottom. That pushed "Subtotal" to the
-/// top of the screen and centered "BUY NOW" mid-page, with a full-bleed
-/// white Container painted over everything else — which is why the
-/// product cards looked invisible even though the cart data loaded fine.
-/// Wrapping the bar's content in a fixed-height `SizedBox`/`ConstrainedBox`
-/// and giving every card image a fixed-size box fixes that.
-///
-/// This version also adds a responsive desktop layout: on wide screens the
-/// list is centered with a max width and sits next to an order-summary
-/// card instead of a thin bottom bar, which reads a lot more like a real
 /// e-commerce cart page.
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});

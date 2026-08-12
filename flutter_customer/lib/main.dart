@@ -19,6 +19,8 @@ import 'screens/categories/categories_screen.dart';
 import 'screens/wishlist/wishlist_screen.dart';
 import 'screens/cart/cart_screen.dart';
 import 'screens/profile/profile_screen.dart';
+import 'screens/shop/shop_detail_screen.dart';
+import 'models/shop_model.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -88,6 +90,21 @@ class ThiraaCustomerApp extends StatelessWidget {
         GoRoute(
           path: '/profile',
           builder: (context, state) => const ProfileScreen(),
+        ),
+
+        /// 4. Shop Detail Route — opened from the "Nearby Shops" section
+        /// on Home. `extra` carries the already-fetched ShopModel when
+        /// navigating from Home (avoids a refetch); falls back to
+        /// fetching by id inside the screen when arriving via a deep
+        /// link with only the id.
+        GoRoute(
+          path: '/shop/:id',
+          builder: (context, state) {
+            final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+            final shop =
+                state.extra is ShopModel ? state.extra as ShopModel : null;
+            return ShopDetailScreen(shopId: id, initialShop: shop);
+          },
         ),
       ],
     );

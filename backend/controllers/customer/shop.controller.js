@@ -1,10 +1,8 @@
 
 const shopService = require('../../services/customer/shop.service');
+const productService = require('../../services/customer/product.service');
 
 // ── Shared row → JSON mapper ────────────────────────────────────────────
-// Matches the Flutter ShopModel.fromJson() field names exactly:
-//   id, shopName, description, shopLogo, shopBanner,
-//   categories (array), city, state, address, rating, status
 function mapShop(row) {
   return {
     id: row.shop_id,
@@ -34,7 +32,7 @@ async function listShops(req, res) {
 }
 
 // GET /api/customer/shops/:id
-// → Returns a single shop (for a future shop-detail screen)
+// → Returns a single shop
 async function getShop(req, res) {
   try {
     const shop = await shopService.getShopById(req.params.id);
@@ -50,7 +48,40 @@ async function getShop(req, res) {
   }
 }
 
+// GET /api/customer/shops/:id/products
+// → Returns products for a specific shop
+async function getShopProducts(req, res) {
+  try {
+    const shopId = Number(req.params.id);
+    const products = await productService.findPublicProductsByShop(shopId);
+    
+    // Using simple mapping to match your product service output
+    const mappedProducts = products.map(row => ({
+        id: row.product_id,
+        productName: row.product_name,
+        description: row.description || '',
+        price: Number(row.price),
+        mrp: row.mrp != null ? Number(row.mrp) : null,
+        discountPercent: Number(row.discount_percent) || 0,
+        thumbnail: row.thumbnail || '',
+        shopId: row.shop_id,
+        shopName: row.shop_name,
+        categoryId: row.category_id,
+        categoryName: row.category_name || '',
+        brandName: row.brand_name || '',
+        totalStock: Number(row.total_stock) || 0,
+        stockStatus: productService.stockStatus(row.total_stock),
+    }));
+
+    res.json({ success: true, data: mappedProducts });
+  } catch (err) {
+    console.error('[customer getShopProducts]', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch shop products' });
+  }
+}
+
 module.exports = {
   listShops,
   getShop,
+  getShopProducts
 };

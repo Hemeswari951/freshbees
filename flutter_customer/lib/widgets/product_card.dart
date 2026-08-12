@@ -8,10 +8,20 @@ class ProductCard extends StatelessWidget {
   final ProductModel product;
   final VoidCallback? onTap;
 
+  /// Whether this product is currently in the customer's wishlist —
+  /// controls whether the heart renders filled (red) or outlined.
+  final bool isWishlisted;
+
+  /// Called when the heart icon is tapped. Left null on call sites that
+  /// don't wire up the wishlist (heart just renders outlined and static).
+  final VoidCallback? onWishlistTap;
+
   const ProductCard({
     super.key,
     required this.product,
     this.onTap,
+    this.isWishlisted = false,
+    this.onWishlistTap,
   });
 
   @override
@@ -86,19 +96,22 @@ class ProductCard extends StatelessWidget {
                 Positioned(
                   top: 10,
                   right: 10,
-                  child: Container(
+                  child: GestureDetector(
+                    onTap: onWishlistTap,
+                    child: Container(
                     width: 34,
                     height: 34,
                     decoration: const BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.favorite_border,
-                      color: AppColors.primary,
+                    child: Icon(
+                        isWishlisted ? Icons.favorite : Icons.favorite_border,
+                        color: isWishlisted ? Colors.red : AppColors.primary,
                       size: 20,
                     ),
                   ),
+                ),
                 ),
               ],
             ),

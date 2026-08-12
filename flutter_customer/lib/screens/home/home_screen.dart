@@ -11,6 +11,7 @@ import '../../models/product_model.dart';
 import '../product/product_details_screen.dart';
 import '../../services/cart_service.dart';
 import '../cart/cart_screen.dart';
+import '../../services/wishlist_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -193,18 +194,63 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  void _toggleWishlist(String id) {
+  // Loads which of the currently-visible products are already
+  // wishlisted, so hearts render filled correctly on open — only
+  // meaningful once the customer is logged in.
+  Future<void> _loadWishlist() async {
+    if (!_isLoggedIn) return;
+    try {
+      final items = await WishlistService.getWishlist();
+      if (!mounted) return;
+      setState(() {
+        _wishlistItems
+          ..clear()
+          ..addAll(items.map((p) => p.id.toString()));
+      });
+    } catch (_) {
+      // Silent — hearts simply default to unfilled if this fails.
+    }
+  }
+
+  Future<void> _toggleWishlist(String id) async {
     if (!_isLoggedIn) {
       _triggerGuestPopUp();
       return;
     }
+
+    final productId = int.tryParse(id);
+    if (productId == null) return;
+
+    final wasWishlisted = _wishlistItems.contains(id);
+
+    // Optimistic UI update, reconciled with the backend call below.
     setState(() {
-      if (_wishlistItems.contains(id)) {
+      if (wasWishlisted) {
         _wishlistItems.remove(id);
       } else {
         _wishlistItems.add(id);
       }
     });
+
+    bool ok;
+    try {
+      ok = wasWishlisted
+          ? await WishlistService.removeFromWishlist(productId)
+          : await WishlistService.addToWishlist(productId);
+    } catch (_) {
+      ok = false;
+    }
+
+    // Roll back on failure so the heart doesn't lie about what's saved.
+    if (!ok && mounted) {
+      setState(() {
+        if (wasWishlisted) {
+          _wishlistItems.add(id);
+        } else {
+          _wishlistItems.remove(id);
+        }
+      });
+    }
   }
 
   @override
@@ -598,7 +644,10 @@ class _HomeScreenState extends State<HomeScreen>
                                   final shop = _nearbyShops[index];
 
                                   return GestureDetector(
-                                    onTap: _handleShoppingAction, // Shop tap action
+                                    onTap: () => context.push(
+                                      '/shop/${shop.id}',
+                                      extra: shop,
+                                    ), // Shop tap action
                                     child: Container(
                                       width: 140,
                                       margin: const EdgeInsets.only(right: 12),

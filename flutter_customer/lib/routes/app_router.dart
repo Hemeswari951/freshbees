@@ -10,6 +10,8 @@ import '../screens/categories/categories_screen.dart';
 import '../screens/wishlist/wishlist_screen.dart';
 import '../screens/cart/cart_screen.dart';
 import '../screens/profile/profile_screen.dart';
+import '../screens/shop/shop_detail_screen.dart';
+import '../models/shop_model.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -23,6 +25,14 @@ class AppRouter {
         builder: (_, __) => const CategoriesScreen(),
       ),
       GoRoute(path: '/wishlist', builder: (_, __) => const WishlistScreen()),
+      GoRoute(
+        path: '/shop/:id',
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+          final shop = state.extra is ShopModel ? state.extra as ShopModel : null;
+          return ShopDetailScreen(shopId: id, initialShop: shop);
+        },
+      ),
       GoRoute(path: '/cart', builder: (_, __) => const CartScreen()),
       GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
     ],

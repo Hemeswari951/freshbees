@@ -1,23 +1,7 @@
-
 import '../models/shop_model.dart';
+import '../models/product_model.dart';
 import 'api_service.dart';
 
-/// Customer-facing shop service.
-///
-/// Calls the same backend the admin panel writes to, so any shop the
-/// admin creates (and activates) automatically shows up here — no more
-/// hardcoded shop cards.
-///
-/// NOTE: This expects a backend route:
-///   GET /api/customer/shops
-/// returning: { "success": true, "data": [ { ...shop fields... }, ... ] }
-/// only including shops with status == "Active".
-///
-/// If your backend doesn't have this route yet, add it alongside your
-/// existing /api/customer/products route (see product_service.dart for
-/// the same pattern) — it should just query the shops table/collection
-/// filtered by status = 'Active' (and optionally by proximity/city for
-/// "nearby" shops).
 class ShopService {
   ShopService._();
 
@@ -45,5 +29,21 @@ class ShopService {
     }
 
     return null;
+  }
+
+  /// Get every ACTIVE product added by this shop's owner — the same
+  /// products already visible under the shop in the Admin Portal.
+  /// Powers the Shop Detail screen opened by tapping a shop on Home.
+  static Future<List<ProductModel>> getShopProducts(int shopId) async {
+    final response = await ApiService.get('/shops/$shopId/products');
+
+    if (response is Map<String, dynamic>) {
+      final List data = response['data'] ?? [];
+      return data
+          .map((json) => ProductModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+    }
+
+    return [];
   }
 }
