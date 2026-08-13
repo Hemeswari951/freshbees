@@ -2,9 +2,7 @@ import 'package:go_router/go_router.dart';
 import '../widgets/customer_layout.dart';
 import '../widgets/splash_screen.dart';
 import '../screens/auth/login_screen.dart';
-// import '../screens/auth/otp_verify_screen.dart';
-// import '../screens/auth/password_screen.dart';
-// import '../screens/auth/create_password_screen.dart';
+
 import '../screens/home/home_screen.dart';
 import '../screens/wishlist/wishlist_screen.dart';
 import '../screens/bag/bag_screen.dart';
@@ -34,33 +32,18 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
 
     // Login Screen
-    GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+    // Reads the `redirectTo` value passed via extra from CustomerHeader's
+    // _goToProtected() (e.g. context.go('/login', extra: {'redirectTo': '/wishlist'}))
+    // so LoginScreen -> OTP/Password flow can send the user back to where
+    // they originally wanted to go, instead of always landing on /home.
+    GoRoute(
+      path: '/login',
+      builder: (context, state) {
+        final redirectRoute = state.uri.queryParameters['redirect'];
+        return LoginScreen(redirectRoute: redirectRoute);
+      },
+    ),
 
-    // GoRoute(
-    //   path: '/forgot-password',
-    //   builder: (context, state) => const ForgotPasswordScreen(),
-    // ),
-    // GoRoute(
-    //   path: '/verify-otp',
-    //   builder: (context, state) {
-    //     final email = state.extra as String;
-    //     return OtpVerificationScreen(email: email);
-    //   },
-    // ),
-    // GoRoute(
-    //   path: '/reset-password',
-    //   builder: (context, state) {
-    //     final extra = state.extra;
-
-    //     if (extra is int) {
-    //       return ResetPasswordScreen(ownerId: extra);
-    //     } else if (extra is String) {
-    //       return ResetPasswordScreen(email: extra);
-    //     }
-
-    //   return const LoginScreen();
-    // },
-    // ),
     ShellRoute(
       builder: (context, state, child) {
         final visibility = _visibilityFor(state.uri.path);
@@ -101,6 +84,7 @@ final GoRouter appRouter = GoRouter(
         GoRoute(path: '/wishlist', builder: (_, __) => const WishlistScreen()),
         GoRoute(path: '/bag', builder: (_, __) => const BagScreen()),
         GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
+        
       ],
     ),
   ],

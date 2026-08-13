@@ -2,6 +2,7 @@ class LoginResponse {
   final bool success;
   final String message;
   final String? token;
+  final String? refreshToken;
   final bool? isNewUser;
   final Map<String, dynamic>? customer;
 
@@ -9,6 +10,7 @@ class LoginResponse {
     required this.success,
     required this.message,
     this.token,
+    this.refreshToken,
     this.isNewUser,
     this.customer,
   });
@@ -17,7 +19,8 @@ class LoginResponse {
     return LoginResponse(
       success: json["success"] ?? false,
       message: json["message"] ?? "",
-      token: json["token"],
+      token: json["accessToken"] ?? json["token"],
+      refreshToken: json["refreshToken"],
       isNewUser: json["isNewUser"],
       customer: json["customer"],
     );

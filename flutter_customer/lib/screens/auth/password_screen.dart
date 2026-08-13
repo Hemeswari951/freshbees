@@ -1,20 +1,22 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_thiraa/widgets/app_colors.dart';
-import '../home/home_screen.dart';
 import 'otp_verify_screen.dart';
 import '../../services/auth_service.dart';
 
 class PasswordScreen extends StatefulWidget {
   final String identifier;
   final bool isResetMode;
+  final String? redirectRoute;
 
   const PasswordScreen({
     super.key,
     required this.identifier,
     this.isResetMode = false,
+    this.redirectRoute,
   });
 
   @override
@@ -75,36 +77,13 @@ class _PasswordScreenState extends State<PasswordScreen> {
         await prefs.setString('loginIdentifier', widget.identifier);
 
         if (response.customer != null) {
-          final customer = response.customer!;
-
-          String nameFromApi = '';
-          if (customer['name'] != null &&
-              customer['name'].toString().trim().isNotEmpty) {
-            nameFromApi = customer['name'].toString().trim();
-          } else {
-            String fname =
-                customer['first_name'] ?? customer['firstName'] ?? '';
-            String lname = customer['last_name'] ?? customer['lastName'] ?? '';
-            nameFromApi = '$fname $lname'.trim();
-          }
-
-          if (nameFromApi.isEmpty) {
-            nameFromApi = widget.identifier.contains('@')
-                ? widget.identifier.split('@')[0]
-                : widget.identifier;
-          }
-
-          await prefs.setString('userName', nameFromApi);
-          await prefs.setString('user_name', nameFromApi);
+          await _saveUserName(response.customer!);
         }
 
         _showSnackBar("Password updated successfully! Welcome back.");
-
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
-          (route) => false,
-        );
+        if (!mounted) return;
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        context.go(widget.redirectRoute ?? '/home');
       } else {
         _showSnackBar(response.message, isError: true);
       }
@@ -123,38 +102,38 @@ class _PasswordScreenState extends State<PasswordScreen> {
         await prefs.setString('loginIdentifier', widget.identifier);
 
         if (response.customer != null) {
-          final customer = response.customer!;
-
-          String nameFromApi = '';
-          if (customer['name'] != null &&
-              customer['name'].toString().trim().isNotEmpty) {
-            nameFromApi = customer['name'].toString().trim();
-          } else {
-            String fname =
-                customer['first_name'] ?? customer['firstName'] ?? '';
-            String lname = customer['last_name'] ?? customer['lastName'] ?? '';
-            nameFromApi = '$fname $lname'.trim();
-          }
-
-          if (nameFromApi.isEmpty) {
-            nameFromApi = widget.identifier.contains('@')
-                ? widget.identifier.split('@')[0]
-                : widget.identifier;
-          }
-
-          await prefs.setString('userName', nameFromApi);
-          await prefs.setString('user_name', nameFromApi);
+          await _saveUserName(response.customer!);
         }
-
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
-          (route) => false,
-        );
+        if (!mounted) return;
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        context.go(widget.redirectRoute ?? '/home');
       } else {
         _showSnackBar(response.message, isError: true);
       }
     }
+  }
+
+  Future<void> _saveUserName(Map<String, dynamic> customer) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    String nameFromApi = '';
+    if (customer['name'] != null &&
+        customer['name'].toString().trim().isNotEmpty) {
+      nameFromApi = customer['name'].toString().trim();
+    } else {
+      String fname = customer['first_name'] ?? customer['firstName'] ?? '';
+      String lname = customer['last_name'] ?? customer['lastName'] ?? '';
+      nameFromApi = '$fname $lname'.trim();
+    }
+
+    if (nameFromApi.isEmpty) {
+      nameFromApi = widget.identifier.contains('@')
+          ? widget.identifier.split('@')[0]
+          : widget.identifier;
+    }
+
+    await prefs.setString('userName', nameFromApi);
+    await prefs.setString('user_name', nameFromApi);
   }
 
   void _handleForgotPassword() async {
@@ -175,6 +154,7 @@ class _PasswordScreenState extends State<PasswordScreen> {
             identifier: widget.identifier,
             purpose: 'forgot_password',
             showUsePassword: false,
+            redirectRoute: widget.redirectRoute,
           ),
         ),
       );
@@ -209,7 +189,6 @@ class _PasswordScreenState extends State<PasswordScreen> {
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: AutofillGroup(
-                  // Added AutofillGroup
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -311,7 +290,9 @@ class _PasswordScreenState extends State<PasswordScreen> {
                                       ),
                                     ),
                                     filled: true,
-                                    fillColor: AppColors.white.withOpacity(0.95),
+                                    fillColor: AppColors.white.withOpacity(
+                                      0.95,
+                                    ),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
                                       borderSide: BorderSide.none,

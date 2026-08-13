@@ -1,40 +1,57 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
- 
+
+import '../services/api_service.dart';
 import './app_colors.dart';
- 
+
 class CustomerHeader extends StatefulWidget {
   const CustomerHeader({super.key});
- 
+
   @override
   State<CustomerHeader> createState() => _CustomerHeaderState();
 }
- 
+
 class _CustomerHeaderState extends State<CustomerHeader> {
   final TextEditingController _searchController = TextEditingController();
- 
+
   // These must match the routes defined in app_router.dart
   // (/home, /home/men, /home/women, /home/kids, /home/beauty).
   final List<_NavLink> _navLinks = const [
-    _NavLink('Home', '/home'),
     _NavLink('Men', '/home/men'),
     _NavLink('Women', '/home/women'),
     _NavLink('Kids', '/home/kids'),
     _NavLink('Beauty', '/home/beauty'),
+    _NavLink('Home', '/home'),
   ];
- 
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
- 
+
   void _handleSearch(String query) {
     if (query.trim().isEmpty) return;
     // TODO: point this at your actual search route.
     context.push('/search', extra: query.trim());
   }
- 
+
+  // Checks login state before navigating to a protected route.
+  // If not logged in, redirects to /login and passes the intended
+  // destination so the login flow can send the user back afterwards.
+  void _goToProtected(BuildContext context, String route) {
+    final isLoggedIn =
+        ApiService.getToken() != null && ApiService.getToken()!.isNotEmpty;
+
+    if (isLoggedIn) {
+      context.go(route);
+    } else {
+      context.go(
+        Uri(path: '/login', queryParameters: {'redirect': route}).toString(),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -57,7 +74,7 @@ class _CustomerHeaderState extends State<CustomerHeader> {
             ),
           ),
           const SizedBox(width: 32),
- 
+
           // Category nav links
           Row(
             children: _navLinks
@@ -79,9 +96,9 @@ class _CustomerHeaderState extends State<CustomerHeader> {
                 )
                 .toList(),
           ),
- 
+
           const SizedBox(width: 24),
- 
+
           // Lengthy search bar
           Expanded(
             child: Container(
@@ -94,11 +111,7 @@ class _CustomerHeaderState extends State<CustomerHeader> {
               ),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.search,
-                    size: 20,
-                    color: AppColors.textGrey,
-                  ),
+                  const Icon(Icons.search, size: 20, color: AppColors.textGrey),
                   const SizedBox(width: 10),
                   Expanded(
                     child: TextField(
@@ -124,9 +137,9 @@ class _CustomerHeaderState extends State<CustomerHeader> {
               ),
             ),
           ),
- 
+
           const SizedBox(width: 28),
- 
+
           // Icon + label actions
           _HeaderAction(
             icon: Icons.person_outline,
@@ -137,43 +150,43 @@ class _CustomerHeaderState extends State<CustomerHeader> {
           _HeaderAction(
             icon: Icons.favorite_border,
             label: 'Wishlist',
-            onTap: () => context.go('/wishlist'),
+            onTap: () => _goToProtected(context, '/wishlist'),
           ),
           const SizedBox(width: 22),
           _HeaderAction(
             icon: Icons.shopping_bag_outlined,
             label: 'Bag',
-            onTap: () => context.go('/bag'),
+            onTap: () => _goToProtected(context, '/bag'),
           ),
           const SizedBox(width: 22),
           _HeaderAction(
             icon: Icons.notifications_none,
             label: 'Notifications',
-            onTap: () => context.go('/notifications'),
+            onTap: () => _goToProtected(context, '/notifications'),
           ),
         ],
       ),
     );
   }
 }
- 
+
 class _NavLink {
   final String label;
   final String route;
   const _NavLink(this.label, this.route);
 }
- 
+
 class _HeaderAction extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
- 
+
   const _HeaderAction({
     required this.icon,
     required this.label,
     required this.onTap,
   });
- 
+
   @override
   Widget build(BuildContext context) {
     return InkWell(
@@ -188,10 +201,7 @@ class _HeaderAction extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               label,
-              style: const TextStyle(
-                fontSize: 11,
-                color: AppColors.black,
-              ),
+              style: const TextStyle(fontSize: 11, color: AppColors.black),
             ),
           ],
         ),

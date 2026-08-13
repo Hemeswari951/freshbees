@@ -73,6 +73,16 @@ module.exports = async (req, res, next) => {
 
     } catch (err) {
 
+        // Access token expired or invalid - frontend should hit /auth/refresh-token
+        // and retry the original request, not treat this as a hard logout.
+        if (err.name === "TokenExpiredError") {
+            return res.status(401).json({
+                success: false,
+                code: "TOKEN_EXPIRED",
+                message: "Access token expired"
+            });
+        }
+
         return res.status(401).json({
             success: false,
             message: "Invalid Token"

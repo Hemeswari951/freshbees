@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../services/api_service.dart';
 
 import 'tabs/all_tab.dart';
 import 'tabs/men_tab.dart';
@@ -43,6 +44,21 @@ class _HomeScreenState extends State<HomeScreen> {
     {'label': 'Beauty', 'icon': Icons.clean_hands_outlined},
   ];
 
+  // Checks login state before navigating to a protected route.
+  void _goToProtected(BuildContext context, String route) {
+    final token = ApiService.getToken();
+
+    final isLoggedIn = token != null && token.isNotEmpty;
+
+    if (isLoggedIn) {
+      context.go(route);
+    } else {
+      context.go(
+        Uri(path: '/login', queryParameters: {'redirect': route}).toString(),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -73,8 +89,10 @@ class _HomeScreenState extends State<HomeScreen> {
             if (isMobile) _buildHeader(),
             Expanded(
               child: SingleChildScrollView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 20,
+                ),
                 child: _buildSelectedCategoryContent(),
               ),
             ),
@@ -185,21 +203,14 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: Row(
               children: [
-                const Icon(
-                  Icons.search,
-                  size: 20,
-                  color: Colors.black54,
-                ),
+                const Icon(Icons.search, size: 20, color: Colors.black54),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: _searchController,
                     decoration: const InputDecoration(
                       hintText: 'Search',
-                      hintStyle: TextStyle(
-                        fontSize: 13,
-                        color: Colors.black45,
-                      ),
+                      hintStyle: TextStyle(fontSize: 13, color: Colors.black45),
                       border: InputBorder.none,
                       isDense: true,
                     ),
@@ -245,7 +256,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _buildHeaderIconButton(
           icon: Icons.shopping_bag_outlined,
           showBadge: true,
-          onTap: () => context.go('/bag'),
+          onTap: () => _goToProtected(context, '/bag'),
         ),
       ],
     );
@@ -340,7 +351,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     label,
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: isSelected
+                          ? FontWeight.w700
+                          : FontWeight.w500,
                       color: isSelected
                           ? const Color(0xFF3A2E22)
                           : Colors.black54,

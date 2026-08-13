@@ -5,7 +5,8 @@ import 'otp_verify_screen.dart';
 import '../../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final String? redirectRoute;
+  const LoginScreen({super.key, this.redirectRoute});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -104,6 +105,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           identifier: input,
                           purpose: isExisting ? 'login' : 'registration',
                           showUsePassword: isExisting,
+                          redirectRoute: widget.redirectRoute,
                         ),
                       ),
                     );
