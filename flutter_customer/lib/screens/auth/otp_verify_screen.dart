@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_thiraa/widgets/app_colors.dart';
-import '../home/home_screen.dart';
 import 'password_screen.dart';
 import 'create_password_screen.dart';
 import '../../services/auth_service.dart';
@@ -13,12 +13,14 @@ class OTPVerifyScreen extends StatefulWidget {
   final String identifier;
   final String purpose;
   final bool showUsePassword;
+  final String? redirectRoute;
 
   const OTPVerifyScreen({
     super.key,
     required this.identifier,
     this.purpose = 'auth',
     this.showUsePassword = false,
+    this.redirectRoute,
   });
 
   @override
@@ -106,7 +108,10 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
       _startTimer();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(response.message), backgroundColor: AppColors.red),
+        SnackBar(
+          content: Text(response.message),
+          backgroundColor: AppColors.red,
+        ),
       );
     }
   }
@@ -132,6 +137,7 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
             builder: (context) => PasswordScreen(
               identifier: widget.identifier,
               isResetMode: true,
+              redirectRoute: widget.redirectRoute,
             ),
           ),
         );
@@ -142,8 +148,10 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(
-            builder: (context) =>
-                CreatePasswordScreen(identifier: widget.identifier),
+            builder: (context) => CreatePasswordScreen(
+              identifier: widget.identifier,
+              redirectRoute: widget.redirectRoute,
+            ),
           ),
           (route) => false,
         );
@@ -161,15 +169,15 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
           fullName.isNotEmpty ? fullName : 'User',
         );
       }
-
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
-        (route) => false,
-      );
+      if (!mounted) return;
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      context.go(widget.redirectRoute ?? '/home');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(response.message), backgroundColor: AppColors.red),
+        SnackBar(
+          content: Text(response.message),
+          backgroundColor: AppColors.red,
+        ),
       );
       for (var c in _controllers) {
         c.clear();
@@ -195,7 +203,6 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: AutofillGroup(
-                  // Added AutofillGroup
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -261,16 +268,14 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
                                         keyboardType: TextInputType.number,
                                         textAlign: TextAlign.center,
                                         maxLength: 1,
-                                        // Added OTP Autofill Hint
                                         autofillHints: const [
                                           AutofillHints.oneTimeCode,
                                         ],
                                         decoration: InputDecoration(
                                           counterText: "",
                                           filled: true,
-                                          fillColor: AppColors.white.withOpacity(
-                                            0.95,
-                                          ),
+                                          fillColor: AppColors.white
+                                              .withOpacity(0.95),
                                           contentPadding: EdgeInsets.zero,
                                           enabledBorder: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(
@@ -353,6 +358,7 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
                                           builder: (context) => PasswordScreen(
                                             identifier: widget.identifier,
                                             isResetMode: false,
+                                            redirectRoute: widget.redirectRoute,
                                           ),
                                         ),
                                       );

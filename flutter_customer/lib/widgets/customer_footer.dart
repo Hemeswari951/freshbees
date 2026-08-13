@@ -1,32 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
- 
+import '../services/api_service.dart';
 import './app_colors.dart';
- 
+
 class CustomerFooter extends StatelessWidget {
   final String currentPath;
- 
+
   const CustomerFooter({super.key, required this.currentPath});
- 
+
   int get currentIndex {
     switch (currentPath) {
       case "/home":
         return 0;
- 
       case "/trial":
         return 1;
- 
       case "/wishlist":
         return 2;
- 
       case "/profile":
         return 3;
- 
       default:
         return 0;
     }
   }
- 
+
+  // Checks login state before navigating to a protected route.
+  void _goToProtected(BuildContext context, String route) {
+    final token = ApiService.getToken();
+
+    final isLoggedIn = token != null && token.isNotEmpty;
+
+    if (isLoggedIn) {
+      context.go(route);
+    } else {
+      context.go(
+        Uri(path: '/login', queryParameters: {'redirect': route}).toString(),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return BottomAppBar(
@@ -39,18 +50,18 @@ class CustomerFooter extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _item(context, 0, Icons.home_filled, "Home", "/home"),
- 
+
             _item(context, 1, Icons.videocam_outlined, "Trial", "/trial"),
- 
+
             _item(context, 2, Icons.favorite_border, "Wishlist", "/wishlist"),
- 
+
             _item(context, 3, Icons.person_outline, "Profile", "/profile"),
           ],
         ),
       ),
     );
   }
- 
+
   Widget _item(
     BuildContext context,
     int index,
@@ -59,23 +70,24 @@ class CustomerFooter extends StatelessWidget {
     String route,
   ) {
     final active = currentIndex == index;
- 
+
     return InkWell(
       onTap: () {
-        context.go(route);
+        if ((route == "/home") || (route == "/profile")){
+          context.go(route);
+        } else {
+          _goToProtected(context, route);
+        }
       },
       child: SizedBox(
         width: 60,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              color: active ? AppColors.black : AppColors.textGrey,
-            ),
- 
+            Icon(icon, color: active ? AppColors.black : AppColors.textGrey),
+
             const SizedBox(height: 4),
- 
+
             Text(
               label,
               style: TextStyle(

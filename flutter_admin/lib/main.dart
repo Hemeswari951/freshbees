@@ -9,16 +9,16 @@ Future<void> main() async {
  
   await ApiService.loadToken();
  
-  runApp(const ThiraaShopowner());
+  runApp(const ThiraaAdmin());
 }
  
-class ThiraaShopowner extends StatelessWidget {
-  const ThiraaShopowner({super.key});
+class ThiraaAdmin extends StatelessWidget {
+  const ThiraaAdmin({super.key});
  
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'THIRAA Shopowner',
+      title: 'THIRAA Admin',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,

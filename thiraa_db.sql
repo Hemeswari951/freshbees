@@ -28,24 +28,25 @@ CREATE TABLE admins (
 -- CUSTOMERS
 -- ─────────────────────────────────────────────────────────────────────────
 CREATE TABLE customers (
-    customer_id SERIAL PRIMARY KEY,
-    first_name VARCHAR(150) NOT NULL,
-    last_name VARCHAR(150) NOT NULL,
-    email VARCHAR(150) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    phone VARCHAR(20) UNIQUE NOT NULL,
-    profile_image TEXT,
-    gender VARCHAR(20),
-    city VARCHAR(100),
-    state VARCHAR(100),
-    date_of_birth DATE,
-    is_verified BOOLEAN DEFAULT FALSE,
-    is_blocked BOOLEAN DEFAULT FALSE,
-    last_login TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    customer_id     SERIAL PRIMARY KEY,
+    first_name      VARCHAR(150) NOT NULL,
+    last_name       VARCHAR(150) NOT NULL,
+    email           VARCHAR(150) UNIQUE,
+    password        VARCHAR(255) NOT NULL,
+    phone           VARCHAR(20)  UNIQUE,
+    profile_image   TEXT,
+    gender          VARCHAR(20),
+    city            VARCHAR(100),
+    state           VARCHAR(100),
+    date_of_birth   DATE,
+    is_verified     BOOLEAN      DEFAULT FALSE,
+    is_blocked      BOOLEAN      DEFAULT FALSE,
+    last_login      TIMESTAMP,
+    created_at      TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT customer_has_identifier
+        CHECK (email IS NOT NULL OR phone IS NOT NULL)
 );
-
 -- ─────────────────────────────────────────────────────────────────────────
 -- CATEGORIES  →  Men, Women, Kids, Beauty
 -- ─────────────────────────────────────────────────────────────────────────
@@ -385,7 +386,7 @@ CREATE TABLE notifications (
 -- ─────────────────────────────────────────────────────────────────────────
 CREATE TABLE otp_verifications (
     id              SERIAL PRIMARY KEY,
-    email           VARCHAR(255) NOT NULL,
+    identifier      VARCHAR(255) NOT NULL,
     portal          VARCHAR(20)  NOT NULL,
     purpose         VARCHAR(30)  NOT NULL,
     otp_code        VARCHAR(255) NOT NULL,
@@ -393,9 +394,21 @@ CREATE TABLE otp_verifications (
     attempts        INT          DEFAULT 0,
     expires_at      TIMESTAMP    NOT NULL,
     created_at      TIMESTAMP    DEFAULT NOW(),
-    CONSTRAINT unique_active_otp UNIQUE (email, portal)
+    CONSTRAINT unique_active_otp UNIQUE (identifier, portal)
 );
 
+
+CREATE TABLE refresh_tokens (
+  refresh_token_id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  portal VARCHAR(20) NOT NULL CHECK (portal IN ('customer', 'shop_owner')),
+  token_hash TEXT NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_refresh_token_hash ON refresh_tokens(token_hash);
+CREATE INDEX idx_refresh_user_portal ON refresh_tokens(user_id, portal);
 -- ============================================================================
 -- INDEXES
 -- ============================================================================
