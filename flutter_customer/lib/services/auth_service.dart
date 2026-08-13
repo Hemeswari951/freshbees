@@ -44,7 +44,10 @@ class AuthService {
       final loginResponse = LoginResponse.fromJson(response);
 
       if (loginResponse.success && loginResponse.token != null) {
-        await ApiService.setToken(loginResponse.token, customer: loginResponse.customer);
+        await ApiService.setToken(
+          loginResponse.token,
+          customer: loginResponse.customer,
+        );
       }
 
       return loginResponse;
@@ -70,7 +73,9 @@ class AuthService {
     try {
       List<String> nameParts = name.trim().split(' ');
       String firstName = nameParts.first;
-      String lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : 'User';
+      String lastName = nameParts.length > 1
+          ? nameParts.sublist(1).join(' ')
+          : 'User';
 
       final response = await ApiService.post("/auth/register", {
         "identifier": identifier.trim().toLowerCase(),
@@ -84,7 +89,10 @@ class AuthService {
       final loginResponse = LoginResponse.fromJson(response);
 
       if (loginResponse.success && loginResponse.token != null) {
-        await ApiService.setToken(loginResponse.token, customer: loginResponse.customer);
+        await ApiService.setToken(
+          loginResponse.token,
+          customer: loginResponse.customer,
+        );
       }
 
       return loginResponse;
@@ -117,7 +125,10 @@ class AuthService {
       final loginResponse = LoginResponse.fromJson(response);
 
       if (loginResponse.success && loginResponse.token != null) {
-        await ApiService.setToken(loginResponse.token, customer: loginResponse.customer);
+        await ApiService.setToken(
+          loginResponse.token,
+          customer: loginResponse.customer,
+        );
       }
 
       return loginResponse;
@@ -153,7 +164,10 @@ class AuthService {
       final loginResponse = LoginResponse.fromJson(response);
 
       if (loginResponse.success && loginResponse.token != null) {
-        await ApiService.setToken(loginResponse.token, customer: loginResponse.customer);
+        await ApiService.setToken(
+          loginResponse.token,
+          customer: loginResponse.customer,
+        );
       }
 
       return loginResponse;
@@ -208,19 +222,24 @@ class AuthService {
       );
     }
   }
-
   //=========================
   // LOGOUT
   //=========================
 
   static Future<LoginResponse> logout() async {
+    // Client-side logout should never depend on the server call succeeding.
+    // Clear the local token FIRST — this is the part that actually controls
+    // whether the app treats the user as logged in. If the token is already
+    // expired (401 TOKEN_EXPIRED), the /auth/logout call below will fail,
+    // but the user must still end up logged out locally.
     try {
       final response = await ApiService.post("/auth/logout", {});
-
       await ApiService.clearToken();
-
       return LoginResponse.fromJson(response);
     } catch (e) {
+      // Server call failed (expired token, no network, etc.) — still clear
+      // the local session so the app doesn't get stuck "logged in".
+      await ApiService.clearToken();
       return LoginResponse(
         success: false,
         message: e.toString().replaceFirst("Exception: ", ""),
