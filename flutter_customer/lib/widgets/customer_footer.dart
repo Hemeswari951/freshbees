@@ -74,7 +74,7 @@ class CustomerFooter extends StatelessWidget {
     return InkWell(
       onTap: () {
         if ((route == "/home") || (route == "/profile")){
-          context.go(route);
+          context.push(route);
         } else {
           _goToProtected(context, route);
         }
