@@ -7,6 +7,8 @@ import '../screens/home/home_screen.dart';
 import '../screens/wishlist/wishlist_screen.dart';
 import '../screens/bag/bag_screen.dart';
 import '../screens/profile/profile_screen.dart';
+import '../models/profile_section.dart';
+import '../screens/profile/profile_details_screen.dart';
 
 // ── Per-route header/footer visibility (mobile only — desktop always shows
 // header+sidebar, see ShopOwnerLayout). Add a case here when a NEW screen
@@ -84,7 +86,15 @@ final GoRouter appRouter = GoRouter(
         GoRoute(path: '/wishlist', builder: (_, __) => const WishlistScreen()),
         GoRoute(path: '/bag', builder: (_, __) => const BagScreen()),
         GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
-        
+        GoRoute(
+          path: '/profile/details',
+          builder: (context, state) {
+            final sectionParam = state.uri.queryParameters['section'];
+            return ProfileDetailsScreen(
+              initialSection: ProfileSectionX.fromSlug(sectionParam),
+            );
+          },
+        ),
       ],
     ),
   ],

@@ -3,6 +3,7 @@
 -- Fresh Consolidated Schema (PostgreSQL) — FINAL UPDATED VERSION
 -- Includes: base schema + product_colors + fixed clothing attributes
 --           + EAV product_attributes + tags + variant fixes
+--           + reviews unique constraint + app_settings
 -- Run this ONCE against a NEW empty database.
 -- ============================================================================
 
@@ -47,6 +48,7 @@ CREATE TABLE customers (
     CONSTRAINT customer_has_identifier
         CHECK (email IS NOT NULL OR phone IS NOT NULL)
 );
+
 -- ─────────────────────────────────────────────────────────────────────────
 -- CATEGORIES  →  Men, Women, Kids, Beauty
 -- ─────────────────────────────────────────────────────────────────────────
@@ -153,7 +155,7 @@ CREATE TABLE brands (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────
--- PRODUCTS  (now includes common clothing attributes + new-arrival flag)
+-- PRODUCTS  (includes common clothing attributes + new-arrival flag)
 -- ─────────────────────────────────────────────────────────────────────────
 CREATE TABLE products (
     product_id SERIAL PRIMARY KEY,
@@ -356,6 +358,8 @@ CREATE TABLE payout_items (
 
 -- ─────────────────────────────────────────────────────────────────────────
 -- REVIEWS
+-- (unique_customer_product_review: prevents a customer from submitting
+--  more than one review per product — merged in directly, no separate ALTER)
 -- ─────────────────────────────────────────────────────────────────────────
 CREATE TABLE reviews (
     review_id SERIAL PRIMARY KEY,
@@ -363,7 +367,8 @@ CREATE TABLE reviews (
     product_id INT REFERENCES products(product_id),
     rating INT CHECK (rating BETWEEN 1 AND 5),
     review_text TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_customer_product_review UNIQUE (customer_id, product_id)
 );
 
 -- ─────────────────────────────────────────────────────────────────────────
@@ -397,18 +402,79 @@ CREATE TABLE otp_verifications (
     CONSTRAINT unique_active_otp UNIQUE (identifier, portal)
 );
 
-
+-- ─────────────────────────────────────────────────────────────────────────
+-- REFRESH TOKENS
+-- ─────────────────────────────────────────────────────────────────────────
 CREATE TABLE refresh_tokens (
-  refresh_token_id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL,
-  portal VARCHAR(20) NOT NULL CHECK (portal IN ('customer', 'shop_owner')),
-  token_hash TEXT NOT NULL,
-  expires_at TIMESTAMP NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    refresh_token_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    portal VARCHAR(20) NOT NULL CHECK (portal IN ('customer', 'shop_owner')),
+    token_hash TEXT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_refresh_token_hash ON refresh_tokens(token_hash);
 CREATE INDEX idx_refresh_user_portal ON refresh_tokens(user_id, portal);
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- APP SETTINGS  (singleton row — only ever ONE row in this table)
+-- ─────────────────────────────────────────────────────────────────────────
+CREATE TABLE app_settings (
+    setting_id          SERIAL PRIMARY KEY,
+
+    -- ── 1.1 Application Information ────────────────────────────────────────
+    app_name            VARCHAR(100)    DEFAULT 'Thiraa',
+    app_logo            TEXT,                          -- S3/CloudFront URL
+    favicon_url         TEXT,                          -- S3/CloudFront URL
+    app_version         VARCHAR(20)     DEFAULT '1.0.0',  -- read-only, set via .env
+
+    -- ── 1.2 Contact Information ─────────────────────────────────────────────
+    support_email       VARCHAR(150),
+    support_phone       VARCHAR(20),
+    whatsapp_number     VARCHAR(20),
+    website_url         TEXT,
+
+    -- ── 1.3 Social Media Links ──────────────────────────────────────────────
+    facebook_url        TEXT,
+    instagram_url       TEXT,
+    twitter_url         TEXT,
+    youtube_url         TEXT,
+    linkedin_url        TEXT,
+
+    -- ── 1.4 Footer Information ───────────────────────────────────────────────
+    company_name        VARCHAR(150)    DEFAULT 'THIRAA',
+    copyright_text      TEXT            DEFAULT '© 2026 THIRAA. All Rights Reserved.',
+    privacy_policy_link TEXT,
+    terms_link          TEXT,
+
+    -- ── 1.5 Contact Us Details ───────────────────────────────────────────────
+    office_address      TEXT,
+    contact_email       VARCHAR(150),
+    contact_phone       VARCHAR(20),
+    working_hours       VARCHAR(255),
+
+    -- ── Audit ─────────────────────────────────────────────────────────────────
+    updated_by          INT             REFERENCES admins(admin_id),
+    created_at          TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP       DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Only ever ONE row — this is the singleton settings row
+INSERT INTO app_settings (
+    app_name,
+    app_version,
+    support_email,
+    company_name,
+    copyright_text
+) VALUES (
+    'Thiraa',
+    '1.0.0',
+    'support@thiraa.com',
+    'THIRAA',
+    '© 2026 THIRAA. All Rights Reserved.'
+);
+
 -- ============================================================================
 -- INDEXES
 -- ============================================================================

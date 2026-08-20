@@ -146,4 +146,9 @@ class ApiService {
 
     throw Exception(body['message'] ?? 'Something went wrong');
   }
+  static Future<String?> getUserName() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getString('user_name');
 }
+}
+
