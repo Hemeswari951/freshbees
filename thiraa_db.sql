@@ -492,3 +492,84 @@ CREATE INDEX idx_reviews_product ON reviews(product_id);
 -- LEFT JOIN products p ON p.shop_id = s.shop_id
 -- LEFT JOIN order_items oi ON oi.shop_id = s.shop_id
 -- GROUP BY s.shop_id;
+
+--customer style profile
+
+CREATE TABLE customer_style_profiles (
+    profile_id SERIAL PRIMARY KEY,
+
+    customer_id INTEGER NOT NULL UNIQUE,
+
+    age_range VARCHAR(20),
+
+    apparel_size VARCHAR(10),
+
+    fit_preference VARCHAR(30),
+
+    preferred_colors TEXT[] DEFAULT '{}',
+
+    preferred_styles TEXT[] DEFAULT '{}',
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_customer_style_profile
+        FOREIGN KEY (customer_id)
+        REFERENCES customers(customer_id)
+        ON DELETE CASCADE
+);
+
+--try on profile 
+
+CREATE TABLE tryon_profiles (
+    profile_id SERIAL PRIMARY KEY,
+
+    customer_id INTEGER NOT NULL,
+
+    profile_name VARCHAR(100) NOT NULL,
+
+    relationship VARCHAR(50) NOT NULL,
+
+    gender VARCHAR(20),
+
+    age INTEGER,
+
+    size VARCHAR(20),
+
+    height NUMERIC(5,2),
+
+    weight NUMERIC(5,2),
+
+    photo_url TEXT,
+
+    is_default BOOLEAN DEFAULT FALSE,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_tryon_customer
+        FOREIGN KEY (customer_id)
+        REFERENCES customers(customer_id)
+        ON DELETE CASCADE
+);
+
+
+--Cart_items
+
+CREATE TABLE IF NOT EXISTS cart_items (
+    cart_item_id SERIAL PRIMARY KEY,
+    customer_id  INTEGER NOT NULL REFERENCES customers(customer_id) ON DELETE CASCADE,
+    product_id   INTEGER NOT NULL REFERENCES products(product_id) ON DELETE CASCADE,
+    variant_id   INTEGER REFERENCES product_variants(variant_id) ON DELETE CASCADE,
+    quantity     INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Speeds up "get my cart" and stops one customer building duplicate rows
+-- for the exact same product + size.
+CREATE INDEX IF NOT EXISTS idx_cart_items_customer ON cart_items(customer_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cart_items_customer_product_variant
+    ON cart_items(customer_id, product_id, COALESCE(variant_id, -1));

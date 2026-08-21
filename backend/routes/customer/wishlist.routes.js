@@ -1,4 +1,4 @@
-
+// backend/routes/customer/wishlist.routes.js
 const express = require('express');
 const router = express.Router();
 

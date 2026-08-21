@@ -1,4 +1,4 @@
- 
+// backend/services/customer/wishlist.service.js
 const pool = require('../../config/db');
  
 // discount_percent is never stored — same derivation used everywhere else
@@ -105,5 +105,3 @@ module.exports = {
   removeFromWishlist,
   getWishlistProducts,
 };
- 
- 

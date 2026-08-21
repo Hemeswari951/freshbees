@@ -1,3 +1,5 @@
+//wishlist_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -59,10 +61,13 @@ class _WishlistScreenState extends State<WishlistScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      // Show the real reason (status code / server message) instead of a
+      // generic string — this is what tells you 401 vs 404 vs 500 without
+      // digging through DevTools every time.
       setState(() {
         _isLoggedIn = true;
         _isLoading = false;
-        _error = 'Could not load your wishlist. Please try again.';
+        _error = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -75,14 +80,19 @@ class _WishlistScreenState extends State<WishlistScreen> {
     setState(() => _items.removeAt(removedIndex));
 
     bool ok;
+    String? failureReason;
     try {
       ok = await WishlistService.removeFromWishlist(product.id);
-    } catch (_) {
+    } catch (e) {
       ok = false;
+      failureReason = e.toString().replaceFirst('Exception: ', '');
     }
 
     if (!ok && mounted) {
       setState(() => _items.insert(removedIndex, product));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(failureReason ?? 'Could not remove item. Please try again.')),
+      );
     }
   }
 
@@ -115,7 +125,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
     );
   }
 
-  Widget _buildBody() {
+  /*Widget _buildBody() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -168,6 +178,275 @@ class _WishlistScreenState extends State<WishlistScreen> {
         },
       ),
     );
+  }*/
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (!_isLoggedIn) {
+      return _emptyState(
+        icon: Icons.lock_outline,
+        title: 'Please login to view your wishlist',
+        actionLabel: 'Login',
+        onAction: () => context.push('/login'),
+      );
+    }
+
+    if (_error != null) {
+      return _emptyState(
+        icon: Icons.error_outline,
+        title: _error!,
+        actionLabel: 'Retry',
+        onAction: _load,
+      );
+    }
+
+    if (_items.isEmpty) {
+      return _emptyState(
+        icon: Icons.favorite_border,
+        title: 'Your wishlist is empty',
+        subtitle: 'Tap the heart on any product to save it here.',
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Myntra-style header
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(color: Colors.black87, fontSize: 16),
+              children: [
+                const TextSpan(
+                  text: 'My Wishlist ',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                TextSpan(
+                  text: '${_items.length} items',
+                  style: const TextStyle(fontWeight: FontWeight.w400),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _load,
+            // LayoutBuilder gives the real available width on every
+            // rebuild (window resize, orientation change, going from a
+            // phone-sized window to a maximized desktop one) so the grid
+            // re-flows instead of being pinned to a fixed column count.
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = _columnsForWidth(constraints.maxWidth);
+                // Desktop cards get a taller image relative to width vs.
+                // phones, matching Myntra's own layout at each breakpoint.
+                final aspectRatio = columns <= 2 ? 0.58 : 0.66;
+
+                return Center(
+                  child: ConstrainedBox(
+                    // Caps the grid on ultra-wide monitors so cards don't
+                    // stretch into huge empty-feeling tiles — Myntra does
+                    // the same with a centered, max-width content column.
+                    constraints: const BoxConstraints(maxWidth: 1600),
+                    child: GridView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      itemCount: _items.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                        childAspectRatio: aspectRatio,
+                      ),
+                      itemBuilder: (context, index) {
+                        final product = _items[index];
+                        return _buildMyntraWishlistCard(product);
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Mirrors Myntra's own responsive breakpoints: 2-up on phones, scaling
+  // up to 5-up on desktop-width screens.
+  int _columnsForWidth(double width) {
+    if (width >= 1200) return 5;
+    if (width >= 900) return 4;
+    if (width >= 600) return 3;
+    return 2;
+  }
+
+  Widget _buildMyntraWishlistCard(ProductModel product) {
+    // Safely calculate prices for the UI
+    final double sellingPrice = product.price.toDouble();
+    final double mrp = product.mrp?.toDouble() ?? sellingPrice;
+    final int discount = mrp > sellingPrice ? ((mrp - sellingPrice) / mrp * 100).round() : 0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Image and Close (X) button
+          Expanded(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: GestureDetector(
+                    onTap: () => _openProduct(product),
+                    child: Container(
+                      color: const Color(0xFFF5F1EA),
+                      child: product.thumbnail.isEmpty
+                          ? const Center(
+                              child: Icon(Icons.image_outlined, color: Colors.black26, size: 36),
+                            )
+                          : Image.network(
+                              product.thumbnail,
+                              fit: BoxFit.cover,
+                              // A broken/missing thumbnail URL (e.g. one
+                              // that 404s and returns an HTML error page)
+                              // used to crash the tile with a big red
+                              // "ImageCodecException" overlay. Fall back
+                              // to a plain placeholder instead.
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Center(
+                                  child: Icon(Icons.image_not_supported_outlined,
+                                      color: Colors.black26, size: 36),
+                                );
+                              },
+                              loadingBuilder: (context, child, progress) {
+                                if (progress == null) return child;
+                                return const Center(
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ),
+                ),
+                // Close 'X' Button
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: GestureDetector(
+                    onTap: () => _removeFromWishlist(product),
+                    child: Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 3)],
+                      ),
+                      child: const Icon(Icons.close, size: 14, color: Colors.black87),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Product Details
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  product.productName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  children: [
+                    Text(
+                      'Rs.${sellingPrice.toInt()}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    if (discount > 0) ...[
+                      Text(
+                        'Rs.${mrp.toInt()}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.black.withOpacity(0.4),
+                          decoration: TextDecoration.lineThrough,
+                        ),
+                      ),
+                      Text(
+                        '($discount% OFF)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.green.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // Divider and Move to Bag Button
+          const Divider(height: 1, color: Colors.black12),
+          InkWell(
+            onTap: () => _moveToBag(product),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 11),
+              child: Text(
+                'MOVE TO BAG',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFFFF3E6C), // Myntra pink
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _moveToBag(ProductModel product) async {
+    // TODO: Call your CartService to add the item to the bag.
+    // Example: await CartService.addToCart(product.id, quantity: 1);
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${product.productName} moved to bag')),
+    );
+    
+    // Optional: Myntra typically removes the item from the wishlist once moved to the bag.
+    // _removeFromWishlist(product); 
   }
 
   Widget _emptyState({

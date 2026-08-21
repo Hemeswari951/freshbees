@@ -3,19 +3,13 @@ import 'package:flutter/material.dart';
 import '../../models/product_model.dart';
 import '../../services/api_service.dart';
 import '../../services/wishlist_service.dart';
-// TODO: point this at wherever your product endpoints live.
 import '../../services/product_service.dart';
 import '../../widgets/product_card.dart';
 import '../product/product_details_screen.dart';
 import 'product_filters.dart';
+import '../../services/wishlist_service.dart';
+import '../wishlist/wishlist_screen.dart'; // Adjust path if your folder structure is different
 
-// ===========================================================================
-// ARGS — what to fetch (shop or search) + the title to show
-// ===========================================================================
-
-/// Carries the "which products to show" info from Home (or search bar)
-/// into ProductListScreen. Only two keys are used right now — add more
-/// later (e.g. 'categoryId') without touching anything else if needed.
 class ProductListArgs {
   static const String keyShop = 'shopId';
   static const String keySearch = 'search';
@@ -77,12 +71,18 @@ class _ProductListScreenState extends State<ProductListScreen> {
   ProductFilters _filters = const ProductFilters();
 
   final Set<int> _wishlistIds = {};
+  bool _isLoggedIn = false; // Safely track login state
+
+  
 
   @override
   void initState() {
     super.initState();
     _loadProducts();
-    _loadWishlistIds();
+    //_loadWishlistIds();
+    _loadWishlist();
+    _checkLoginAndLoadWishlist(); // Initialize login status safely
+
   }
 
   /// Only place that decides which service call to make. If your real
@@ -122,10 +122,24 @@ class _ProductListScreenState extends State<ProductListScreen> {
     }
   }
 
-  Future<void> _loadWishlistIds() async {
-    final token = ApiService.getToken();
-    if (token == null || token.isEmpty) return; // guest — hearts stay unfilled
 
+   Future<void> _checkLoginAndLoadWishlist() async {
+    await ApiService.loadToken();
+    final token = ApiService.getToken();
+    
+    if (mounted) {
+      setState(() {
+        _isLoggedIn = token != null && token.isNotEmpty;
+      });
+    }
+
+    if (_isLoggedIn) {
+      _loadWishlist();
+    }
+  }
+
+  // 2. Load wishlist directly without reloading the token
+  Future<void> _loadWishlist() async {
     try {
       final items = await WishlistService.getWishlist();
       if (!mounted) return;
@@ -135,48 +149,56 @@ class _ProductListScreenState extends State<ProductListScreen> {
           ..addAll(items.map((p) => p.id));
       });
     } catch (_) {
-      // Silent — hearts simply default to unfilled if this fails.
+      // Silent fail
     }
   }
 
+  // 3. Toggle wishlist purely relying on the safe _isLoggedIn state. 
+  // DO NOT call ApiService.loadToken() inside this function.
   Future<void> _toggleWishlist(ProductModel product) async {
-    final token = ApiService.getToken();
-    if (token == null || token.isEmpty) {
+    if (!_isLoggedIn) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please login to use your wishlist')),
       );
       return;
     }
 
-    final wasWishlisted = _wishlistIds.contains(product.id);
+    final int productId = product.id;
+    final bool wasWishlisted = _wishlistIds.contains(productId);
 
+    // Optimistic UI update for instant red heart
     setState(() {
       if (wasWishlisted) {
-        _wishlistIds.remove(product.id);
+        _wishlistIds.remove(productId);
       } else {
-        _wishlistIds.add(product.id);
+        _wishlistIds.add(productId);
       }
     });
 
     bool ok;
     try {
       ok = wasWishlisted
-          ? await WishlistService.removeFromWishlist(product.id)
-          : await WishlistService.addToWishlist(product.id);
+          ? await WishlistService.removeFromWishlist(productId)
+          : await WishlistService.addToWishlist(productId);
     } catch (_) {
       ok = false;
     }
 
+    // Roll back UI only if the API genuinely fails
     if (!ok && mounted) {
       setState(() {
         if (wasWishlisted) {
-          _wishlistIds.add(product.id);
+          _wishlistIds.add(productId);
         } else {
-          _wishlistIds.remove(product.id);
+          _wishlistIds.remove(productId);
         }
       });
-    }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to update wishlist. Please try again.')),
+      );
+    } 
   }
+
 
   void _openProduct(ProductModel product) {
     Navigator.push(
@@ -211,7 +233,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
     return 'No products in this shop yet.';
   }
 
-  @override
+ /* @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFAF7F2),
@@ -228,6 +250,35 @@ class _ProductListScreenState extends State<ProductListScreen> {
           ),
         ),
         actions: [_buildFilterAction()],
+      ),
+      body: CustomScrollView(
+        slivers: [
+          ..._buildProductSlivers(),
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+        ],
+      ),
+    );
+  }*/
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFAF7F2),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFFAF7F2),
+        elevation: 0,
+        foregroundColor: Colors.black87,
+        title: Text(
+          widget.args.title,
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+            color: Colors.black87,
+          ),
+        ),
+        actions: [
+          _buildFilterAction(),
+        ],
       ),
       body: CustomScrollView(
         slivers: [

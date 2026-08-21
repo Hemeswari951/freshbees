@@ -6,7 +6,8 @@ import '../screens/auth/login_screen.dart';
 
 import '../screens/home/home_screen.dart';
 import '../screens/wishlist/wishlist_screen.dart';
-import '../screens/bag/bag_screen.dart';
+//import '../screens/bag/bag_screen.dart';
+import '../screens/cart/cart_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../models/profile_section.dart';
 import '../screens/profile/profile_details_screen.dart';
@@ -36,11 +37,12 @@ _LayoutVisibility _visibilityFor(String path) {
   if (path.startsWith('/wishlist/')) {
     return const _LayoutVisibility(showFooterOnMobile: false);
   }
-  return const _LayoutVisibility();
+  
   if (path == '/trial' ||
       path.startsWith('/virtual-tryon')) {
         return const _LayoutVisibility(showFooterOnMobile: false);
       }
+  return const _LayoutVisibility();
 
 }
 
@@ -100,7 +102,8 @@ final GoRouter appRouter = GoRouter(
           ],
         ),
         GoRoute(path: '/wishlist', builder: (_, __) => const WishlistScreen()),
-        GoRoute(path: '/bag', builder: (_, __) => const BagScreen()),
+        //GoRoute(path: '/bag', builder: (_, __) => const BagScreen()),
+        GoRoute(path: '/cart', builder: (_, __) => const CartScreen()),
         GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
         GoRoute(
           path: '/profile/details',

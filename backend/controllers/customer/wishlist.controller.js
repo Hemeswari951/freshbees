@@ -1,4 +1,4 @@
- 
+// backend/controllers/customer/wishlist.controller.js
 const wishlistService = require('../../services/customer/wishlist.service');
 const productService = require('../../services/customer/product.service');
  
@@ -71,5 +71,3 @@ module.exports = {
   addToWishlist,
   removeFromWishlist,
 };
- 
- 

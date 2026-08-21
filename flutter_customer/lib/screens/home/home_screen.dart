@@ -410,7 +410,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _buildHeaderIconButton(
           icon: Icons.shopping_bag_outlined,
           showBadge: true,
-          onTap: () => context.go('/bag'),
+          onTap: () => context.go('/cart'),
         ),
       ],
     );

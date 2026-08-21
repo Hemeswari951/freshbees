@@ -8,8 +8,6 @@ import '../../services/api_service.dart';
 import '../../services/order_service.dart';
 import '../../services/cart_service.dart';
 import '../cart/cart_screen.dart';
-import '../../widgets/reviews_section.dart';
-import '../../models/review_model.dart';
 
 
 class ProductViewScreen extends StatefulWidget {
@@ -23,7 +21,6 @@ class ProductViewScreen extends StatefulWidget {
 
 class _ProductViewScreenState extends State<ProductViewScreen> {
   ProductDetailsModel? _product;
-  ReviewSummaryModel? _liveSummary;
   bool _loading = true;
   String? _error;
   bool _addingToBag = false;
@@ -104,16 +101,16 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     return variants[_selectedSizeIndex!];
   }
 
-  //List<ProductReviewModel> get _reviews => _product?.reviews ?? [];
+  List<ProductReviewModel> get _reviews => _product?.reviews ?? [];
 
-  /*double get _avgRating {
+  double get _avgRating {
     if (_reviews.isEmpty) return 0.0;
 
     return _reviews.map((r) => r.rating.toDouble()).reduce((a, b) => a + b) /
         _reviews.length;
-  }*/
+  }
 
-  //int get _reviewCount => _reviews.length;
+  int get _reviewCount => _reviews.length;
 
   // ── Product specifications — everything captured on Add Product that
   // isn't already shown elsewhere on this page. SKU is intentionally
@@ -623,11 +620,14 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
         const SizedBox(height: 16),
         // Ratings summary — green pill badge + count, matching the
         // Myntra "4.4 ★ | 679 Ratings" treatment.
-        if (_liveSummary != null && _liveSummary!.totalReviews > 0)
+        if (_reviewCount > 0)
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 7,
+                  vertical: 3.5,
+                ),
                 decoration: BoxDecoration(
                   color: TColors.green,
                   borderRadius: BorderRadius.circular(4),
@@ -636,25 +636,40 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      _liveSummary!.avgRating.toStringAsFixed(1),
-                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white),
+                      _avgRating.toStringAsFixed(1),
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(width: 3),
-                    const Icon(Icons.star_rounded, size: 13, color: Colors.white),
+                    const Icon(
+                      Icons.star_rounded,
+                      size: 13,
+                      color: Colors.white,
+                    ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
               Text(
-                '${_liveSummary!.totalReviews} ${_liveSummary!.totalReviews == 1 ? 'Rating' : 'Ratings'}',
-                style: TextStyle(fontSize: 13, color: TColors.ink.withOpacity(0.55), fontWeight: FontWeight.w500),
+                '$_reviewCount ${_reviewCount == 1 ? 'Rating' : 'Ratings'}',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: TColors.ink.withOpacity(0.55),
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           )
         else
           Text(
             'No ratings yet',
-            style: TextStyle(fontSize: 12.5, color: TColors.ink.withOpacity(0.5)),
+            style: TextStyle(
+              fontSize: 12.5,
+              color: TColors.ink.withOpacity(0.5),
+            ),
           ),
         Divider(color: Colors.grey.withOpacity(0.45), thickness: 1, height: 20),
         const SizedBox(height: 10),
@@ -811,11 +826,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           const SizedBox(height: 24),
         ],
 
-        //_ratingsAndReviews(),
-        ReviewsSection(
-          productId: product.id,
-          onSummaryChanged: (summary) => setState(() => _liveSummary = summary),
-        ),
+        _ratingsAndReviews(),
       ],
     );
   }
@@ -1006,7 +1017,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
   }
 
   // ── Ratings & reviews — read-only, shown at the very end of the details.
-  /*Widget _ratingsAndReviews() {
+  Widget _ratingsAndReviews() {
     final reviews = _reviews;
 
     return Column(
@@ -1097,7 +1108,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           ),
       ],
     );
-  }*/
+  }
 
   Widget _sectionTitle(String title) => Text(
         title,
