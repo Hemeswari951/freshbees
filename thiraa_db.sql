@@ -366,6 +366,15 @@ CREATE TABLE reviews (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ============================================================================
+-- MIGRATION: prevent a customer from submitting more than one review per
+-- product. Run this once against the existing database.
+-- ============================================================================
+
+ALTER TABLE reviews
+    ADD CONSTRAINT unique_customer_product_review UNIQUE (customer_id, product_id);
+
+
 -- ─────────────────────────────────────────────────────────────────────────
 -- NOTIFICATIONS
 -- ─────────────────────────────────────────────────────────────────────────

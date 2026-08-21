@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../services/api_service.dart';
 
+import '../product/product_list_screen.dart';
 import 'tabs/all_tab.dart';
 import 'tabs/men_tab.dart';
 import 'tabs/women_tab.dart';
@@ -44,21 +44,6 @@ class _HomeScreenState extends State<HomeScreen> {
     {'label': 'Beauty', 'icon': Icons.clean_hands_outlined},
   ];
 
-  // Checks login state before navigating to a protected route.
-  void _goToProtected(BuildContext context, String route) {
-    final token = ApiService.getToken();
-
-    final isLoggedIn = token != null && token.isNotEmpty;
-
-    if (isLoggedIn) {
-      context.go(route);
-    } else {
-      context.go(
-        Uri(path: '/login', queryParameters: {'redirect': route}).toString(),
-      );
-    }
-  }
-
   @override
   void dispose() {
     _searchController.dispose();
@@ -89,12 +74,165 @@ class _HomeScreenState extends State<HomeScreen> {
             if (isMobile) _buildHeader(),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 20,
-                ),
-                child: _buildSelectedCategoryContent(),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                    child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+
+                children: [
+
+                  // ==========================================
+                  // AI VIRTUAL TRY-ON BANNER
+                  // ==========================================
+
+                  const SizedBox(height: 20),
+
+                  Container(
+                    width: double.infinity,
+
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF2ECE4),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+
+                    child: Row(
+                      children: [
+
+                        // ======================================
+                        // LEFT CONTENT
+                        // ======================================
+
+                        Expanded(
+                          flex: 3,
+
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+
+                              children: [
+
+                                const Text(
+                                  'AI VIRTUAL TRY-ON',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    letterSpacing: 1.2,
+                                    color: Color(0xFF8B7355),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+
+                                const SizedBox(height: 8),
+
+                                const Text(
+                                  'Try Before\nYou Buy',
+                                  style: TextStyle(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.w500,
+                                    height: 1.1,
+                                    fontFamily: 'Serif',
+                                  ),
+                                ),
+
+                                const SizedBox(height: 8),
+
+                                const Text(
+                                  'See it on you,\nlove it for real.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+
+                                const SizedBox(height: 16),
+
+                                // =================================
+                                // TRY NOW BUTTON
+                                // =================================
+
+                                ElevatedButton.icon(
+                                  onPressed: () {
+                                    context.go('/trial');
+                                  },
+
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.black,
+                                    foregroundColor: Colors.white,
+
+                                    padding:
+                                        const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 10,
+                                    ),
+
+                                    shape:
+                                        RoundedRectangleBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(10),
+                                    ),
+
+                                    elevation: 0,
+                                  ),
+
+                                  label: const Text(
+                                    'Try Now',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                    ),
+                                  ),
+
+                                  icon: const Icon(
+                                    Icons.arrow_forward,
+                                    size: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        // ======================================
+                        // RIGHT IMAGE / PLACEHOLDER
+                        // ======================================
+
+                        Expanded(
+                          flex: 2,
+
+                          child: ClipRRect(
+                            borderRadius:
+                                const BorderRadius.horizontal(
+                              right: Radius.circular(20),
+                            ),
+
+                            child: Container(
+                              height: 210,
+
+                              color: const Color(0xFFE8DFD1),
+
+                              child: const Icon(
+                                Icons.person,
+                                size: 50,
+                                color: Colors.black38,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ==========================================
+                  // SPACE AFTER AI BANNER
+                  // ==========================================
+
+                  const SizedBox(height: 24),
+
+                _buildSelectedCategoryContent(),
+                ],
               ),
+            ),
             ),
           ],
         ),
@@ -104,9 +242,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ---------------------------------------------------------------------
-  // BODY: each toggle has its own file — tap "Men" and MenTab() is what
-  // gets called, tap "Kids" and KidsTab() gets called, and so on.
-  // Add your real per-category content inside each tab file.
+  // BODY: each toggle has its own file, and each tab calls its own
+  // dedicated HomeService method — tap "Men" and MenTab() runs, which
+  // calls HomeService.getMenShops() itself, and so on. Home doesn't
+  // fetch or filter anything.
   // ---------------------------------------------------------------------
   Widget _buildSelectedCategoryContent() {
     switch (_selectedCategory) {
@@ -203,20 +342,35 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.search, size: 20, color: Colors.black54),
+                const Icon(
+                  Icons.search,
+                  size: 20,
+                  color: Colors.black54,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: _searchController,
                     decoration: const InputDecoration(
                       hintText: 'Search',
-                      hintStyle: TextStyle(fontSize: 13, color: Colors.black45),
+                      hintStyle: TextStyle(
+                        fontSize: 13,
+                        color: Colors.black45,
+                      ),
                       border: InputBorder.none,
                       isDense: true,
                     ),
                     style: const TextStyle(fontSize: 13, color: Colors.black87),
-                    onSubmitted: (_) {
-                      // TODO: point this at your actual search route.
+                    onSubmitted: (query) {
+                      if (query.trim().isEmpty) return;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ProductListScreen(
+                            args: ProductListArgs.search(query: query.trim()),
+                          ),
+                        ),
+                      );
                     },
                   ),
                 ),
@@ -256,7 +410,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _buildHeaderIconButton(
           icon: Icons.shopping_bag_outlined,
           showBadge: true,
-          onTap: () => _goToProtected(context, '/bag'),
+          onTap: () => context.go('/bag'),
         ),
       ],
     );
@@ -351,9 +505,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     label,
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: isSelected
-                          ? FontWeight.w700
-                          : FontWeight.w500,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                       color: isSelected
                           ? const Color(0xFF3A2E22)
                           : Colors.black54,

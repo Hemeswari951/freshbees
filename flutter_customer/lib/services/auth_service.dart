@@ -222,24 +222,28 @@ class AuthService {
       );
     }
   }
+
   //=========================
   // LOGOUT
   //=========================
 
   static Future<LoginResponse> logout() async {
-    // Client-side logout should never depend on the server call succeeding.
-    // Clear the local token FIRST — this is the part that actually controls
-    // whether the app treats the user as logged in. If the token is already
-    // expired (401 TOKEN_EXPIRED), the /auth/logout call below will fail,
-    // but the user must still end up logged out locally.
+    // Clear the local token FIRST, before the network call — this is the
+    // part that actually controls whether the app treats the user as
+    // logged in. Previously this ran AFTER the /auth/logout API call
+    // finished, so the UI kept showing the old logged-in state (stale
+    // username) until that network call completed, because nothing
+    // re-rendered once the token was eventually cleared. Clearing it up
+    // front makes logout instant and independent of network/server state
+    // (expired token, no connection, slow response, etc. no longer matter).
+    await ApiService.clearToken();
+
     try {
       final response = await ApiService.post("/auth/logout", {});
-      await ApiService.clearToken();
       return LoginResponse.fromJson(response);
     } catch (e) {
-      // Server call failed (expired token, no network, etc.) — still clear
-      // the local session so the app doesn't get stuck "logged in".
-      await ApiService.clearToken();
+      // Local session is already cleared above, so a failed/timed-out
+      // server call here doesn't leave the app stuck "logged in".
       return LoginResponse(
         success: false,
         message: e.toString().replaceFirst("Exception: ", ""),

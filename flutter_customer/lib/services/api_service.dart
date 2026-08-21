@@ -30,6 +30,32 @@ class ApiService {
 
   static String? _token;
 
+  // ============================================================
+// IMAGE URL
+// ============================================================
+
+static String imageUrl(String? photoUrl) {
+  if (photoUrl == null || photoUrl.trim().isEmpty) {
+    return '';
+  }
+
+  // Already a complete URL
+  if (photoUrl.startsWith('http://') ||
+      photoUrl.startsWith('https://')) {
+    return photoUrl;
+  }
+
+  // Backend returns paths like:
+  // /uploads/tryon/profile_1_xxx.jpg
+
+  if (photoUrl.startsWith('/')) {
+    return '$serverUrl$photoUrl';
+  }
+
+  return '$serverUrl/$photoUrl';
+}
+
+
   // =========================
   // TOKEN MANAGEMENT
   // =========================
@@ -146,4 +172,9 @@ class ApiService {
 
     throw Exception(body['message'] ?? 'Something went wrong');
   }
+  static Future<String?> getUserName() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getString('user_name');
 }
+}
+
