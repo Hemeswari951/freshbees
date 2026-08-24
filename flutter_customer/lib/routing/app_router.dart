@@ -6,7 +6,7 @@ import '../screens/auth/login_screen.dart';
 
 import '../screens/home/home_screen.dart';
 import '../screens/wishlist/wishlist_screen.dart';
-//import '../screens/bag/bag_screen.dart';
+import '../screens/profile/order_details_screen.dart';
 import '../screens/cart/cart_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../models/profile_section.dart';
@@ -114,6 +114,18 @@ final GoRouter appRouter = GoRouter(
             );
           },
         ),
+        GoRoute(
+  path: '/profile/details/orders/:orderId',
+  builder: (context, state) {
+    final orderId = int.parse(
+      state.pathParameters['orderId']!,
+    );
+
+    return OrderDetailsScreen(
+      orderId: orderId,
+    );
+  },
+),
         GoRoute(
   path: '/trial',
   builder: (_, __) => const TryOnEntryScreen(),

@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import '../../models/profile_section.dart';
 import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
+import '../../screens/profile/orders_screen.dart';
+import '../../screens/profile/saved_addresses_screen.dart';
 
 // Same palette style as your mobile ProfileScreen — kept local to this file.
 class _Palette {
@@ -183,13 +185,13 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
       case ProfileSection.overview:
         return _buildOverview();
       case ProfileSection.orders:
-        return _placeholder(section);
+        return const OrdersScreen();
       case ProfileSection.coupons:
         return _placeholder(section);
       case ProfileSection.savedCards:
         return _placeholder(section);
       case ProfileSection.savedAddress:
-        return _placeholder(section);
+        return const SavedAddressesScreen();
       case ProfileSection.helpCenter:
         return _placeholder(section);
       case ProfileSection.notificationSettings:

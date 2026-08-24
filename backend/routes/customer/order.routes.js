@@ -23,5 +23,7 @@ router.post("/", customerAuth, orderController.placeOrder);
 // POST /api/customer/orders/checkout  { cart_item_ids? }  → "Buy Now" from the Cart screen
 router.post("/checkout", customerAuth, orderController.checkoutCart);
 
+router.get("/", customerAuth, orderController.getMyOrders);
+
 module.exports = router;
 
