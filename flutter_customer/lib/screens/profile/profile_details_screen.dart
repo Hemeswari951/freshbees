@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../models/profile_section.dart';
-import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
 import '../../screens/profile/orders_screen.dart';
 import '../../screens/profile/saved_addresses_screen.dart';
+import '../../screens/profile/saved_cards_screen.dart';
+import '../../screens/profile/overview_screen.dart';
 
 // Same palette style as your mobile ProfileScreen — kept local to this file.
 class _Palette {
@@ -84,7 +85,7 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
         shadowColor: Colors.black12,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: _Palette.ink),
-          onPressed: () => context.pop(),
+          onPressed: () => context.go('/profile'),
         ),
         title: Text(
           isDesktop ? 'My Account' : _selectedSection.label,
@@ -183,13 +184,13 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
   Widget _buildContent(ProfileSection section) {
     switch (section) {
       case ProfileSection.overview:
-        return _buildOverview();
+        return const OverviewScreen();
       case ProfileSection.orders:
         return const OrdersScreen();
       case ProfileSection.coupons:
         return _placeholder(section);
       case ProfileSection.savedCards:
-        return _placeholder(section);
+        return const SavedCardsScreen();
       case ProfileSection.savedAddress:
         return const SavedAddressesScreen();
       case ProfileSection.helpCenter:

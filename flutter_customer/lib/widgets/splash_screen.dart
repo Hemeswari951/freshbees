@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
  
 import '../services/location_permission_service.dart';
+
  
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -59,6 +60,8 @@ class _SplashScreenState extends State<SplashScreen>
     _navigate();
   }
  
+
+
   Future<void> _navigate() async {
   await Future.delayed(const Duration(seconds: 3));
  
@@ -67,11 +70,10 @@ class _SplashScreenState extends State<SplashScreen>
   final status =
       await LocationPermissionService.requestLocation();
  
-  if (status.isGranted) {
-    context.go('/home');
-    return;
-  }
- 
+ if (status.isGranted) {
+  context.go('/home');
+  return;
+}
   final enableLocation = await _showPermissionDialog();
  
   if (!mounted) return;
@@ -88,7 +90,7 @@ class _SplashScreenState extends State<SplashScreen>
   if (!mounted) return;
  
   // User can continue even without location
-  context.go('/home');
+context.go('/home');
 }
  
   Future<bool> _showPermissionDialog() async {
