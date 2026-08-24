@@ -20,10 +20,20 @@ async function getShops(req, res) {
   }
 }
 
-/**
- * GET /shops/:id
- * Not required for the Home tabs, but useful for a shop-detail fallback
- * fetch (same pattern the app already had before).
- */
+async function getShopDetail(req, res) {
+  try {
+    const { id } = req.params;
+    const shop = await homeService.getShopDetails(id);
 
-module.exports = { getShops};
+    if (!shop) {
+      return res.status(404).json({ success: false, message: 'Shop not found' });
+    }
+
+    return res.status(200).json({ success: true, data: shop });
+  } catch (err) {
+    console.error('getShopDetail error:', err);
+    return res.status(500).json({ success: false, message: 'Could not fetch shop details' });
+  }
+}
+
+module.exports = { getShops, getShopDetail };

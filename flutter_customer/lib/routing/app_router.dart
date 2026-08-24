@@ -1,97 +1,384 @@
 import 'package:go_router/go_router.dart';
+
 import '../widgets/customer_layout.dart';
 import '../widgets/splash_screen.dart';
+
 import '../screens/auth/login_screen.dart';
 
 import '../screens/home/home_screen.dart';
 import '../screens/wishlist/wishlist_screen.dart';
-import '../screens/bag/bag_screen.dart';
+import '../screens/cart/cart_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../models/profile_section.dart';
 import '../screens/profile/profile_details_screen.dart';
 
-// ── Per-route header/footer visibility (mobile only — desktop always shows
-// header+sidebar, see ShopOwnerLayout). Add a case here when a NEW screen
-// needs non-default behaviour. ShopOwnerLayout itself never needs edits. ──
+import '../screens/product/product_list_screen.dart';
+import '../screens/product/product_view_screen.dart';
+import '../screens/product/shop_overview_screen.dart';
+import '../screens/product/product_filters.dart';
+
+
+// ─────────────────────────────────────────────────────────────
+// Layout visibility
+// ─────────────────────────────────────────────────────────────
+
 class _LayoutVisibility {
   final bool showFooterOnMobile;
-  const _LayoutVisibility({this.showFooterOnMobile = true});
+
+  const _LayoutVisibility({
+    this.showFooterOnMobile = true,
+  });
 }
 
+
 _LayoutVisibility _visibilityFor(String path) {
-  if (path.startsWith('/products/')) {
-    return const _LayoutVisibility(showFooterOnMobile: false);
+  // Product List + Product View
+  if (path == '/products' || path.startsWith('/products/')) {
+    return const _LayoutVisibility(
+      showFooterOnMobile: false,
+    );
   }
-  if (path.startsWith('/wishlist/')) {
-    return const _LayoutVisibility(showFooterOnMobile: false);
+
+  // Wishlist
+  if (path == '/wishlist' || path.startsWith('/wishlist/')) {
+    return const _LayoutVisibility(
+      showFooterOnMobile: false,
+    );
   }
+
+  // Shop Overview
+  if (path == '/shops' || path.startsWith('/shops/')) {
+    return const _LayoutVisibility(
+      showFooterOnMobile: false,
+    );
+  }
+
+  // Filter
+  if (path == '/filter' || path.startsWith('/filter/')) {
+    return const _LayoutVisibility(
+      showFooterOnMobile: false,
+    );
+  }
+
+  // Default
   return const _LayoutVisibility();
 }
 
+
+// ─────────────────────────────────────────────────────────────
+// GoRouter
+// ─────────────────────────────────────────────────────────────
+
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
-  routes: [
-    GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
 
-    // Login Screen
-    // Reads the `redirectTo` value passed via extra from CustomerHeader's
-    // _goToProtected() (e.g. context.go('/login', extra: {'redirectTo': '/wishlist'}))
-    // so LoginScreen -> OTP/Password flow can send the user back to where
-    // they originally wanted to go, instead of always landing on /home.
+  routes: [
+
+    // ─────────────────────────────────────────────────────────
+    // Splash
+    // ─────────────────────────────────────────────────────────
+
     GoRoute(
-      path: '/login',
+      path: '/splash',
       builder: (context, state) {
-        final redirectRoute = state.uri.queryParameters['redirect'];
-        return LoginScreen(redirectRoute: redirectRoute);
+        return const SplashScreen();
       },
     ),
 
+
+    // ─────────────────────────────────────────────────────────
+    // Login
+    // ─────────────────────────────────────────────────────────
+
+    GoRoute(
+      path: '/login',
+      builder: (context, state) {
+        final redirectRoute =
+            state.uri.queryParameters['redirect'];
+
+        return LoginScreen(
+          redirectRoute: redirectRoute,
+        );
+      },
+    ),
+
+
+    // ─────────────────────────────────────────────────────────
+    // Customer Layout
+    // ─────────────────────────────────────────────────────────
+
     ShellRoute(
       builder: (context, state, child) {
-        final visibility = _visibilityFor(state.uri.path);
+        final visibility =
+            _visibilityFor(state.uri.path);
+
         return CustomerLayout(
           currentPath: state.uri.path,
-          showFooterOnMobile: visibility.showFooterOnMobile,
+          showFooterOnMobile:
+              visibility.showFooterOnMobile,
           child: child,
         );
       },
 
       routes: [
-        // '/home' = All toggle. Each nested route below is a separate
-        // toggle (Men / Women / Kids / Beauty) — navigating to it opens
-        // HomeScreen with that category pre-selected, and the URL
-        // reflects which toggle is active.
+
+        // ─────────────────────────────────────────
+        // HOME
+        // ─────────────────────────────────────────
+
         GoRoute(
           path: '/home',
-          builder: (_, __) => const HomeScreen(initialCategory: 'All'),
+
+          builder: (_, __) {
+            return const HomeScreen(
+              initialCategory: 'All',
+            );
+          },
+
           routes: [
+
+            // Men
             GoRoute(
               path: 'men',
-              builder: (_, __) => const HomeScreen(initialCategory: 'Men'),
+              builder: (_, __) {
+                return const HomeScreen(
+                  initialCategory: 'Men',
+                );
+              },
             ),
+
+            // Women
             GoRoute(
               path: 'women',
-              builder: (_, __) => const HomeScreen(initialCategory: 'Women'),
+              builder: (_, __) {
+                return const HomeScreen(
+                  initialCategory: 'Women',
+                );
+              },
             ),
+
+            // Kids
             GoRoute(
               path: 'kids',
-              builder: (_, __) => const HomeScreen(initialCategory: 'Kids'),
+              builder: (_, __) {
+                return const HomeScreen(
+                  initialCategory: 'Kids',
+                );
+              },
             ),
+
+            // Beauty
             GoRoute(
               path: 'beauty',
-              builder: (_, __) => const HomeScreen(initialCategory: 'Beauty'),
+              builder: (_, __) {
+                return const HomeScreen(
+                  initialCategory: 'Beauty',
+                );
+              },
             ),
           ],
         ),
-        GoRoute(path: '/wishlist', builder: (_, __) => const WishlistScreen()),
-        GoRoute(path: '/bag', builder: (_, __) => const BagScreen()),
-        GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
+
+
+        // ─────────────────────────────────────────
+        // WISHLIST
+        // ─────────────────────────────────────────
+
+        GoRoute(
+          path: '/wishlist',
+          builder: (_, __) {
+            return const WishlistScreen();
+          },
+        ),
+
+
+        // ─────────────────────────────────────────
+        // CART
+        // ─────────────────────────────────────────
+
+        GoRoute(
+          path: '/cart',
+          builder: (_, __) {
+            return const CartScreen();
+          },
+        ),
+
+
+        // ─────────────────────────────────────────
+        // PROFILE
+        // ─────────────────────────────────────────
+
+        GoRoute(
+          path: '/profile',
+          builder: (_, __) {
+            return const ProfileScreen();
+          },
+        ),
+
+
+        // ─────────────────────────────────────────
+        // PROFILE DETAILS
+        // ─────────────────────────────────────────
+
         GoRoute(
           path: '/profile/details',
+
           builder: (context, state) {
-            final sectionParam = state.uri.queryParameters['section'];
+            final sectionParam =
+                state.uri.queryParameters['section'];
+
             return ProfileDetailsScreen(
-              initialSection: ProfileSectionX.fromSlug(sectionParam),
+              initialSection:
+                  ProfileSectionX.fromSlug(
+                sectionParam,
+              ),
+            );
+          },
+        ),
+
+
+        // ─────────────────────────────────────────
+        // PRODUCT LIST
+        // ─────────────────────────────────────────
+        //
+        // IMPORTANT:
+        // Do NOT use state.extra here.
+        //
+        // Product list information is stored in the URL:
+        //
+        // /products?shopId=10&shopName=Surya%20Fashion
+        //
+        // or
+        //
+        // /products?search=tshirt
+        //
+        // This allows browser Back / Forward to work.
+        // ─────────────────────────────────────────
+
+        GoRoute(
+          path: '/products',
+
+          builder: (context, state) {
+            final shopId =
+                state.uri.queryParameters['shopId'];
+
+            final shopName =
+                state.uri.queryParameters['shopName'];
+
+            final search =
+                state.uri.queryParameters['search'];
+
+
+            // -----------------------------------------
+            // Shop products
+            // -----------------------------------------
+
+            if (shopId != null &&
+                shopName != null) {
+
+              final args = ProductListArgs.shop(
+                shopId: int.parse(shopId),
+                shopName: shopName,
+              );
+
+              return ProductListScreen(
+                args: args,
+              );
+            }
+
+
+            // -----------------------------------------
+            // Search products
+            // -----------------------------------------
+
+            if (search != null &&
+                search.isNotEmpty) {
+
+              final args = ProductListArgs.search(
+                query: search,
+              );
+
+              return ProductListScreen(
+                args: args,
+              );
+            }
+
+
+            // -----------------------------------------
+            // No valid ProductList arguments
+            // -----------------------------------------
+            //
+            // This prevents:
+            //
+            // TypeError: null is not a subtype of
+            // ProductListArgs
+            //
+            // -----------------------------------------
+
+            return const HomeScreen(
+              initialCategory: 'All',
+            );
+          },
+        ),
+
+
+        // ─────────────────────────────────────────
+        // PRODUCT VIEW
+        // ─────────────────────────────────────────
+
+        GoRoute(
+          path: '/products/:productId',
+
+          builder: (context, state) {
+            final productId =
+                state.pathParameters['productId'];
+
+            return ProductViewScreen(
+              productId: int.parse(productId!),
+            );
+          },
+        ),
+
+
+        // ─────────────────────────────────────────
+        // SHOP OVERVIEW
+        // ─────────────────────────────────────────
+
+        GoRoute(
+          path: '/shops/:shopId',
+
+          builder: (context, state) {
+            final shopId =
+                state.pathParameters['shopId'];
+
+            return ShopOverviewScreen(
+              shopId: int.parse(shopId!),
+            );
+          },
+        ),
+
+
+        // ─────────────────────────────────────────
+        // FILTER
+        // ─────────────────────────────────────────
+        //
+        // For now FilterPage still receives
+        // ProductFilters through extra.
+        //
+        // We can convert this to URL parameters later
+        // if browser Back/Forward needs to restore the
+        // exact filter state.
+        // ─────────────────────────────────────────
+
+        GoRoute(
+          path: '/filter',
+
+          builder: (context, state) {
+            final filters =
+                state.extra as ProductFilters;
+
+            return FilterPage(
+              initialFilters: filters,
             );
           },
         ),

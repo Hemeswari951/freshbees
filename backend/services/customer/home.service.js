@@ -31,5 +31,32 @@ async function getShops({ category } = {}) {
   return rows.map(mapShopRow);
 }
 
+function mapShopDetailRow(row) {
+  return {
+    id: row.shop_id,
+    shopName: row.shop_name,
+    description: row.shop_description || null,
+    shopLogo: row.shop_logo || null,
+    shopBanner: row.shop_banner || null,
+    categories: row.categories || [],
+    city: row.city || null,
+    state: row.state || null,
+    address: row.address || null,
+    rating: Number(row.rating) || 0,
+    ratingCount: Number(row.rating_count) || 0,
+    status: row.is_blocked ? 'Blocked' : 'Active',
 
-module.exports = { getShops};
+    ownerName: row.owner_name || null,
+    ownerEmail: row.owner_email || null,
+    ownerPhone: row.owner_phone || null,
+    ownerProfileImage: row.owner_profile_image || null,
+  };
+}
+
+async function getShopDetails(shopId) {
+  const row = await homeModel.findShopById(shopId);
+  if (!row) return null;
+  return mapShopDetailRow(row);
+}
+
+module.exports = { getShops, getShopDetails };

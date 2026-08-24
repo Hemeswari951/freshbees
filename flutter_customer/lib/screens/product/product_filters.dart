@@ -5,14 +5,14 @@ import 'package:flutter/material.dart';
 // ===========================================================================
 
 /// Static filter option lists — hardcoded for now. Move to an API call
-/// later without touching ProductFilters or the bottom sheet below.
+/// later without touching ProductFilters or the panel below.
 class FilterOptions {
   static const double minPrice = 0;
   static const double maxPrice = 10000;
 
   static const List<String> categories = ['Men', 'Women', 'Kids'];
 
-  /// label -> swatch color shown in the bottom sheet.
+  /// label -> swatch color shown in the filter panel.
   static const Map<String, Color> colors = {
     'Red': Color(0xFFE53935),
     'Blue': Color(0xFF1E88E5),
@@ -56,7 +56,7 @@ class ProductFilters {
       minDiscount == null &&
       minRating == null;
 
-  /// Used to show a count badge on the filter icon.
+  /// Used to show a count badge on the filter icon/button.
   int get activeCount {
     var count = 0;
     if (priceRange.start != FilterOptions.minPrice || priceRange.end != FilterOptions.maxPrice) count++;
@@ -106,35 +106,31 @@ class ProductFilters {
 }
 
 // ===========================================================================
-// UI — FilterBottomSheet
+// UI — FilterPanel (the actual form, no chrome of its own beyond a
+// "Filters / Clear all" header). Embed this ANYWHERE:
+//   - inside a fixed-width sidebar Container (desktop)
+//   - as the body of a full page pushed via Navigator (mobile — see
+//     [FilterPage] below)
 // ===========================================================================
 
-/// Opens as a modal bottom sheet, lets the user edit filters, and pops
-/// with the new [ProductFilters] when "Apply" is tapped (or `null` if
-/// dismissed without applying).
-///
-/// Usage:
-/// ```dart
-/// final result = await showModalBottomSheet<ProductFilters>(
-///   context: context,
-///   isScrollControlled: true,
-///   shape: const RoundedRectangleBorder(
-///     borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-///   ),
-///   builder: (_) => FilterBottomSheet(initialFilters: _filters),
-/// );
-/// if (result != null) setState(() => _filters = result);
-/// ```
-class FilterBottomSheet extends StatefulWidget {
+/// Renders the filter form and calls [onApply] with the edited draft
+/// when the user taps "Apply". Doesn't navigate anywhere itself — the
+/// caller decides what "apply" means (pop a route, or just setState).
+class FilterPanel extends StatefulWidget {
   final ProductFilters initialFilters;
+  final ValueChanged<ProductFilters> onApply;
 
-  const FilterBottomSheet({super.key, required this.initialFilters});
+  const FilterPanel({
+    super.key,
+    required this.initialFilters,
+    required this.onApply,
+  });
 
   @override
-  State<FilterBottomSheet> createState() => _FilterBottomSheetState();
+  State<FilterPanel> createState() => _FilterPanelState();
 }
 
-class _FilterBottomSheetState extends State<FilterBottomSheet> {
+class _FilterPanelState extends State<FilterPanel> {
   late ProductFilters _draft;
 
   @override
@@ -145,37 +141,28 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (context, scrollController) {
-        return Column(
-          children: [
-            _buildHeader(),
-            const Divider(height: 1),
-            Expanded(
-              child: ListView(
-                controller: scrollController,
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _buildPriceSection(),
-                  const SizedBox(height: 24),
-                  _buildCategorySection(),
-                  const SizedBox(height: 24),
-                  _buildColorSection(),
-                  const SizedBox(height: 24),
-                  _buildDiscountSection(),
-                  const SizedBox(height: 24),
-                  _buildRatingSection(),
-                ],
-              ),
-            ),
-            _buildFooter(),
-          ],
-        );
-      },
+    return Column(
+      children: [
+        _buildHeader(),
+        const Divider(height: 1),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildPriceSection(),
+              const SizedBox(height: 24),
+              _buildCategorySection(),
+              const SizedBox(height: 24),
+              _buildColorSection(),
+              const SizedBox(height: 24),
+              _buildDiscountSection(),
+              const SizedBox(height: 24),
+              _buildRatingSection(),
+            ],
+          ),
+        ),
+        _buildFooter(),
+      ],
     );
   }
 
@@ -192,10 +179,6 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
           TextButton(
             onPressed: () => setState(() => _draft = const ProductFilters()),
             child: const Text('Clear all'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close),
-            onPressed: () => Navigator.pop(context),
           ),
         ],
       ),
@@ -377,6 +360,7 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
 
   Widget _buildFooter() {
     return SafeArea(
+      top: false,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: SizedBox(
@@ -390,7 +374,7 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            onPressed: () => Navigator.pop(context, _draft),
+            onPressed: () => widget.onApply(_draft),
             child: Text(
               _draft.activeCount > 0
                   ? 'Apply (${_draft.activeCount})'
@@ -398,6 +382,42 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ===========================================================================
+// UI — FilterPage: full-screen mobile route wrapping [FilterPanel].
+// Push it, await the result — same contract the old bottom sheet had.
+//
+// Usage:
+// final result = await Navigator.push<ProductFilters>(
+//   context,
+//   MaterialPageRoute(builder: (_) => FilterPage(initialFilters: _filters)),
+// );
+// if (result != null) setState(() => _filters = result);
+// ===========================================================================
+
+class FilterPage extends StatelessWidget {
+  final ProductFilters initialFilters;
+
+  const FilterPage({super.key, required this.initialFilters});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        foregroundColor: Colors.black87,
+        // No title here on purpose — FilterPanel's own header already
+        // shows "Filters" + "Clear all", so this stays just a back button.
+      ),
+      body: FilterPanel(
+        initialFilters: initialFilters,
+        onApply: (filters) => Navigator.pop(context, filters),
       ),
     );
   }

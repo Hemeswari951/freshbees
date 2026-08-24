@@ -5,7 +5,7 @@ import '../../models/product_model.dart';
 import '../../services/api_service.dart';
 import '../../services/wishlist_service.dart';
 import '../../widgets/product_card.dart';
-import '../product/product_details_screen.dart';
+import '../product/product_view_screen.dart';
 
 /// Wishlist screen — every product the logged-in customer has hearted,
 /// backed by GET /api/customer/wishlist. Reuses the same ProductCard as

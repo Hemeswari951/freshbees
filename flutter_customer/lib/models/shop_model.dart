@@ -1,23 +1,29 @@
- 
 import '../services/api_service.dart';
- 
-/// Represents a shop as shown to the customer (nearby shops, shop list,
-/// shop detail). Built to be tolerant of both camelCase and snake_case
-/// keys, since different backend endpoints may serialize fields
-/// differently (this mirrors how the admin app reads shop data).
+
 class ShopModel {
   final int id;
   final String shopName;
+
   final String? description;
+
   final String? shopLogo;
   final String? shopBanner;
+
   final List<String> categories;
+
   final String? city;
   final String? state;
   final String? address;
+
   final double rating;
-  final String status; // Active / Blocked / Pending
- 
+  final int ratingCount;
+
+  final String status;
+  final String? ownerName;
+  final String? ownerEmail;
+  final String? ownerPhone;
+  final String? ownerProfileImage;
+  
   ShopModel({
     required this.id,
     required this.shopName,
@@ -29,46 +35,222 @@ class ShopModel {
     this.state,
     this.address,
     this.rating = 0.0,
+    this.ratingCount = 0,
     this.status = 'Active',
+    this.ownerName,
+    this.ownerEmail,
+    this.ownerPhone,
+    this.ownerProfileImage,
   });
- 
+
+  // ==============================================================
+  // FROM JSON
+  // ==============================================================
+
   factory ShopModel.fromJson(Map<String, dynamic> json) {
+    // --------------------------------------------------------------
+    // Categories
+    // --------------------------------------------------------------
+
+    List<String> parsedCategories = [];
+
+    if (json['categories'] is List) {
+      parsedCategories = (json['categories'] as List)
+          .map((e) => e.toString())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    } else {
+      // Support old API response:
+      // "category": "Men"
+      // "categoryLabel": "Men"
+
+      final String? category = json['category']?.toString();
+
+      final String? categoryLabel = json['categoryLabel']?.toString();
+
+      if (category != null && category.isNotEmpty) {
+        parsedCategories = [category];
+      } else if (categoryLabel != null && categoryLabel.isNotEmpty) {
+        parsedCategories = [categoryLabel];
+      }
+    }
+
+    // --------------------------------------------------------------
+    // Rating
+    // --------------------------------------------------------------
+
+    double parsedRating = 0.0;
+
+    if (json['rating'] is num) {
+      parsedRating = (json['rating'] as num).toDouble();
+    } else {
+      parsedRating = double.tryParse(json['rating']?.toString() ?? '') ?? 0.0;
+    }
+
+    // --------------------------------------------------------------
+    // Rating Count
+    // --------------------------------------------------------------
+
+    int parsedRatingCount = 0;
+
+    if (json['ratingCount'] is num) {
+      parsedRatingCount = (json['ratingCount'] as num).toInt();
+    } else if (json['rating_count'] is num) {
+      parsedRatingCount = (json['rating_count'] as num).toInt();
+    } else {
+      parsedRatingCount =
+          int.tryParse(
+            (json['ratingCount'] ?? json['rating_count'] ?? '0').toString(),
+          ) ??
+          0;
+    }
+
     return ShopModel(
+      // ------------------------------------------------------------
+      // ID
+      // ------------------------------------------------------------
+
       id: json['id'] ?? json['shop_id'] ?? 0,
+
+      // ------------------------------------------------------------
+      // Shop Name
+      // ------------------------------------------------------------
       shopName: (json['shopName'] ?? json['shop_name'] ?? '').toString(),
+
+      // ------------------------------------------------------------
+      // Description
+      // ------------------------------------------------------------
       description: json['description']?.toString(),
-      shopLogo: (json['shopLogo'] ?? json['shop_logo'])?.toString(),
-      shopBanner: (json['shopBanner'] ?? json['shop_banner'])?.toString(),
-      categories: json['categories'] is List
-          ? (json['categories'] as List).map((e) => e.toString()).toList()
-          : <String>[],
+
+      // ------------------------------------------------------------
+      // Shop Logo
+      //
+      // Supports:
+      // logoUrl
+      // shopLogo
+      // shop_logo
+      // ------------------------------------------------------------
+      shopLogo: (json['logoUrl'] ?? json['shopLogo'] ?? json['shop_logo'])
+          ?.toString(),
+
+      // ------------------------------------------------------------
+      // Shop Banner
+      //
+      // Supports:
+      // shopBanner
+      // bannerUrl
+      // shop_banner
+      // ------------------------------------------------------------
+      shopBanner:
+          (json['shopBanner'] ?? json['bannerUrl'] ?? json['shop_banner'])
+              ?.toString(),
+
+      // ------------------------------------------------------------
+      // Categories
+      // ------------------------------------------------------------
+      categories: parsedCategories,
+
+      // ------------------------------------------------------------
+      // Location
+      // ------------------------------------------------------------
       city: json['city']?.toString(),
+
       state: json['state']?.toString(),
+
       address: json['address']?.toString(),
-      rating: json['rating'] is num
-          ? (json['rating'] as num).toDouble()
-          : double.tryParse(json['rating']?.toString() ?? '') ?? 0.0,
+
+      // ------------------------------------------------------------
+      // Rating
+      // ------------------------------------------------------------
+      rating: parsedRating,
+
+      // ------------------------------------------------------------
+      // Rating Count
+      // ------------------------------------------------------------
+      ratingCount: parsedRatingCount,
+
+      // ------------------------------------------------------------
+      // Status
+      // ------------------------------------------------------------
       status: (json['status'] ?? 'Active').toString(),
+
+      ownerName: json['ownerName']?.toString(),
+      ownerEmail: json['ownerEmail']?.toString(),
+      ownerPhone: json['ownerPhone']?.toString(),
+      ownerProfileImage: json['ownerProfileImage']?.toString(),
     );
   }
- 
-  /// "Boutique, Men" style subtitle used under the shop name on cards.
-  String get categoryLabel =>
-      categories.isNotEmpty ? categories.join(', ') : 'Shop';
- 
-  /// "Hariprasad · Kurnool" style location line.
+
+  // ==============================================================
+  // CATEGORY LABEL
+  // ==============================================================
+
+  String get categoryLabel {
+    if (categories.isNotEmpty) {
+      return categories.join(', ');
+    }
+
+    return 'Shop';
+  }
+
+  // ==============================================================
+  // LOCATION LABEL
+  // ==============================================================
+
   String get locationLabel {
     if (city != null && city!.isNotEmpty) {
-      return state != null && state!.isNotEmpty ? '$city, $state' : city!;
+      if (state != null && state!.isNotEmpty) {
+        return '$city, $state';
+      }
+
+      return city!;
     }
+
     return address ?? '';
   }
- 
-  /// Full URL for the shop logo, ready to hand to Image.network.
-  String? get logoUrl =>
-      (shopLogo != null && shopLogo!.isNotEmpty)
-          ? '${ApiService.serverUrl}$shopLogo'
-          : null;
- 
-  bool get isActive => status.toLowerCase() == 'active';
+
+  // ==============================================================
+  // LOGO URL
+  // ==============================================================
+
+  String? get logoUrl {
+    if (shopLogo == null || shopLogo!.isEmpty) {
+      return null;
+    }
+
+    // If backend already returns a complete URL
+    if (shopLogo!.startsWith('http://') || shopLogo!.startsWith('https://')) {
+      return shopLogo;
+    }
+
+    // If backend returns relative path
+    return '${ApiService.serverUrl}$shopLogo';
+  }
+
+  // ==============================================================
+  // BANNER URL
+  // ==============================================================
+
+  String? get bannerUrl {
+    if (shopBanner == null || shopBanner!.isEmpty) {
+      return null;
+    }
+
+    // If backend already returns a complete URL
+    if (shopBanner!.startsWith('http://') ||
+        shopBanner!.startsWith('https://')) {
+      return shopBanner;
+    }
+
+    // If backend returns relative path
+    return '${ApiService.serverUrl}$shopBanner';
+  }
+
+  // ==============================================================
+  // ACTIVE STATUS
+  // ==============================================================
+
+  bool get isActive {
+    return status.toLowerCase() == 'active';
+  }
 }

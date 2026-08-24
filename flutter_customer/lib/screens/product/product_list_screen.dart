@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../models/product_model.dart';
 import '../../services/api_service.dart';
-import '../../services/wishlist_service.dart';
-// TODO: point this at wherever your product endpoints live.
 import '../../services/product_service.dart';
 import '../../widgets/product_card.dart';
-import '../product/product_details_screen.dart';
 import 'product_filters.dart';
 
 // ===========================================================================
@@ -27,7 +25,7 @@ class ProductListArgs {
   /// the typed query (String) for [keySearch].
   final dynamic value;
 
-  /// Text shown in the AppBar — shop name, or `Results for "query"`.
+  /// Text shown in the header — shop name, or `Results for "query"`.
   final String title;
 
   const ProductListArgs({
@@ -36,7 +34,10 @@ class ProductListArgs {
     required this.title,
   });
 
-  factory ProductListArgs.shop({required int shopId, required String shopName}) {
+  factory ProductListArgs.shop({
+    required int shopId,
+    required String shopName,
+  }) {
     return ProductListArgs(key: keyShop, value: shopId, title: shopName);
   }
 
@@ -50,6 +51,9 @@ class ProductListArgs {
 
   bool get isShop => key == keyShop;
   bool get isSearch => key == keySearch;
+
+  /// Shop id, only valid when [isShop] is true.
+  int get shopId => value as int;
 }
 
 // ===========================================================================
@@ -60,6 +64,29 @@ class ProductListArgs {
 /// ProductService. Every clickable entry point on Home (nearby shop
 /// card, search bar) routes here with a [ProductListArgs]; this screen
 /// decides which API to call and applies [ProductFilters] on top.
+///
+/// Responsive behaviour:
+/// - Width >= [_desktopBreakpoint] → "desktop": a top bar with a back
+///   button, the title (shop name / search query), and — only for shop
+///   lists — an "Overview" button on the right. Products render in a
+///   grid on the LEFT with the filter form ([FilterPanel]) permanently
+///   visible as a sidebar on the RIGHT. Changing a filter and tapping
+///   Apply just re-runs the fetch, no navigation involved.
+/// - Below that → "mobile": a compact header — back button, title,
+///   a search icon, and a bag/cart icon. The filter/overview toolbar
+///   row ("Filters" on the left, "Overview" — shop only — on the
+///   right) now scrolls WITH the page content instead of being pinned
+///   under the header. Tapping the search icon expands an inline
+///   search field in place of the title/icons. Tapping "Filters"
+///   pushes [FilterPage] as its own full screen route and applies
+///   whatever comes back.
+///
+/// Wishlist: tapping the heart on a card checks login state first. A
+/// guest gets sent straight to `/login` — nothing is written until
+/// they're actually signed in. A logged-in tap flips the heart
+/// optimistically and calls [ProductService.addToWishlist] /
+/// [ProductService.removeFromWishlist], rolling the heart back if the
+/// API call fails.
 class ProductListScreen extends StatefulWidget {
   final ProductListArgs args;
 
@@ -70,6 +97,10 @@ class ProductListScreen extends StatefulWidget {
 }
 
 class _ProductListScreenState extends State<ProductListScreen> {
+  static const double _desktopBreakpoint = 900;
+  static const Color _bg = Color(0xFFFAF7F2);
+  static const Color _ink = Color(0xFF1F1B16);
+
   List<ProductModel> _products = [];
   bool _isLoading = true;
   String? _error;
@@ -77,13 +108,41 @@ class _ProductListScreenState extends State<ProductListScreen> {
   ProductFilters _filters = const ProductFilters();
 
   final Set<int> _wishlistIds = {};
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+
+  /// Mobile only — whether the header is showing the inline search field
+  /// in place of the title/search-icon/cart-icon row.
+  bool _searchExpanded = false;
 
   @override
   void initState() {
     super.initState();
+    if (widget.args.isSearch) {
+      _searchController.text = widget.args.value as String;
+    }
     _loadProducts();
     _loadWishlistIds();
   }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  bool _isDesktop(BuildContext context) =>
+      MediaQuery.of(context).size.width >= _desktopBreakpoint;
+
+  bool get _isLoggedIn {
+    final token = ApiService.getToken();
+    return token != null && token.isNotEmpty;
+  }
+
+  // ===========================================================
+  // DATA
+  // ===========================================================
 
   /// Only place that decides which service call to make. If your real
   /// method names/signatures differ, this is the one spot to edit.
@@ -91,7 +150,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
     final queryParams = _filters.toQueryParams();
     if (widget.args.isShop) {
       return ProductService.getProductsByShop(
-        widget.args.value as int,
+        widget.args.shopId,
         filters: queryParams,
       );
     }
@@ -123,11 +182,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
   }
 
   Future<void> _loadWishlistIds() async {
-    final token = ApiService.getToken();
-    if (token == null || token.isEmpty) return; // guest — hearts stay unfilled
+    if (!_isLoggedIn) return; // guest — hearts stay unfilled
 
     try {
-      final items = await WishlistService.getWishlist();
+      final items = await ProductService.getWishlist();
       if (!mounted) return;
       setState(() {
         _wishlistIds
@@ -139,12 +197,13 @@ class _ProductListScreenState extends State<ProductListScreen> {
     }
   }
 
+  /// Login gate lives here: guests are routed to `/login` and nothing
+  /// is written. Logged-in users get an optimistic heart flip + the
+  /// actual API call, rolled back if that call fails.
   Future<void> _toggleWishlist(ProductModel product) async {
-    final token = ApiService.getToken();
-    if (token == null || token.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please login to use your wishlist')),
-      );
+    if (!_isLoggedIn) {
+      // Not logged in — send them to login instead of writing anything.
+      context.push('/login');
       return;
     }
 
@@ -161,8 +220,8 @@ class _ProductListScreenState extends State<ProductListScreen> {
     bool ok;
     try {
       ok = wasWishlisted
-          ? await WishlistService.removeFromWishlist(product.id)
-          : await WishlistService.addToWishlist(product.id);
+          ? await ProductService.removeFromWishlist(product.id)
+          : await ProductService.addToWishlist(product.id);
     } catch (_) {
       ok = false;
     }
@@ -178,29 +237,82 @@ class _ProductListScreenState extends State<ProductListScreen> {
     }
   }
 
+  // ===========================================================
+  // NAVIGATION
+  // ===========================================================
+
   void _openProduct(ProductModel product) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ProductViewScreen(productId: product.id),
-      ),
-    );
+    context.push('/products/${product.id}');
   }
 
-  Future<void> _openFilterSheet() async {
-    final result = await showModalBottomSheet<ProductFilters>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => FilterBottomSheet(initialFilters: _filters),
+  /// Only relevant when we got here via a shop (widget.args.isShop).
+  void _openShopOverview() {
+    context.push('/shops/${widget.args.shopId}');
+  }
+
+  void _openCart() {
+    _goToProtected(context, '/cart');
+  }
+
+  /// New search from the mobile header's search field — replaces this
+  /// screen with a fresh ProductListScreen for the new query so the
+  /// back stack still makes sense (Home -> this new search result).
+  void _onSearchSubmitted(String query) {
+    final trimmed = query.trim();
+
+    if (trimmed.isEmpty) return;
+
+    final uri = Uri(path: '/products', queryParameters: {'search': trimmed});
+
+    context.pushReplacement(uri.toString());
+  }
+
+  void _openInlineSearch() {
+    setState(() => _searchExpanded = true);
+    // Give the field a frame to build before requesting focus.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _searchFocusNode.requestFocus();
+    });
+  }
+
+  void _closeInlineSearch() {
+    setState(() => _searchExpanded = false);
+    _searchFocusNode.unfocus();
+  }
+
+  /// Mobile: pushes the filter form as its own full page and applies
+  /// whatever comes back.
+  Future<void> _openFilterPage() async {
+    final result = await context.push<ProductFilters>(
+      '/filter',
+      extra: _filters,
     );
 
     if (result != null) {
       setState(() => _filters = result);
-      _loadProducts(); // refetch with the new filters applied
+      _loadProducts();
+    }
+  }
+
+  /// Desktop: sidebar's Apply just updates state in place — no route.
+  void _applyDesktopFilters(ProductFilters filters) {
+    setState(() => _filters = filters);
+    _loadProducts();
+  }
+
+  // Checks login state before navigating to a protected route.
+  // If not logged in, redirects to /login and passes the intended
+  // destination so the login flow can send the user back afterwards.
+  void _goToProtected(BuildContext context, String route) {
+    final isLoggedIn =
+        ApiService.getToken() != null && ApiService.getToken()!.isNotEmpty;
+
+    if (isLoggedIn) {
+      context.go(route);
+    } else {
+      context.go(
+        Uri(path: '/login', queryParameters: {'redirect': route}).toString(),
+      );
     }
   }
 
@@ -211,62 +323,279 @@ class _ProductListScreenState extends State<ProductListScreen> {
     return 'No products in this shop yet.';
   }
 
+  // ===========================================================
+  // BUILD
+  // ===========================================================
+
   @override
   Widget build(BuildContext context) {
+    final isDesktop = _isDesktop(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF7F2),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFFAF7F2),
-        elevation: 0,
-        foregroundColor: Colors.black87,
-        title: Text(
-          widget.args.title,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 16,
-            color: Colors.black87,
+      backgroundColor: _bg,
+      body: SafeArea(
+        top: isDesktop,
+        bottom: false,
+        child: isDesktop ? _buildDesktopScaffold() : _buildMobileScaffold(),
+      ),
+    );
+  }
+
+  // ===========================================================
+  // DESKTOP — back button + title (+ Overview for shop lists) top
+  // bar, then left grid / right filter sidebar
+  // ===========================================================
+
+  Widget _buildDesktopScaffold() {
+    return Column(
+      children: [
+        _buildDesktopTopBar(),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: CustomScrollView(
+                  slivers: [
+                    ..._buildProductSlivers(),
+                    const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                  ],
+                ),
+              ),
+              Container(
+                width: 340,
+                margin: const EdgeInsets.fromLTRB(0, 16, 24, 16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.black12),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: FilterPanel(
+                  initialFilters: _filters,
+                  onApply: _applyDesktopFilters,
+                ),
+              ),
+            ],
           ),
         ),
-        actions: [_buildFilterAction()],
-      ),
-      body: CustomScrollView(
-        slivers: [
-          ..._buildProductSlivers(),
-          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ],
+    );
+  }
+
+  /// Back button + title (shop name / search query) on the left,
+  /// "Overview" button on the right — only shown when this list came
+  /// from a shop.
+  Widget _buildDesktopTopBar() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(4, 14, 24, 0),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: _ink),
+            onPressed: () => Navigator.maybePop(context),
+          ),
+          Expanded(
+            child: Text(
+              widget.args.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: _ink,
+              ),
+            ),
+          ),
+          if (widget.args.isShop)
+            OutlinedButton.icon(
+              onPressed: _openShopOverview,
+              icon: const Icon(Icons.storefront_outlined, size: 16),
+              label: const Text('Overview'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _ink,
+                side: const BorderSide(color: Colors.black26),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildFilterAction() {
-    final count = _filters.activeCount;
-    return Stack(
-      alignment: Alignment.center,
+  // ===========================================================
+  // MOBILE — back+name+search-icon+cart header. Filter/Overview
+  // toolbar now scrolls WITH the product grid instead of being
+  // pinned under the header.
+  // ===========================================================
+
+  Widget _buildMobileScaffold() {
+    return Column(
       children: [
-        IconButton(
-          icon: const Icon(Icons.tune, color: Colors.black87),
-          onPressed: _openFilterSheet,
-        ),
-        if (count > 0)
-          Positioned(
-            right: 6,
-            top: 6,
-            child: Container(
-              padding: const EdgeInsets.all(3),
-              decoration: const BoxDecoration(
-                color: Colors.redAccent,
-                shape: BoxShape.circle,
-              ),
-              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-              child: Text(
-                '$count',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 10, color: Colors.white),
-              ),
-            ),
+        _buildMobileHeader(),
+        Expanded(
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: _buildMobileFilterToolbar()),
+              ..._buildProductSlivers(),
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            ],
           ),
+        ),
       ],
     );
+  }
+
+  /// Back button, screen name, a search icon, and a bag icon — all in
+  /// one row. Tapping the search icon swaps the title/icons for an
+  /// inline, auto-focused search field (with a close icon to collapse
+  /// back to the normal header).
+  Widget _buildMobileHeader() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
+      child: _searchExpanded ? _buildSearchRow() : _buildTitleRow(),
+    );
+  }
+
+  Widget _buildTitleRow() {
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_back, color: _ink),
+          onPressed: () => Navigator.maybePop(context),
+        ),
+        Expanded(
+          child: Text(
+            widget.args.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: _ink,
+            ),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.search, color: _ink),
+          onPressed: _openInlineSearch,
+        ),
+        IconButton(
+          icon: const Icon(Icons.shopping_cart_outlined, color: _ink),
+          onPressed: _openCart,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchRow() {
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_back, color: _ink),
+          onPressed: _closeInlineSearch,
+        ),
+        Expanded(
+          child: Container(
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1ECE3),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TextField(
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              textInputAction: TextInputAction.search,
+              onSubmitted: _onSearchSubmitted,
+              style: const TextStyle(fontSize: 14, color: _ink),
+              decoration: InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                prefixIcon: const Icon(
+                  Icons.search,
+                  size: 20,
+                  color: Colors.black45,
+                ),
+                suffixIcon: _searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(
+                          Icons.close,
+                          size: 18,
+                          color: Colors.black45,
+                        ),
+                        onPressed: () {
+                          setState(() => _searchController.clear());
+                        },
+                      ),
+                hintText: 'Search products',
+                hintStyle: const TextStyle(
+                  fontSize: 13,
+                  color: Colors.black45,
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Slim strip — "Filters" trigger on the left, "Overview" (shop
+  /// lists only) on the right. Now placed as the first sliver in the
+  /// scroll view, so it scrolls away with the rest of the page
+  /// content instead of staying pinned under the header. Tapping
+  /// Filters pushes [FilterPage].
+  Widget _buildMobileFilterToolbar() {
+    final count = _filters.activeCount;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 16, 10),
+      child: Row(
+        children: [
+          TextButton.icon(
+            onPressed: _openFilterPage,
+            icon: Badge(
+              isLabelVisible: count > 0,
+              label: Text('$count'),
+              child: const Icon(Icons.tune, size: 18),
+            ),
+            label: const Text('Filters'),
+            style: TextButton.styleFrom(foregroundColor: _ink),
+          ),
+          const Spacer(),
+          if (widget.args.isShop)
+            TextButton.icon(
+              onPressed: _openShopOverview,
+              icon: const Icon(Icons.storefront_outlined, size: 16),
+              label: const Text('Overview'),
+              style: TextButton.styleFrom(foregroundColor: _ink),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================
+  // GRID
+  // ===========================================================
+
+  /// Column count adapts to width: 2 on phones, scales up as the
+  /// available grid width grows (desktop already loses 340px to the
+  /// sidebar, so this reads the ACTUAL remaining width, not the full
+  /// screen width).
+  int _gridColumnCount(double width) {
+    if (width >= 1000) return 4;
+    if (width >= 700) return 3;
+    if (width >= 460) return 2;
+    return 2;
   }
 
   List<Widget> _buildProductSlivers() {
@@ -285,7 +614,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
               children: [
                 Text(_error!, style: const TextStyle(color: Colors.black54)),
                 const SizedBox(height: 12),
-                TextButton(onPressed: _loadProducts, child: const Text('Retry')),
+                TextButton(
+                  onPressed: _loadProducts,
+                  child: const Text('Retry'),
+                ),
               ],
             ),
           ),
@@ -300,7 +632,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(_emptyMessage, style: const TextStyle(color: Colors.black54)),
+                Text(
+                  _emptyMessage,
+                  style: const TextStyle(color: Colors.black54),
+                ),
                 if (_filters.activeCount > 0) ...[
                   const SizedBox(height: 8),
                   TextButton(
@@ -319,28 +654,30 @@ class _ProductListScreenState extends State<ProductListScreen> {
     }
 
     return [
-      SliverPadding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        sliver: SliverGrid(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 0.62,
-          ),
-          delegate: SliverChildBuilderDelegate(
-            (context, index) {
-              final product = _products[index];
-              return ProductCard(
-                product: product,
-                isWishlisted: _wishlistIds.contains(product.id),
-                onWishlistTap: () => _toggleWishlist(product),
-                onTap: () => _openProduct(product),
-              );
-            },
-            childCount: _products.length,
-          ),
-        ),
+      SliverLayoutBuilder(
+        builder: (context, constraints) {
+          final crossAxisCount = _gridColumnCount(constraints.crossAxisExtent);
+          return SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            sliver: SliverGrid(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 0.62,
+              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final product = _products[index];
+                return ProductCard(
+                  product: product,
+                  isWishlisted: _wishlistIds.contains(product.id),
+                  onWishlistTap: () => _toggleWishlist(product),
+                  onTap: () => _openProduct(product),
+                );
+              }, childCount: _products.length),
+            ),
+          );
+        },
       ),
     ];
   }

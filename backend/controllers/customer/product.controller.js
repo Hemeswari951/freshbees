@@ -95,15 +95,19 @@ function mapDetail(row) {
 
 // GET /api/customer/products
 // GET /api/customer/products?shopId=5
-// → shopId irundha andha shop oda products mattum; illana ella active products um.
-//   Powers Home "Recommended For You" / Explore, AND the per-shop listing.
+// GET /api/customer/products?search=tshirt
 async function listProducts(req, res) {
   try {
-    const { shopId } = req.query;
+    const { shopId, search } = req.query;
 
-    const rows = shopId
-      ? await productService.findPublicProductsByShop(Number(shopId))
-      : await productService.findAllPublicProducts();
+    let rows;
+    if (search && search.trim() !== '') {
+      rows = await productService.findPublicProductsBySearch(search.trim());
+    } else if (shopId) {
+      rows = await productService.findPublicProductsByShop(Number(shopId));
+    } else {
+      rows = await productService.findAllPublicProducts();
+    }
 
     res.json({ success: true, data: rows.map(mapListItem) });
   } catch (err) {
@@ -111,6 +115,7 @@ async function listProducts(req, res) {
     res.status(500).json({ success: false, message: 'Failed to fetch products' });
   }
 }
+
 // GET /api/customer/products/:id
 async function getProduct(req, res) {
   try {

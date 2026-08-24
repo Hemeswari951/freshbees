@@ -3,11 +3,11 @@ const router = express.Router();
 
 const homeController = require('../../controllers/customer/home.controller');
 
-// GET /shops                 -> every shop (Home "All" tab)
-// GET /shops?category=men    -> filtered by category (Home "Men" tab, etc)
+// GET /home/get-shops                 -> every shop (Home "All" tab)
+// GET /home/get-shops?category=men    -> filtered by category
 router.get('/get-shops', homeController.getShops);
 
-// GET /shops/:id              -> single shop, for detail-page fallback fetches
-// router.get('/:id', homeController.getShopById);
+// GET /home/shop-detail/:id           -> single shop, for Shop Overview screen
+router.get('/shop-detail/:id', homeController.getShopDetail);
 
 module.exports = router;

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
+import '../services/search_service.dart';
+import '../screens/product/product_list_screen.dart'; // adjust path if different
 import './app_colors.dart';
 
 class CustomerHeader extends StatefulWidget {
@@ -15,6 +17,14 @@ class CustomerHeader extends StatefulWidget {
 
 class _CustomerHeaderState extends State<CustomerHeader> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  final LayerLink _searchLayerLink = LayerLink();
+  final OverlayPortalController _searchOverlayController =
+      OverlayPortalController();
+
+  Timer? _debounce;
+  List<SearchSuggestion> _suggestions = [];
+  bool _isSuggesting = false;
 
   // These must match the routes defined in app_router.dart
   // (/home, /home/men, /home/women, /home/kids, /home/beauty).
@@ -28,14 +38,76 @@ class _CustomerHeaderState extends State<CustomerHeader> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _searchFocusNode.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
+  // ---------------------------------------------------------------------
+  // SEARCH — same debounced flow as HomeScreen (mobile), same shared
+  // HomeService.getSearchSuggestions() call, same OverlayPortal pattern
+  // (no focus-loss race condition — suggestion taps register reliably).
+  // ---------------------------------------------------------------------
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+
+    if (value.trim().isEmpty) {
+      setState(() {
+        _suggestions = [];
+        _isSuggesting = false;
+      });
+      if (_searchOverlayController.isShowing) {
+        _searchOverlayController.hide();
+      }
+      return;
+    }
+
+    _debounce = Timer(const Duration(milliseconds: 350), () async {
+      setState(() => _isSuggesting = true);
+      try {
+        final results = await SearchService.getSearchSuggestions(value);
+        if (!mounted) return;
+        setState(() {
+          _suggestions = results;
+          _isSuggesting = false;
+        });
+        if (_suggestions.isNotEmpty && !_searchOverlayController.isShowing) {
+          _searchOverlayController.show();
+        } else if (_suggestions.isEmpty && _searchOverlayController.isShowing) {
+          _searchOverlayController.hide();
+        }
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _suggestions = [];
+          _isSuggesting = false;
+        });
+      }
+    });
+  }
+
   void _handleSearch(String query) {
     if (query.trim().isEmpty) return;
-    // TODO: point this at your actual search route.
-    context.push('/search', extra: query.trim());
+    if (_searchOverlayController.isShowing) {
+      _searchOverlayController.hide();
+    }
+    _searchFocusNode.unfocus();
+    // Same destination as the mobile HomeScreen search bar — direct to
+    // ProductListScreen, not a separate /search route.
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProductListScreen(
+          args: ProductListArgs.search(query: query.trim()),
+        ),
+      ),
+    );
+  }
+
+  void _onSuggestionTap(SearchSuggestion suggestion) {
+    _searchController.text = suggestion.text;
+    _handleSearch(suggestion.text);
   }
 
   // Checks login state before navigating to a protected route.
@@ -101,41 +173,130 @@ class _CustomerHeaderState extends State<CustomerHeader> {
 
           const SizedBox(width: 24),
 
-          // Lengthy search bar
+          // Lengthy search bar — wrapped in CompositedTransformTarget +
+          // OverlayPortal so the suggestions dropdown anchors under it
+          // and taps register reliably.
           Expanded(
-            child: Container(
-              height: 42,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: AppColors.cream,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.search, size: 20, color: AppColors.textGrey),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      onSubmitted: _handleSearch,
-                      textInputAction: TextInputAction.search,
-                      decoration: const InputDecoration(
-                        hintText: 'Search for products, brands and more',
-                        hintStyle: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.textGrey,
-                        ),
-                        border: InputBorder.none,
-                        isDense: true,
-                      ),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: AppColors.black,
+            child: CompositedTransformTarget(
+              link: _searchLayerLink,
+              child: OverlayPortal(
+                controller: _searchOverlayController,
+                overlayChildBuilder: (context) {
+                  return Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () {
+                        _searchOverlayController.hide();
+                      },
+                      child: Stack(
+                        children: [
+                          CompositedTransformFollower(
+                            link: _searchLayerLink,
+                            showWhenUnlinked: false,
+                            offset: const Offset(0, 46),
+                            child: Align(
+                              alignment: Alignment.topLeft,
+                              child: Material(
+                                elevation: 4,
+                                borderRadius: BorderRadius.circular(12),
+                                color: AppColors.white,
+                                child: SizedBox(
+                                  width: 420, // roughly matches the search bar width
+                                  child: ConstrainedBox(
+                                    constraints:
+                                        const BoxConstraints(maxHeight: 320),
+                                    child: ListView.separated(
+                                      shrinkWrap: true,
+                                      padding:
+                                          const EdgeInsets.symmetric(vertical: 6),
+                                      itemCount: _suggestions.length,
+                                      separatorBuilder: (_, __) =>
+                                          const Divider(height: 1),
+                                      itemBuilder: (context, index) {
+                                        final s = _suggestions[index];
+                                        return ListTile(
+                                          dense: true,
+                                          leading: Icon(
+                                            s.isTag
+                                                ? Icons.sell_outlined
+                                                : Icons.search_rounded,
+                                            size: 18,
+                                            color: AppColors.textGrey,
+                                          ),
+                                          title: Text(
+                                            s.text,
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                          trailing: s.isTag
+                                              ? const Text(
+                                                  'tag',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.black38,
+                                                  ),
+                                                )
+                                              : null,
+                                          onTap: () => _onSuggestionTap(s),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                  );
+                },
+                child: Container(
+                  height: 42,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: AppColors.cream,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: AppColors.border),
                   ),
-                ],
+                  child: Row(
+                    children: [
+                      const Icon(Icons.search,
+                          size: 20, color: AppColors.textGrey),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          focusNode: _searchFocusNode,
+                          onChanged: _onSearchChanged,
+                          onSubmitted: _handleSearch,
+                          textInputAction: TextInputAction.search,
+                          decoration: const InputDecoration(
+                            hintText: 'Search for products, brands and more',
+                            hintStyle: TextStyle(
+                              fontSize: 14,
+                              color: AppColors.textGrey,
+                            ),
+                            border: InputBorder.none,
+                            isDense: true,
+                          ),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.black,
+                          ),
+                        ),
+                      ),
+                      if (_isSuggesting)
+                        const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -152,9 +313,9 @@ class _CustomerHeaderState extends State<CustomerHeader> {
           ),
           const SizedBox(width: 22),
           _HeaderAction(
-            icon: Icons.shopping_bag_outlined,
-            label: 'Bag',
-            onTap: () => _goToProtected(context, '/bag'),
+            icon: Icons.shopping_cart_outlined,
+            label: 'Cart',
+            onTap: () => _goToProtected(context, '/cart'),
           ),
           const SizedBox(width: 22),
           _HeaderAction(
