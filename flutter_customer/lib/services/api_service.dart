@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io';
 
-
 class AppConfig {
   static const bool isDevelopment = true;
 
@@ -30,11 +29,67 @@ class ApiService {
 
   static String? _token;
 
+  // ============================================================
+  // IMAGE URL
+  // ============================================================
+
+  static String imageUrl(String? photoUrl) {
+    if (photoUrl == null || photoUrl.trim().isEmpty) {
+      return '';
+    }
+
+    // Already a complete URL
+    if (photoUrl.startsWith('http://') || photoUrl.startsWith('https://')) {
+      return photoUrl;
+    }
+
+    // Backend returns paths like:
+    // /uploads/tryon/profile_1_xxx.jpg
+
+    if (photoUrl.startsWith('/')) {
+      return '$serverUrl$photoUrl';
+    }
+
+    return '$serverUrl/$photoUrl';
+  }
+
+  static bool _isTokenExpired(String token) {
+    try {
+      final parts = token.split('.');
+
+      if (parts.length != 3) {
+        return true;
+      }
+
+      final payload = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      );
+
+      final exp = payload['exp'];
+
+      if (exp == null) {
+        return true;
+      }
+
+      final expiryDate = DateTime.fromMillisecondsSinceEpoch(
+        (exp as num).toInt() * 1000,
+      );
+
+      return DateTime.now().isAfter(expiryDate);
+    } catch (e) {
+      debugPrint('JWT validation error: $e');
+      return true;
+    }
+  }
+  
   // =========================
   // TOKEN MANAGEMENT
   // =========================
 
-  static Future<void> setToken(String? token, {Map<String, dynamic>? customer}) async {
+  static Future<void> setToken(
+    String? token, {
+    Map<String, dynamic>? customer,
+  }) async {
     _token = token;
 
     final prefs = await SharedPreferences.getInstance();
@@ -44,10 +99,15 @@ class ApiService {
       await prefs.remove('user_name');
     } else {
       await prefs.setString('customer_token', token);
-      
+
       if (customer != null) {
-        String fullName = '${customer['first_name'] ?? ''} ${customer['last_name'] ?? ''}'.trim();
-        await prefs.setString('user_name', fullName.isNotEmpty ? fullName : 'User');
+        String fullName =
+            '${customer['first_name'] ?? ''} ${customer['last_name'] ?? ''}'
+                .trim();
+        await prefs.setString(
+          'user_name',
+          fullName.isNotEmpty ? fullName : 'User',
+        );
       }
     }
   }
@@ -146,9 +206,9 @@ class ApiService {
 
     throw Exception(body['message'] ?? 'Something went wrong');
   }
-  static Future<String?> getUserName() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getString('user_name');
-}
-}
 
+  static Future<String?> getUserName() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('user_name');
+  }
+}

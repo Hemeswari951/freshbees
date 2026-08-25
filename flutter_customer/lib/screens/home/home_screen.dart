@@ -176,7 +176,149 @@ class _HomeScreenState extends State<HomeScreen> {
                   horizontal: 20,
                   vertical: 20,
                 ),
-                child: _buildSelectedCategoryContent(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+
+                  children: [
+                    // ==========================================
+                    // AI VIRTUAL TRY-ON BANNER
+                    // ==========================================
+
+                    const SizedBox(height: 20),
+
+                    Container(
+                      width: double.infinity,
+
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF2ECE4),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+
+                      child: Row(
+                        children: [
+                          // ======================================
+                          // LEFT CONTENT
+                          // ======================================
+
+                          Expanded(
+                            flex: 3,
+
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+
+                                children: [
+                                  const Text(
+                                    'AI VIRTUAL TRY-ON',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      letterSpacing: 1.2,
+                                      color: Color(0xFF8B7355),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 8),
+
+                                  const Text(
+                                    'Try Before\nYou Buy',
+                                    style: TextStyle(
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.w500,
+                                      height: 1.1,
+                                      fontFamily: 'Serif',
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 8),
+
+                                  const Text(
+                                    'See it on you,\nlove it for real.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 16),
+
+                                  // =================================
+                                  // TRY NOW BUTTON
+                                  // =================================
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      context.go('/trial');
+                                    },
+
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.black,
+                                      foregroundColor: Colors.white,
+
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 10,
+                                      ),
+
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+
+                                      elevation: 0,
+                                    ),
+
+                                    label: const Text(
+                                      'Try Now',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+
+                                    icon: const Icon(
+                                      Icons.arrow_forward,
+                                      size: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          // ======================================
+                          // RIGHT IMAGE / PLACEHOLDER
+                          // ======================================
+                          Expanded(
+                            flex: 2,
+
+                            child: ClipRRect(
+                              borderRadius: const BorderRadius.horizontal(
+                                right: Radius.circular(20),
+                              ),
+
+                              child: Container(
+                                height: 210,
+
+                                color: const Color(0xFFE8DFD1),
+
+                                child: const Icon(
+                                  Icons.person,
+                                  size: 50,
+                                  color: Colors.black38,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // ==========================================
+                    // SPACE AFTER AI BANNER
+                    // ==========================================
+                    const SizedBox(height: 24),
+
+                    _buildSelectedCategoryContent(),
+                  ],
+                ),
               ),
             ),
           ],

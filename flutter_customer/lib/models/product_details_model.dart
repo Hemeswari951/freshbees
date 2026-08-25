@@ -1,3 +1,5 @@
+import '../../services/api_service.dart'; // TODO: adjust this relative path to match where api_service.dart actually lives (e.g. '../services/api_service.dart')
+
 class ProductDetailsModel {
   final int id;
   final String productName;
@@ -26,7 +28,7 @@ class ProductDetailsModel {
   final List<ProductAttributeModel> attributes;
   final List<ProductTagModel> tags;
   final List<ProductReviewModel> reviews;
-  
+
   ProductDetailsModel({
     required this.id,
     required this.productName,
@@ -55,7 +57,6 @@ class ProductDetailsModel {
     required this.attributes,
     required this.tags,
     required this.reviews,
-    
   });
 
   factory ProductDetailsModel.fromJson(Map<String, dynamic> json) {
@@ -64,7 +65,6 @@ class ProductDetailsModel {
       productName: json["productName"],
       description: json["description"] ?? "",
       subCategory: json["subCategory"],
-
       fabric: json["fabric"],
       pattern: json["pattern"],
       fitType: json["fitType"],
@@ -76,9 +76,11 @@ class ProductDetailsModel {
       price: (json["price"] as num).toDouble(),
       mrp: json["mrp"] == null ? null : (json["mrp"] as num).toDouble(),
       discountPercent: json["discountPercent"] ?? 0,
+      // FIXED: was hardcoded "http://localhost:3000" — broke on Android
+      // emulator (localhost there means the emulator itself, not your PC).
       thumbnail: json["thumbnail"] == null
           ? null
-          : "http://localhost:3000${json["thumbnail"]}",
+          : "${ApiService.serverUrl}${json["thumbnail"]}",
       shopId: json["shopId"],
       shopName: json["shopName"],
       categoryId: json["categoryId"],
@@ -87,22 +89,17 @@ class ProductDetailsModel {
       totalStock: json["totalStock"] ?? 0,
       stockStatus: json["stockStatus"] ?? "",
       colors: (json["colors"] as List)
-    .map((e) => ProductColorModel.fromJson(e))
-    .toList(),
-
-    attributes: (json["attributes"] as List? ?? [])
-    .map((e) => ProductAttributeModel.fromJson(e))
-    .toList(),
-
-tags: (json["tags"] as List? ?? [])
-    .map((e) => ProductTagModel.fromJson(e))
-    .toList(),
-
-reviews: (json["reviews"] as List? ?? [])
-    .map((e) => ProductReviewModel.fromJson(e))
-    .toList(),
-
-     
+          .map((e) => ProductColorModel.fromJson(e))
+          .toList(),
+      attributes: (json["attributes"] as List? ?? [])
+          .map((e) => ProductAttributeModel.fromJson(e))
+          .toList(),
+      tags: (json["tags"] as List? ?? [])
+          .map((e) => ProductTagModel.fromJson(e))
+          .toList(),
+      reviews: (json["reviews"] as List? ?? [])
+          .map((e) => ProductReviewModel.fromJson(e))
+          .toList(),
     );
   }
 }
@@ -121,7 +118,8 @@ class ProductImageModel {
   factory ProductImageModel.fromJson(Map<String, dynamic> json) {
     return ProductImageModel(
       imageId: json["imageId"],
-      imageUrl: "http://localhost:3000${json["imageUrl"]}",
+      // FIXED: same hardcoded-localhost issue as thumbnail above.
+      imageUrl: "${ApiService.serverUrl}${json["imageUrl"]}",
       imageType: json["imageType"],
     );
   }
@@ -151,8 +149,8 @@ class ProductColorModel {
           .map((e) => ProductImageModel.fromJson(e))
           .toList(),
       variants: (json["variants"] as List? ?? [])
-    .map((e) => ProductVariantModel.fromJson(e))
-    .toList(),
+          .map((e) => ProductVariantModel.fromJson(e))
+          .toList(),
     );
   }
 }
@@ -178,13 +176,8 @@ class ProductVariantModel {
     return ProductVariantModel(
       variantId: json["variantId"],
       productColorId: json["productColorId"] as int?,
-      price: json["price"] == null
-    ? null
-    : (json["price"] as num).toDouble(),
-
-mrp: json["mrp"] == null
-    ? null
-    : (json["mrp"] as num).toDouble(),
+      price: json["price"] == null ? null : (json["price"] as num).toDouble(),
+      mrp: json["mrp"] == null ? null : (json["mrp"] as num).toDouble(),
       size: json["size"],
       stockQuantity: json["stockQuantity"],
     );

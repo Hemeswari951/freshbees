@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
- 
+
 class AppColors {
   // ==========================================================
   // Backgrounds
@@ -7,10 +7,10 @@ class AppColors {
   // static const Color cream = Color(0xFFFBF8F4);       // App background
   // static const Color white = Color(0xFFFFFFFF);
   static const Color card = Color(0xFFFFFFFF);
- 
+  static const Color cardBg = Color(0xFFF3EBE0);
   static const Color sidebarBg = Color(0xFFFFFFFF);
   static const Color headerBg = Color(0xFFFFFFFF);
- 
+
   // ==========================================================
   // Primary Brand (Brown)
   // ==========================================================
@@ -18,74 +18,78 @@ class AppColors {
   static const Color brown = Color(0xFF4A2C1D);
   static const Color brownDark = Color(0xFF2E1B12);
   static const Color brownLight = Color(0xFFF5EEE8);
-  static const Color accentBrown = Color(0xFF9E5A38);   // NEW - icons, links, accents
- 
+  static const Color accentBrown = Color(
+    0xFF9E5A38,
+  ); // NEW - icons, links, accents
+
   // ==========================================================
   // Text
   // ==========================================================
   static const Color textDark = Color(0xFF2B241D);
   static const Color textGrey = Color(0xFF8A8178);
   static const Color textLight = Color(0xFFB6ADA4);
-  static const Color textMuted = textGrey;               // NEW - alias, subtext use pannuறோம்
- 
+  static const Color textMuted = textGrey; // NEW - alias, subtext use pannuறோம்
+
   // ==========================================================
   // Borders / Dividers
   // ==========================================================
   static const Color border = Color(0xFFF0E9E3);
- 
+
   // ==========================================================
   // Navigation
   // ==========================================================
   static const Color activeNav = brown;
   static const Color activeNavBg = Color(0xFFF5EEE8);
   static const Color inactiveNav = Color(0xFF5E4B3D);
- 
+
   // ==========================================================
   // Icon Background
   // ==========================================================
   static const Color iconBg = Color(0xFFF7EEE4);
- 
+
   // ==========================================================
   // Success
   // ==========================================================
   // static const Color green = Color(0xFF2F8A4C);
   static const Color greenLight = Color(0xFFEAF7EC);
-  static const Color greenTagBg = greenLight;             // NEW - "New" status badge
-  static const Color greenTagText = green;                // NEW
- 
+  static const Color greenTagBg = greenLight; // NEW - "New" status badge
+  static const Color greenTagText = green; // NEW
+
   // ==========================================================
   // Error
   // ==========================================================
   // static const Color red = Color(0xFFC84E4E);
   static const Color redLight = Color(0xFFFCEEEE);
- 
+
   // ==========================================================
   // Warning
   // ==========================================================
   static const Color warning = Color(0xFFB52A2A);
   static const Color warningBg = Color(0xFFFDF1F2);
-  static const Color alertBgPink = warningBg;              // NEW - low stock banner
-  static const Color alertTextRed = warning;               // NEW
- 
+  static const Color alertBgPink = warningBg; // NEW - low stock banner
+  static const Color alertTextRed = warning; // NEW
+
   // ==========================================================
   // Amber / Pending status
   // ==========================================================
-  static const Color amberTagBg = Color(0xFFFFF4E0);       // NEW - "Shipped/Pending" badge
-  static const Color amberTagText = Color(0xFFB57A00);     // NEW
- 
+  static const Color amberTagBg = Color(
+    0xFFFFF4E0,
+  ); // NEW - "Shipped/Pending" badge
+  static const Color amberTagText = Color(0xFFB57A00); // NEW
+
   // ==========================================================
   // Payout Card
   // ==========================================================
   static const Color payout = Color(0xFF4A2C1D);
   static const Color payoutButton = Color(0xFFFFFFFF);
- 
+
   // ==========================================================
   // Shadows
   // ==========================================================
   static const Color shadow = Color(0x14000000);
- 
+
   // ---------------------
- 
+
   static const Color cream = Color(0xFFFAF4EA);
   static const Color blush = Color(0xFFFDF3E9);
   static const Color ink = Color(0xFF2B241D);
@@ -100,23 +104,15 @@ class AppColors {
   static const Color redSoft = Color(0xFFF4E2DD);
   static const Color gold = Color(0xFFC79A3C);
   static const Color white = Color(0xFFFFFFFF);
- 
+
   static const Color blueSoft = Color(0xFFDDE6F5);
   static const Color blue = Color(0xFF3A5C9C);
   static const Color amberSoft = Color(0xFFFBEBD2);
   static const Color amber = Color(0xFF966A1B);
 
-          
-
- 
-
   // ==========================================================
   // Navigation
   // ==========================================================
- 
-
-
-
 
   /// -------------------------- START OF NEW CHANGES ------------------------------------------
 
@@ -134,8 +130,6 @@ class AppColors {
   static const Color textPrimary = Color(0xFF1A1A1A);
   static const Color textSecondary = Color(0xFF6B6B6B);
 
-
-
   /// Rating
   static const Color star = Color(0xFFB8956A);
 
@@ -144,8 +138,6 @@ class AppColors {
 
   /// Error
   static const Color danger = Color(0xFFD32F2F);
-
-
 
   /// Transparent
   static const Color transparent = Colors.transparent;
@@ -229,10 +221,7 @@ class AppColors {
   );
 
   /// Normal Body
-  static const TextStyle body = TextStyle(
-    fontSize: 13,
-    color: textSecondary,
-  );
+  static const TextStyle body = TextStyle(fontSize: 13, color: textSecondary);
 
   /// Small Caption
   static const TextStyle caption = TextStyle(
@@ -302,10 +291,7 @@ class AppColors {
 
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(radiusSM),
-        borderSide: const BorderSide(
-          color: primary,
-          width: 1.2,
-        ),
+        borderSide: const BorderSide(color: primary, width: 1.2),
       ),
     );
   }

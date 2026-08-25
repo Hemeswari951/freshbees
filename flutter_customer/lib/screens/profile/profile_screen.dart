@@ -199,7 +199,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         shadowColor: Colors.black12,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: _Palette.ink),
-          onPressed: () => context.pop(),
+          onPressed: () => context.go('/profile'),
         ),
         title: const Text(
           'Profile',

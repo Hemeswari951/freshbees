@@ -1,11 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../widgets/app_colors.dart';
-import '../../services/product_details_service.dart';
+import '../../services/product_service.dart';
 import '../../models/product_details_model.dart';
 import '../../services/api_service.dart';
 import '../../services/cart_service.dart';
+import '../../services/wishlist_service.dart';
 import '../cart/cart_screen.dart';
+import '../../widgets/reviews_section.dart';
+import '../../models/review_model.dart';
 
 class ProductViewScreen extends StatefulWidget {
   final int productId;
@@ -18,9 +22,16 @@ class ProductViewScreen extends StatefulWidget {
 
 class _ProductViewScreenState extends State<ProductViewScreen> {
   ProductDetailsModel? _product;
+  ReviewSummaryModel? _liveSummary;
   bool _loading = true;
   String? _error;
   bool _addingToBag = false;
+  bool _buyingNow = false;
+ 
+  // Wishlist heart state for THIS product — separate from the list-screen
+  // pattern (which tracks a Set<int> of many products) since this screen
+  // only ever cares about one product.
+  bool _isWishlisted = false;
 
   int _activeColorIndex = 0;
   int _selectedIndex = 0; // index within _galleryItems
@@ -53,7 +64,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     });
     try {
       final product =
-          await ProductDetailsService.getProductDetails(widget.productId);
+          await ProductService.getProductDetails(widget.productId);
       setState(() {
         _product = product;
         _loading = false;
@@ -62,11 +73,56 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
       // currently active — same idea as the color swatch defaulting to
       // index 0 on first load.
       _defaultSizeSelection();
+      _checkWishlistStatus();
     } catch (e) {
       setState(() {
         _error = e.toString().replaceFirst('Exception: ', '');
         _loading = false;
       });
+    }
+  }
+
+  // Guests don't have a wishlist — heart just stays unfilled for them.
+  Future<void> _checkWishlistStatus() async {
+    final token = ApiService.getToken();
+    if (token == null || token.isEmpty) return;
+    try {
+      final items = await WishlistService.getWishlist();
+      if (!mounted) return;
+      setState(() {
+        _isWishlisted = items.any((p) => p.id == widget.productId);
+      });
+    } catch (_) {
+      // Silent — heart simply defaults to unfilled if this fails.
+    }
+  }
+
+  Future<void> _toggleWishlist() async {
+    final token = ApiService.getToken();
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please login to use your wishlist')),
+      );
+      return;
+    }
+ 
+    final wasWishlisted = _isWishlisted;
+ 
+    // Optimistic UI update, reconciled with the backend call below.
+    setState(() => _isWishlisted = !wasWishlisted);
+ 
+    bool ok;
+    try {
+      ok = wasWishlisted
+          ? await WishlistService.removeFromWishlist(widget.productId)
+          : await WishlistService.addToWishlist(widget.productId);
+    } catch (_) {
+      ok = false;
+    }
+ 
+    // Roll back on failure so the heart doesn't lie about what's saved.
+    if (!ok && mounted) {
+      setState(() => _isWishlisted = wasWishlisted);
     }
   }
 
@@ -98,16 +154,6 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     return variants[_selectedSizeIndex!];
   }
 
-  List<ProductReviewModel> get _reviews => _product?.reviews ?? [];
-
-  double get _avgRating {
-    if (_reviews.isEmpty) return 0.0;
-
-    return _reviews.map((r) => r.rating.toDouble()).reduce((a, b) => a + b) /
-        _reviews.length;
-  }
-
-  int get _reviewCount => _reviews.length;
 
   // ── Product specifications — everything captured on Add Product that
   // isn't already shown elsewhere on this page. SKU is intentionally
@@ -203,57 +249,186 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     setState(() => _selectedSizeIndex = index);
   }
 
-  Future<void> _handleAddToBag() async {
+  /// Shared guest/size checks for both "Add to Cart" and "Buy Now" —
+  /// returns false (and shows the right message / navigates to login)
+  /// if the flow shouldn't proceed.
+  bool _passesPreChecks() {
     final token = ApiService.getToken();
+ 
     if (token == null || token.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please login to continue')),
+        const SnackBar(
+          content: Text('Please login to continue'),
+          duration: Duration(seconds: 2),
+        ),
       );
-      // TODO: navigate to your login screen instead, e.g.:
-      // Navigator.of(context).pushNamed('/login');
-      return;
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (!mounted) return;
+        context.go(
+          Uri(
+            path: '/login',
+            queryParameters: {'redirect': '/shop/${widget.productId}'},
+          ).toString(),
+        );
+      });
+      return false;
     }
-
-    // If this product has sizes, one must be selected before adding to bag.
+ 
     if (_activeVariants.isNotEmpty && _selectedVariant == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a size')),
       );
-      return;
+      return false;
     }
+ 
+    return true;
+  }
+ 
 
-    setState(() => _addingToBag = true);
+  Future<void> _handleAddToBag() async {
+  final token = ApiService.getToken();
 
+  // ==========================================
+  // GUEST USER → GO TO LOGIN
+  // ==========================================
+  if (token == null || token.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Please login to add items to your bag'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (!mounted) return;
+
+    context.go(
+      Uri(
+        path: '/login',
+        queryParameters: {
+          'redirect': '/shop/${widget.productId}',
+        },
+      ).toString(),
+    );
+
+    return;
+  }
+
+  // ==========================================
+  // SIZE VALIDATION
+  // ==========================================
+  if (_activeVariants.isNotEmpty && _selectedVariant == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Please select a size'),
+      ),
+    );
+    return;
+  }
+
+  // ==========================================
+  // ADD TO BAG
+  // ==========================================
+  setState(() => _addingToBag = true);
+
+  try {
+    await CartService.addToCart(
+      productId: widget.productId,
+      variantId: _selectedVariant?.variantId,
+      quantity: 1,
+    );
+
+    if (!mounted) return;
+
+    // 1. Capture the messenger locally so it works even if you navigate away
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+     
+      scaffoldMessenger.clearSnackBars();
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: const Text('Added to Bag'),
+          behavior: SnackBarBehavior.floating,
+         // width: 400,
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(
+            label: 'VIEW BAG',
+            onPressed: () {
+              scaffoldMessenger.hideCurrentSnackBar();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const CartScreen(),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+ 
+      // 2. Force the SnackBar to close after 3 seconds, bypassing the mouse-hover pause
+      Future.delayed(const Duration(seconds: 3), () {
+        scaffoldMessenger.hideCurrentSnackBar();
+      });
+ 
+    } catch (e) {
+      if (!mounted) return;
+ 
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst('Exception: ', ''),
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _addingToBag = false);
+      }
+    }
+  }
+ 
+
+/// "Buy Now" — adds the selected item to the cart (same as Add to Cart)
+  /// then jumps straight to checkout instead of staying on this page.
+  /// TODO: swap CartScreen for your actual checkout screen/route once
+  /// that exists — this currently opens the cart as the next step.
+  Future<void> _handleBuyNow() async {
+    if (!_passesPreChecks()) return;
+ 
+    setState(() => _buyingNow = true);
+ 
     try {
       await CartService.addToCart(
         productId: widget.productId,
         variantId: _selectedVariant?.variantId,
         quantity: 1,
       );
-
+ 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Added to Bag'),
-          action: SnackBarAction(
-            label: 'VIEW BAG',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => const CartScreen()),
-              );
-            },
-          ),
-        ),
+ 
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (context) => const CartScreen()),
       );
     } catch (e) {
       if (!mounted) return;
+ 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst('Exception: ', ''),
+          ),
+        ),
       );
     } finally {
-      if (mounted) setState(() => _addingToBag = false);
+      if (mounted) {
+        setState(() => _buyingNow = false);
+      }
     }
   }
+ 
+
 
   @override
   Widget build(BuildContext context) {
@@ -360,34 +535,66 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           ],
         ),
         child: SafeArea(
-          child: SizedBox(
-            width: double.infinity, // Makes the button take full width
-            child: OutlinedButton.icon(
-              onPressed: _addingToBag ? null : _handleAddToBag,
-              icon: _addingToBag
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.shopping_bag_outlined, color: AppColors.ink, size: 20),
-              label: Text(
-                _addingToBag ? 'ADDING...' : 'ADD TO BAG',
-                style: const TextStyle(
-                  color: AppColors.ink,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                  letterSpacing: 0.5,
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: (_addingToBag || _buyingNow) ? null : _handleAddToBag,
+                  icon: _addingToBag
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.shopping_bag_outlined, color: AppColors.ink, size: 20),
+                  label: Text(
+                    _addingToBag ? 'ADDING...' : 'ADD TO CART',
+                    style: const TextStyle(
+                      color: AppColors.ink,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    side: BorderSide(color: AppColors.ink.withOpacity(0.3)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
                 ),
               ),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                side: BorderSide(color: AppColors.ink.withOpacity(0.3)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: (_addingToBag || _buyingNow) ? null : _handleBuyNow,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.ink,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: _buyingNow
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text(
+                          'BUY NOW',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -554,16 +761,35 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Name — bold, dark, tighter than before (Myntra-style brand/name line)
-        Text(
-          product.productName,
-          style: const TextStyle(
-            fontFamily: 'Fraunces',
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-            color: AppColors.ink,
-            height: 1.25,
-          ),
+       // Name — bold, dark, tighter than before (Myntra-style brand/name line)
+        // + wishlist heart, right-aligned on the same line.
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                product.productName,
+                style: const TextStyle(
+                  fontFamily: 'Fraunces',
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.ink,
+                  height: 1.25,
+                ),
+              ),
+            ),
+            GestureDetector(
+              onTap: _toggleWishlist,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 10, top: 2),
+                child: Icon(
+                  _isWishlisted ? Icons.favorite : Icons.favorite_border,
+                  size: 24,
+                  color: _isWishlisted ? Colors.red : AppColors.ink.withOpacity(0.45),
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 5),
         // Sub name (category) — regular weight, softer gray, more legible
@@ -582,14 +808,11 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
         const SizedBox(height: 16),
         // Ratings summary — green pill badge + count, matching the
         // Myntra "4.4 ★ | 679 Ratings" treatment.
-        if (_reviewCount > 0)
+        if (_liveSummary != null && _liveSummary!.totalReviews > 0)
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 7,
-                  vertical: 3.5,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
                 decoration: BoxDecoration(
                   color: AppColors.green,
                   borderRadius: BorderRadius.circular(4),
@@ -598,40 +821,25 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      _avgRating.toStringAsFixed(1),
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
+                      _liveSummary!.avgRating.toStringAsFixed(1),
+                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white),
                     ),
                     const SizedBox(width: 3),
-                    const Icon(
-                      Icons.star_rounded,
-                      size: 13,
-                      color: Colors.white,
-                    ),
+                    const Icon(Icons.star_rounded, size: 13, color: Colors.white),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
               Text(
-                '$_reviewCount ${_reviewCount == 1 ? 'Rating' : 'Ratings'}',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.ink.withOpacity(0.55),
-                  fontWeight: FontWeight.w500,
-                ),
+                '${_liveSummary!.totalReviews} ${_liveSummary!.totalReviews == 1 ? 'Rating' : 'Ratings'}',
+                style: TextStyle(fontSize: 13, color: AppColors.ink.withOpacity(0.55), fontWeight: FontWeight.w500),
               ),
             ],
           )
         else
           Text(
             'No ratings yet',
-            style: TextStyle(
-              fontSize: 12.5,
-              color: AppColors.ink.withOpacity(0.5),
-            ),
+            style: TextStyle(fontSize: 12.5, color: AppColors.ink.withOpacity(0.5)),
           ),
         Divider(color: Colors.grey.withOpacity(0.45), thickness: 1, height: 20),
         const SizedBox(height: 10),
@@ -788,7 +996,10 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           const SizedBox(height: 24),
         ],
 
-        _ratingsAndReviews(),
+       ReviewsSection(
+          productId: product.id,
+          onSummaryChanged: (summary) => setState(() => _liveSummary = summary),
+        ),
       ],
     );
   }
@@ -977,100 +1188,100 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
       ],
     );
   }
+ 
+  // // ── Ratings & reviews — read-only, shown at the very end of the details.
+  // Widget _ratingsAndReviews() {
+  //   final reviews = _reviews;
 
-  // ── Ratings & reviews — read-only, shown at the very end of the details.
-  Widget _ratingsAndReviews() {
-    final reviews = _reviews;
+  //   return Column(
+  //     crossAxisAlignment: CrossAxisAlignment.start,
+  //     children: [
+  //       _sectionTitle('RATINGS & REVIEWS'),
+  //       const SizedBox(height: 14),
+  //       if (reviews.isEmpty)
+  //         Text(
+  //           'No reviews yet.',
+  //           style: TextStyle(
+  //             fontSize: 13,
+  //             color: AppColors.ink.withOpacity(0.5),
+  //           ),
+  //         )
+  //       else
+  //         Column(
+  //           children: List.generate(reviews.length, (i) {
+  //             final r = reviews[i];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionTitle('RATINGS & REVIEWS'),
-        const SizedBox(height: 14),
-        if (reviews.isEmpty)
-          Text(
-            'No reviews yet.',
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.ink.withOpacity(0.5),
-            ),
-          )
-        else
-          Column(
-            children: List.generate(reviews.length, (i) {
-              final r = reviews[i];
+  //             final rating = r.rating.toDouble();
 
-              final rating = r.rating.toDouble();
+  //             // Backend currently doesn't send customerName
+  //             final name = 'Customer #${r.customerId}';
 
-              // Backend currently doesn't send customerName
-              final name = 'Customer #${r.customerId}';
+  //             final comment = r.reviewText;
 
-              final comment = r.reviewText;
-
-              final date =
-                  "${r.createdAt.day}/${r.createdAt.month}/${r.createdAt.year}";
-              return Padding(
-                padding: EdgeInsets.only(
-                  bottom: i == reviews.length - 1 ? 0 : 16,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            name,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.ink,
-                            ),
-                          ),
-                        ),
-                        Row(
-                          children: List.generate(
-                            5,
-                            (star) => Icon(
-                              star < rating.round()
-                                  ? Icons.star_rounded
-                                  : Icons.star_border_rounded,
-                              size: 14,
-                              color: AppColors.gold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (date.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        date,
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          color: AppColors.ink.withOpacity(0.4),
-                        ),
-                      ),
-                    ],
-                    if (comment.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        comment,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          color: AppColors.ink,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              );
-            }),
-          ),
-      ],
-    );
-  }
+  //             final date =
+  //                 "${r.createdAt.day}/${r.createdAt.month}/${r.createdAt.year}";
+  //             return Padding(
+  //               padding: EdgeInsets.only(
+  //                 bottom: i == reviews.length - 1 ? 0 : 16,
+  //               ),
+  //               child: Column(
+  //                 crossAxisAlignment: CrossAxisAlignment.start,
+  //                 children: [
+  //                   Row(
+  //                     children: [
+  //                       Expanded(
+  //                         child: Text(
+  //                           name,
+  //                           style: const TextStyle(
+  //                             fontSize: 13,
+  //                             fontWeight: FontWeight.w700,
+  //                             color: AppColors.ink,
+  //                           ),
+  //                         ),
+  //                       ),
+  //                       Row(
+  //                         children: List.generate(
+  //                           5,
+  //                           (star) => Icon(
+  //                             star < rating.round()
+  //                                 ? Icons.star_rounded
+  //                                 : Icons.star_border_rounded,
+  //                             size: 14,
+  //                             color: AppColors.gold,
+  //                           ),
+  //                         ),
+  //                       ),
+  //                     ],
+  //                   ),
+  //                   if (date.isNotEmpty) ...[
+  //                     const SizedBox(height: 2),
+  //                     Text(
+  //                       date,
+  //                       style: TextStyle(
+  //                         fontSize: 10.5,
+  //                         color: AppColors.ink.withOpacity(0.4),
+  //                       ),
+  //                     ),
+  //                   ],
+  //                   if (comment.isNotEmpty) ...[
+  //                     const SizedBox(height: 6),
+  //                     Text(
+  //                       comment,
+  //                       style: const TextStyle(
+  //                         fontSize: 12.5,
+  //                         color: AppColors.ink,
+  //                         height: 1.4,
+  //                       ),
+  //                     ),
+  //                   ],
+  //                 ],
+  //               ),
+  //             );
+  //           }),
+  //         ),
+  //     ],
+  //   );
+  // }
 
   Widget _sectionTitle(String title) => Text(
         title,
