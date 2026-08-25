@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../models/shop_model.dart';
+import '../widgets/product_grid.dart';
 import '../../../services/home_service.dart';
 import '../widgets/shop_grid.dart';
 
@@ -63,16 +64,30 @@ class _KidsTabState extends State<KidsTab> {
 
   @override
   Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── SHOPS SECTION (top) ──────────────────────────────────
+        _buildShopsSection(),
+
+        const SizedBox(height: 28),
+
+        _buildProductsSection(),
+      ],
+    );
+  }
+
+  Widget _buildShopsSection() {
     if (_isLoading) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 60),
+        padding: EdgeInsets.symmetric(vertical: 40),
         child: Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_error != null) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 60),
+        padding: const EdgeInsets.symmetric(vertical: 40),
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -88,10 +103,10 @@ class _KidsTabState extends State<KidsTab> {
 
     if (_shops.isEmpty) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 60),
+        padding: EdgeInsets.symmetric(vertical: 40),
         child: Center(
           child: Text(
-            'No Kids shops found.',
+            'No shops found.',
             style: TextStyle(color: Colors.black54),
           ),
         ),
@@ -99,5 +114,21 @@ class _KidsTabState extends State<KidsTab> {
     }
 
     return ShopGrid(shops: _shops, onShopTap: _openShop, category: 'All');
+  }
+
+  Widget _buildProductsSection() {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(bottom: 12),
+          child: Text(
+            'All Products',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          ),
+        ),
+        ProductGrid(category: 'kids'),
+      ],
+    );
   }
 }

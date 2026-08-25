@@ -18,6 +18,7 @@ function mapListItem(row) {
     shopName: row.shop_name,
     categoryId: row.category_id,
     categoryName: row.category_name || '',
+    subCategory: row.sub_category || '',
     brandName: row.brand_name || '',
     totalStock: Number(row.total_stock) || 0,
     stockStatus: productService.stockStatus(row.total_stock),
@@ -102,9 +103,20 @@ function mapDetail(row) {
 // GET /api/customer/products
 // GET /api/customer/products?shopId=5
 // GET /api/customer/products?search=tshirt
+// GET /api/customer/products?category=Men&subCategory=Shirt
+// GET /api/customer/products?minPrice=200&maxPrice=999
+// GET /api/customer/products?sortBy=price_asc
 async function listProducts(req, res) {
   try {
-    const { shopId, search } = req.query;
+    const {
+      shopId,
+      search,
+      category,
+      subCategory,
+      minPrice,
+      maxPrice,
+      sortBy,
+    } = req.query;
 
     let rows;
     if (search && search.trim() !== '') {
@@ -112,9 +124,18 @@ async function listProducts(req, res) {
     } else if (shopId) {
       rows = await productService.findPublicProductsByShop(Number(shopId));
     } else {
-      rows = await productService.findAllPublicProducts();
+      // minPrice / maxPrice / sortBy were previously dropped here, so the
+      // Flutter price-range chips and sort sheet had no effect on the
+      // actual results. findAllPublicProducts already supports all three
+      // — just needed to be forwarded from the query string.
+      rows = await productService.findAllPublicProducts({
+        category,
+        subCategory,
+        minPrice,
+        maxPrice,
+        sortBy,
+      });
     }
-
     res.json({ success: true, data: rows.map(mapListItem) });
   } catch (err) {
     console.error('[customer listProducts]', err);

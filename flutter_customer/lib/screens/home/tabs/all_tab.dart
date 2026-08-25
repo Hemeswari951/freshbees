@@ -1,55 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
- 
+
 import '../../../models/shop_model.dart';
 import '../../../services/home_service.dart';
 import '../widgets/shop_grid.dart';
 import '../widgets/product_grid.dart';
- 
+
 class AllTab extends StatefulWidget {
   const AllTab({super.key});
- 
+
   @override
   State<AllTab> createState() => _AllTabState();
 }
- 
+
 class _AllTabState extends State<AllTab> {
   List<ShopModel> _shops = [];
- 
+
   bool _isLoading = true;
   String? _error;
- 
+
   @override
   void initState() {
     super.initState();
     _loadShops();
   }
- 
+
   Future<void> _loadShops() async {
     setState(() {
       _isLoading = true;
       _error = null;
     });
- 
+
     try {
       final shops = await HomeService.getShops(category: null);
- 
+
       if (!mounted) return;
- 
+
       setState(() {
         _shops = shops;
         _isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
- 
+
       setState(() {
         _isLoading = false;
         _error = 'Could not load shops. Please try again.';
       });
     }
   }
- 
+
   void _openShop(ShopModel shop) {
     final uri = Uri(
       path: '/products',
@@ -58,10 +58,10 @@ class _AllTabState extends State<AllTab> {
         'shopName': shop.shopName,
       },
     );
- 
+
     context.push(uri.toString());
   }
- 
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -69,22 +69,14 @@ class _AllTabState extends State<AllTab> {
       children: [
         // ── SHOPS SECTION (top) ──────────────────────────────────
         _buildShopsSection(),
- 
+
         const SizedBox(height: 28),
- 
-        // ── PRODUCTS SECTION (bottom) ────────────────────────────
-        const Padding(
-          padding: EdgeInsets.only(bottom: 12),
-          child: Text(
-            'All Products',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-          ),
-        ),
-        const ProductGrid(gender: 'all'),
+
+        _buildProductsSection(),
       ],
     );
   }
- 
+
   Widget _buildShopsSection() {
     if (_isLoading) {
       return const Padding(
@@ -92,7 +84,7 @@ class _AllTabState extends State<AllTab> {
         child: Center(child: CircularProgressIndicator()),
       );
     }
- 
+
     if (_error != null) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 40),
@@ -108,7 +100,7 @@ class _AllTabState extends State<AllTab> {
         ),
       );
     }
- 
+
     if (_shops.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 40),
@@ -120,8 +112,23 @@ class _AllTabState extends State<AllTab> {
         ),
       );
     }
- 
+
     return ShopGrid(shops: _shops, onShopTap: _openShop, category: 'All');
   }
+
+  Widget _buildProductsSection() {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(bottom: 12),
+          child: Text(
+            'All Products',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          ),
+        ),
+        ProductGrid(category: 'all'),
+      ],
+    );
+  }
 }
- 
