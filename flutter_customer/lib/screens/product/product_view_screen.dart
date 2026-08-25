@@ -4,7 +4,6 @@ import '../../widgets/app_colors.dart';
 import '../../services/product_details_service.dart';
 import '../../models/product_details_model.dart';
 import '../../services/api_service.dart';
-import '../../services/order_service.dart';
 import '../../services/cart_service.dart';
 import '../cart/cart_screen.dart';
 

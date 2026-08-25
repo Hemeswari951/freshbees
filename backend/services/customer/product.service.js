@@ -1,4 +1,3 @@
-
 const pool = require('../../config/db');
 
 const LOW_STOCK_THRESHOLD = 5;
@@ -19,9 +18,36 @@ const DISCOUNT_SQL = `
   END
 `;
 
+// Shared JOIN block that adds sizes/colors/rating to any product-list
+// query below. Needed by the Flutter filter panel (Size, Color, Rating
+// filters) — without these three columns the client has nothing to
+// filter on.
+const FILTER_JOINS = `
+  LEFT JOIN (
+    SELECT pc.product_id, ARRAY_AGG(DISTINCT pv.size) AS sizes
+    FROM product_variants pv
+    JOIN product_colors pc ON pc.product_color_id = pv.product_color_id
+    GROUP BY pc.product_id
+  ) sizes_agg ON sizes_agg.product_id = p.product_id
+  LEFT JOIN (
+    SELECT product_id, ARRAY_AGG(DISTINCT color_name) AS colors
+    FROM product_colors
+    GROUP BY product_id
+  ) colors_agg ON colors_agg.product_id = p.product_id
+  LEFT JOIN (
+    SELECT product_id, AVG(rating) AS avg_rating
+    FROM reviews
+    GROUP BY product_id
+  ) rating_agg ON rating_agg.product_id = p.product_id
+`;
+
+const FILTER_SELECT_COLS = `
+  COALESCE(sizes_agg.sizes, ARRAY[]::text[]) AS sizes,
+  COALESCE(colors_agg.colors, ARRAY[]::text[]) AS colors,
+  COALESCE(rating_agg.avg_rating, 0)::float AS rating
+`;
+
 // ── Product grid for Home "Recommended For You" / Explore ─────────────────
-// Only products that are BOTH active (owner turned them on) AND belong to
-// a shop the admin has NOT blocked show up here.
 async function findAllPublicProducts() {
   const { rows } = await pool.query(`
     SELECT
@@ -37,7 +63,8 @@ async function findAllPublicProducts() {
       cat.category_name,
       b.brand_name,
       COALESCE(img.image_url, NULL) AS thumbnail,
-      COALESCE(v.total_stock, 0) AS total_stock
+      COALESCE(v.total_stock, 0) AS total_stock,
+      ${FILTER_SELECT_COLS}
     FROM products p
     JOIN shops s ON s.shop_id = p.shop_id
     LEFT JOIN categories cat ON cat.category_id = p.category_id
@@ -57,6 +84,7 @@ async function findAllPublicProducts() {
       FROM product_variants
       GROUP BY product_id
     ) v ON v.product_id = p.product_id
+    ${FILTER_JOINS}
     WHERE p.is_active = true
       AND s.is_blocked = false
     ORDER BY p.created_at DESC
@@ -88,7 +116,6 @@ async function findPublicProductById(productId) {
 
   const product = rows[0];
   if (!product) return null;
-  // Hide the product if the owner deactivated it or the admin blocked the shop.
   if (!product.is_active || product.shop_is_blocked) return null;
 
   const colorRows = await pool.query(
@@ -167,9 +194,6 @@ async function findPublicProductById(productId) {
 }
 
 // ── Product grid scoped to one shop (customer Shop Detail screen) ─────────
-// Same active-product / unblocked-shop rule as findAllPublicProducts,
-// plus a shop_id filter — the same products already visible under this
-// shop in the Admin Portal.
 async function findPublicProductsByShop(shopId) {
   const { rows } = await pool.query(
     `
@@ -186,7 +210,8 @@ async function findPublicProductsByShop(shopId) {
       cat.category_name,
       b.brand_name,
       COALESCE(img.image_url, NULL) AS thumbnail,
-      COALESCE(v.total_stock, 0) AS total_stock
+      COALESCE(v.total_stock, 0) AS total_stock,
+      ${FILTER_SELECT_COLS}
     FROM products p
     JOIN shops s ON s.shop_id = p.shop_id
     LEFT JOIN categories cat ON cat.category_id = p.category_id
@@ -206,6 +231,7 @@ async function findPublicProductsByShop(shopId) {
       FROM product_variants
       GROUP BY product_id
     ) v ON v.product_id = p.product_id
+    ${FILTER_JOINS}
     WHERE p.is_active = true
       AND s.is_blocked = false
       AND p.shop_id = $1
@@ -216,12 +242,7 @@ async function findPublicProductsByShop(shopId) {
   return rows;
 }
 
-
 // ── Product grid for search — matches product_name OR tag_name ───────────
-// Same active-product / unblocked-shop rule as findAllPublicProducts,
-// plus an ILIKE match on product_name, and an EXISTS check against
-// product_tags/tags so a search like "tshirt" also surfaces products
-// tagged "tshirt" even if that word isn't in the product name.
 async function findPublicProductsBySearch(searchQuery) {
   const { rows } = await pool.query(
     `
@@ -238,7 +259,8 @@ async function findPublicProductsBySearch(searchQuery) {
       cat.category_name,
       b.brand_name,
       COALESCE(img.image_url, NULL) AS thumbnail,
-      COALESCE(v.total_stock, 0) AS total_stock
+      COALESCE(v.total_stock, 0) AS total_stock,
+      ${FILTER_SELECT_COLS}
     FROM products p
     JOIN shops s ON s.shop_id = p.shop_id
     LEFT JOIN categories cat ON cat.category_id = p.category_id
@@ -258,6 +280,7 @@ async function findPublicProductsBySearch(searchQuery) {
       FROM product_variants
       GROUP BY product_id
     ) v ON v.product_id = p.product_id
+    ${FILTER_JOINS}
     WHERE p.is_active = true
       AND s.is_blocked = false
       AND (
@@ -276,10 +299,44 @@ async function findPublicProductsBySearch(searchQuery) {
   return rows;
 }
 
+// ── Distinct filter option values — colors & sizes actually in use ────────
+// Used to populate the Flutter filter panel's Color/Size lists dynamically
+// instead of a hardcoded list that goes stale the moment a shop owner adds
+// a new color/size. Only pulls from active products in unblocked shops —
+// same visibility rule as the product-list queries above.
+async function findFilterOptions() {
+  const colorsResult = await pool.query(`
+    SELECT DISTINCT pc.color_name
+    FROM product_colors pc
+    JOIN products p ON p.product_id = pc.product_id
+    JOIN shops s ON s.shop_id = p.shop_id
+    WHERE p.is_active = true
+      AND s.is_blocked = false
+    ORDER BY pc.color_name
+  `);
+
+  const sizesResult = await pool.query(`
+    SELECT DISTINCT pv.size
+    FROM product_variants pv
+    JOIN product_colors pc ON pc.product_color_id = pv.product_color_id
+    JOIN products p ON p.product_id = pc.product_id
+    JOIN shops s ON s.shop_id = p.shop_id
+    WHERE p.is_active = true
+      AND s.is_blocked = false
+    ORDER BY pv.size
+  `);
+
+  return {
+    colors: colorsResult.rows.map((r) => r.color_name),
+    sizes: sizesResult.rows.map((r) => r.size),
+  };
+}
+
 module.exports = {
   stockStatus,
   findAllPublicProducts,
   findPublicProductsByShop,
   findPublicProductsBySearch,
   findPublicProductById,
+  findFilterOptions,
 };

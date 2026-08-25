@@ -2,7 +2,6 @@
 import '../models/product_model.dart';
 import 'api_service.dart';
 
-
 class WishlistService {
   WishlistService._();
 

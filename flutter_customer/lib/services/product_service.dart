@@ -1,6 +1,27 @@
 import '../models/product_model.dart';
 import 'api_service.dart';
 
+// ---------------------------------------------------------------------
+// Filter options — distinct sizes/colors actually present in the DB
+// right now. Backend-driven so the filter panel's Size/Color lists
+// never go stale when a shop owner adds a new color/size.
+// ---------------------------------------------------------------------
+class FilterOptionsResult {
+  final List<String> colors;
+  final List<String> sizes;
+
+  const FilterOptionsResult({required this.colors, required this.sizes});
+
+  factory FilterOptionsResult.fromJson(Map<String, dynamic> json) {
+    return FilterOptionsResult(
+      colors: (json['colors'] as List?)?.map((e) => e.toString()).toList() ?? [],
+      sizes: (json['sizes'] as List?)?.map((e) => e.toString()).toList() ?? [],
+    );
+  }
+
+  static const empty = FilterOptionsResult(colors: [], sizes: []);
+}
+
 class ProductService {
   ProductService._();
 
@@ -29,11 +50,14 @@ class ProductService {
 
   // ---------------------------------------------------------------------
   // endpoints
+  //
+  // NOTE: `filters` param is kept here for backward compatibility (e.g.
+  // if you later want to push price range to the backend for large
+  // catalogs), but ProductListScreen no longer passes anything in it —
+  // size/color/discount/rating are all filtered client-side against
+  // the full fetched list via ProductFilters.matches().
   // ---------------------------------------------------------------------
 
-  /// Get all products, with optional filters (price range, colors,
-  /// categories, discount, rating — see ProductFilters.toQueryParams()
-  /// in product_filters.dart).
   static Future<List<ProductModel>> getProducts({
     Map<String, String>? filters,
   }) async {
@@ -42,12 +66,6 @@ class ProductService {
     return _parseProducts(response);
   }
 
-  /// Get products belonging to a specific shop, with optional filters
-  /// layered on top.
-  ///
-  /// TODO: if your backend uses a dedicated route instead of a query
-  /// param (e.g. '/shops/$shopId/products'), swap the endpoint below —
-  /// everything else stays the same.
   static Future<List<ProductModel>> getProductsByShop(
     int shopId, {
     Map<String, String>? filters,
@@ -58,7 +76,6 @@ class ProductService {
     return _parseProducts(response);
   }
 
-  /// Search products by keyword, with optional filters layered on top.
   static Future<List<ProductModel>> searchProducts(
     String searchQuery, {
     Map<String, String>? filters,
@@ -69,51 +86,19 @@ class ProductService {
     return _parseProducts(response);
   }
 
-  // ---------------------------------------------------------------------
-  // wishlist
-  // ---------------------------------------------------------------------
-  // Goes through ApiService like every other call above, so it
-  // automatically gets the '/api/customer' prefix, the auth header
-  // (from ApiService.headers / the stored customer_token), and the same
-  // JSON-parsing + error-throwing behaviour as get/post/delete.
-  //
-  // Full URLs hit: {serverUrl}/api/customer/wishlist
-  //                {serverUrl}/api/customer/wishlist/:productId
-  //
-  // See the backend files (wishlistController.js / wishlistRoutes.js)
-  // for the matching Express side — getWishlist there returns the same
-  // `{ data: [...] }` envelope your product endpoints use, so
-  // _parseProducts can be reused as-is.
-
-  /// Fetches the logged-in customer's wishlist as full ProductModel
-  /// objects. Throws (via ApiService's error handling) if the request
-  /// fails — callers should catch and treat that as "couldn't load,
-  /// hearts default to unfilled" rather than a hard error.
-  static Future<List<ProductModel>> getWishlist() async {
-    final response = await ApiService.get('/wishlist');
-    return _parseProducts(response);
-  }
-
-  /// Adds [productId] to the logged-in customer's wishlist.
-  /// Returns true on success, false on any failure (ApiService throws
-  /// on non-2xx, or a network error) so the caller can roll back its
-  /// optimistic UI update.
-  static Future<bool> addToWishlist(int productId) async {
+  /// Distinct sizes/colors currently present across visible products —
+  /// used to populate the filter panel's Size/Color lists dynamically.
+  /// Fails soft (returns empty) so a broken/unreachable endpoint just
+  /// hides those two filter groups instead of crashing the screen.
+  static Future<FilterOptionsResult> getFilterOptions() async {
     try {
-      await ApiService.post('/wishlist', {'productId': productId});
-      return true;
+      final response = await ApiService.get('/products/meta/filter-options');
+      if (response is Map<String, dynamic> && response['data'] != null) {
+        return FilterOptionsResult.fromJson(response['data']);
+      }
+      return FilterOptionsResult.empty;
     } catch (_) {
-      return false;
-    }
-  }
-
-  /// Removes [productId] from the logged-in customer's wishlist.
-  static Future<bool> removeFromWishlist(int productId) async {
-    try {
-      await ApiService.delete('/wishlist/$productId');
-      return true;
-    } catch (_) {
-      return false;
+      return FilterOptionsResult.empty;
     }
   }
 }

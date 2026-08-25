@@ -17,7 +17,6 @@ import '../screens/product/product_view_screen.dart';
 import '../screens/product/shop_overview_screen.dart';
 import '../screens/product/product_filters.dart';
 
-
 // ─────────────────────────────────────────────────────────────
 // Layout visibility
 // ─────────────────────────────────────────────────────────────
@@ -25,45 +24,33 @@ import '../screens/product/product_filters.dart';
 class _LayoutVisibility {
   final bool showFooterOnMobile;
 
-  const _LayoutVisibility({
-    this.showFooterOnMobile = true,
-  });
+  const _LayoutVisibility({this.showFooterOnMobile = true});
 }
-
 
 _LayoutVisibility _visibilityFor(String path) {
   // Product List + Product View
   if (path == '/products' || path.startsWith('/products/')) {
-    return const _LayoutVisibility(
-      showFooterOnMobile: false,
-    );
+    return const _LayoutVisibility(showFooterOnMobile: false);
   }
 
   // Wishlist
   if (path == '/wishlist' || path.startsWith('/wishlist/')) {
-    return const _LayoutVisibility(
-      showFooterOnMobile: false,
-    );
+    return const _LayoutVisibility(showFooterOnMobile: false);
   }
 
   // Shop Overview
   if (path == '/shops' || path.startsWith('/shops/')) {
-    return const _LayoutVisibility(
-      showFooterOnMobile: false,
-    );
+    return const _LayoutVisibility(showFooterOnMobile: false);
   }
 
   // Filter
   if (path == '/filter' || path.startsWith('/filter/')) {
-    return const _LayoutVisibility(
-      showFooterOnMobile: false,
-    );
+    return const _LayoutVisibility(showFooterOnMobile: false);
   }
 
   // Default
   return const _LayoutVisibility();
 }
-
 
 // ─────────────────────────────────────────────────────────────
 // GoRouter
@@ -73,7 +60,6 @@ final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
 
   routes: [
-
     // ─────────────────────────────────────────────────────────
     // Splash
     // ─────────────────────────────────────────────────────────
@@ -85,43 +71,33 @@ final GoRouter appRouter = GoRouter(
       },
     ),
 
-
     // ─────────────────────────────────────────────────────────
     // Login
     // ─────────────────────────────────────────────────────────
-
     GoRoute(
       path: '/login',
       builder: (context, state) {
-        final redirectRoute =
-            state.uri.queryParameters['redirect'];
+        final redirectRoute = state.uri.queryParameters['redirect'];
 
-        return LoginScreen(
-          redirectRoute: redirectRoute,
-        );
+        return LoginScreen(redirectRoute: redirectRoute);
       },
     ),
-
 
     // ─────────────────────────────────────────────────────────
     // Customer Layout
     // ─────────────────────────────────────────────────────────
-
     ShellRoute(
       builder: (context, state, child) {
-        final visibility =
-            _visibilityFor(state.uri.path);
+        final visibility = _visibilityFor(state.uri.path);
 
         return CustomerLayout(
           currentPath: state.uri.path,
-          showFooterOnMobile:
-              visibility.showFooterOnMobile,
+          showFooterOnMobile: visibility.showFooterOnMobile,
           child: child,
         );
       },
 
       routes: [
-
         // ─────────────────────────────────────────
         // HOME
         // ─────────────────────────────────────────
@@ -130,20 +106,15 @@ final GoRouter appRouter = GoRouter(
           path: '/home',
 
           builder: (_, __) {
-            return const HomeScreen(
-              initialCategory: 'All',
-            );
+            return const HomeScreen(initialCategory: 'All');
           },
 
           routes: [
-
             // Men
             GoRoute(
               path: 'men',
               builder: (_, __) {
-                return const HomeScreen(
-                  initialCategory: 'Men',
-                );
+                return const HomeScreen(initialCategory: 'Men');
               },
             ),
 
@@ -151,9 +122,7 @@ final GoRouter appRouter = GoRouter(
             GoRoute(
               path: 'women',
               builder: (_, __) {
-                return const HomeScreen(
-                  initialCategory: 'Women',
-                );
+                return const HomeScreen(initialCategory: 'Women');
               },
             ),
 
@@ -161,9 +130,7 @@ final GoRouter appRouter = GoRouter(
             GoRoute(
               path: 'kids',
               builder: (_, __) {
-                return const HomeScreen(
-                  initialCategory: 'Kids',
-                );
+                return const HomeScreen(initialCategory: 'Kids');
               },
             ),
 
@@ -171,19 +138,15 @@ final GoRouter appRouter = GoRouter(
             GoRoute(
               path: 'beauty',
               builder: (_, __) {
-                return const HomeScreen(
-                  initialCategory: 'Beauty',
-                );
+                return const HomeScreen(initialCategory: 'Beauty');
               },
             ),
           ],
         ),
 
-
         // ─────────────────────────────────────────
         // WISHLIST
         // ─────────────────────────────────────────
-
         GoRoute(
           path: '/wishlist',
           builder: (_, __) {
@@ -191,11 +154,9 @@ final GoRouter appRouter = GoRouter(
           },
         ),
 
-
         // ─────────────────────────────────────────
         // CART
         // ─────────────────────────────────────────
-
         GoRoute(
           path: '/cart',
           builder: (_, __) {
@@ -203,11 +164,9 @@ final GoRouter appRouter = GoRouter(
           },
         ),
 
-
         // ─────────────────────────────────────────
         // PROFILE
         // ─────────────────────────────────────────
-
         GoRoute(
           path: '/profile',
           builder: (_, __) {
@@ -215,27 +174,20 @@ final GoRouter appRouter = GoRouter(
           },
         ),
 
-
         // ─────────────────────────────────────────
         // PROFILE DETAILS
         // ─────────────────────────────────────────
-
         GoRoute(
           path: '/profile/details',
 
           builder: (context, state) {
-            final sectionParam =
-                state.uri.queryParameters['section'];
+            final sectionParam = state.uri.queryParameters['section'];
 
             return ProfileDetailsScreen(
-              initialSection:
-                  ProfileSectionX.fromSlug(
-                sectionParam,
-              ),
+              initialSection: ProfileSectionX.fromSlug(sectionParam),
             );
           },
         ),
-
 
         // ─────────────────────────────────────────
         // PRODUCT LIST
@@ -254,55 +206,38 @@ final GoRouter appRouter = GoRouter(
         //
         // This allows browser Back / Forward to work.
         // ─────────────────────────────────────────
-
         GoRoute(
           path: '/products',
 
           builder: (context, state) {
-            final shopId =
-                state.uri.queryParameters['shopId'];
+            final shopId = state.uri.queryParameters['shopId'];
 
-            final shopName =
-                state.uri.queryParameters['shopName'];
+            final shopName = state.uri.queryParameters['shopName'];
 
-            final search =
-                state.uri.queryParameters['search'];
-
+            final search = state.uri.queryParameters['search'];
 
             // -----------------------------------------
             // Shop products
             // -----------------------------------------
 
-            if (shopId != null &&
-                shopName != null) {
-
+            if (shopId != null && shopName != null) {
               final args = ProductListArgs.shop(
                 shopId: int.parse(shopId),
                 shopName: shopName,
               );
 
-              return ProductListScreen(
-                args: args,
-              );
+              return ProductListScreen(args: args);
             }
-
 
             // -----------------------------------------
             // Search products
             // -----------------------------------------
 
-            if (search != null &&
-                search.isNotEmpty) {
+            if (search != null && search.isNotEmpty) {
+              final args = ProductListArgs.search(query: search);
 
-              final args = ProductListArgs.search(
-                query: search,
-              );
-
-              return ProductListScreen(
-                args: args,
-              );
+              return ProductListScreen(args: args);
             }
-
 
             // -----------------------------------------
             // No valid ProductList arguments
@@ -315,48 +250,35 @@ final GoRouter appRouter = GoRouter(
             //
             // -----------------------------------------
 
-            return const HomeScreen(
-              initialCategory: 'All',
-            );
+            return const HomeScreen(initialCategory: 'All');
           },
         ),
-
 
         // ─────────────────────────────────────────
         // PRODUCT VIEW
         // ─────────────────────────────────────────
-
         GoRoute(
           path: '/products/:productId',
 
           builder: (context, state) {
-            final productId =
-                state.pathParameters['productId'];
+            final productId = state.pathParameters['productId'];
 
-            return ProductViewScreen(
-              productId: int.parse(productId!),
-            );
+            return ProductViewScreen(productId: int.parse(productId!));
           },
         ),
-
 
         // ─────────────────────────────────────────
         // SHOP OVERVIEW
         // ─────────────────────────────────────────
-
         GoRoute(
           path: '/shops/:shopId',
 
           builder: (context, state) {
-            final shopId =
-                state.pathParameters['shopId'];
+            final shopId = state.pathParameters['shopId'];
 
-            return ShopOverviewScreen(
-              shopId: int.parse(shopId!),
-            );
+            return ShopOverviewScreen(shopId: int.parse(shopId!));
           },
         ),
-
 
         // ─────────────────────────────────────────
         // FILTER
@@ -369,16 +291,15 @@ final GoRouter appRouter = GoRouter(
         // if browser Back/Forward needs to restore the
         // exact filter state.
         // ─────────────────────────────────────────
-
         GoRoute(
           path: '/filter',
-
           builder: (context, state) {
-            final filters =
-                state.extra as ProductFilters;
-
+            final args = state.extra as FilterPageArgs;
             return FilterPage(
-              initialFilters: filters,
+              initialFilters: args.filters,
+              allProducts: args.allProducts,
+              availableSizes: args.availableSizes,
+              availableColors: args.availableColors,
             );
           },
         ),

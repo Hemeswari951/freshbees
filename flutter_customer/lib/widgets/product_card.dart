@@ -190,7 +190,7 @@ class _ProductCardState extends State<ProductCard> {
                     // admin card has no equivalent. Login check + API call
                     // happens in the parent's onWishlistTap callback.
                     Positioned(
-                      bottom: 15,
+                      top: 20,
                       right: 15,
                       child: GestureDetector(
                         onTap: widget.onWishlistTap,

@@ -1,6 +1,6 @@
-
+// backend/services/customer/wishlist.service.js
 const pool = require('../../config/db');
-
+ 
 // discount_percent is never stored — same derivation used everywhere else
 // on the customer side (see services/customer/product.service.js).
 const DISCOUNT_SQL = `
@@ -9,21 +9,32 @@ const DISCOUNT_SQL = `
     ELSE ROUND(((p.mrp - p.price) / p.mrp) * 100)::INT
   END
 `;
-
+ 
 // ── Add a product to the customer's wishlist ──────────────────────────────
-// (customer_id, product_id) is UNIQUE in the schema, so adding something
-// that's already wishlisted is a harmless no-op rather than an error.
+// Manual existence check instead of relying on an ON CONFLICT upsert, so
+// this keeps working even if the (customer_id, product_id) unique
+// constraint is ever missing, renamed, or dropped by a future migration.
+// Adding something that's already wishlisted is a harmless no-op.
 async function addToWishlist(customerId, productId) {
+  const existing = await pool.query(
+    `SELECT wishlist_id FROM wishlist
+     WHERE customer_id = $1 AND product_id = $2`,
+    [customerId, productId]
+  );
+ 
+  if (existing.rows[0]) {
+    return existing.rows[0]; // already wishlisted — nothing to do
+  }
+ 
   const { rows } = await pool.query(
     `INSERT INTO wishlist (customer_id, product_id)
      VALUES ($1, $2)
-     ON CONFLICT (customer_id, product_id) DO NOTHING
      RETURNING wishlist_id`,
     [customerId, productId]
   );
   return rows[0] || null;
 }
-
+ 
 // ── Remove a product from the customer's wishlist ─────────────────────────
 async function removeFromWishlist(customerId, productId) {
   const { rows } = await pool.query(
@@ -34,7 +45,7 @@ async function removeFromWishlist(customerId, productId) {
   );
   return rows[0] || null;
 }
-
+ 
 // ── Every wishlisted product for this customer ─────────────────────────────
 // Same active-product / unblocked-shop rule as the rest of the customer
 // catalog (see findAllPublicProducts) — if the owner deactivates a product
@@ -88,7 +99,7 @@ async function getWishlistProducts(customerId) {
   );
   return rows;
 }
-
+ 
 module.exports = {
   addToWishlist,
   removeFromWishlist,

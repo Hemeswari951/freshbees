@@ -1,4 +1,4 @@
- 
+// backend/controllers/customer/wishlist.controller.js
 const wishlistService = require('../../services/customer/wishlist.service');
 const productService = require('../../services/customer/product.service');
  
@@ -29,7 +29,10 @@ function mapListItem(row) {
 // → Every product the logged-in customer has wishlisted.
 async function listWishlist(req, res) {
   try {
-    const rows = await wishlistService.getWishlistProducts(req.customer.customer_id);
+    // customerauth middleware sets req.customer.customerId (camelCase) —
+    // NOT customer_id. Using the wrong key here silently produced
+    // `undefined`, which matched zero rows on every query.
+    const rows = await wishlistService.getWishlistProducts(req.customer.customerId);
     res.json({ success: true, data: rows.map(mapListItem) });
   } catch (err) {
     console.error('[customer listWishlist]', err);
@@ -42,7 +45,7 @@ async function listWishlist(req, res) {
 async function addToWishlist(req, res) {
   try {
     const productId = Number(req.params.productId);
-    await wishlistService.addToWishlist(req.customer.customer_id, productId);
+    await wishlistService.addToWishlist(req.customer.customerId, productId);
     res.json({ success: true, message: 'Added to wishlist' });
   } catch (err) {
     console.error('[customer addToWishlist]', err);
@@ -55,7 +58,7 @@ async function addToWishlist(req, res) {
 async function removeFromWishlist(req, res) {
   try {
     const productId = Number(req.params.productId);
-    await wishlistService.removeFromWishlist(req.customer.customer_id, productId);
+    await wishlistService.removeFromWishlist(req.customer.customerId, productId);
     res.json({ success: true, message: 'Removed from wishlist' });
   } catch (err) {
     console.error('[customer removeFromWishlist]', err);

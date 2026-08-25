@@ -1,6 +1,10 @@
 const productService = require('../../services/customer/product.service');
 
 // ── List row → JSON matching Flutter ProductModel.fromJson() ──────────────
+// IMPORTANT: sizes/colors/rating are included here — these are what the
+// Flutter filter panel actually filters on. Without them, ProductModel
+// gets empty sizes/colors/rating=0 for every product and Size/Color/
+// Rating filters silently match nothing.
 function mapListItem(row) {
   return {
     id: row.product_id,
@@ -17,6 +21,9 @@ function mapListItem(row) {
     brandName: row.brand_name || '',
     totalStock: Number(row.total_stock) || 0,
     stockStatus: productService.stockStatus(row.total_stock),
+    sizes: row.sizes || [],
+    colors: row.colors || [],
+    rating: row.rating != null ? Number(row.rating) : 0,
   };
 }
 
@@ -41,7 +48,6 @@ function mapDetail(row) {
     })),
   }));
 
-  // Same "front image of first color" rule the list/thumbnail uses.
   const firstColorImages = colors[0]?.images || [];
   const thumbnail =
     firstColorImages.find((i) => i.imageType === 'front')?.imageUrl ||
@@ -131,7 +137,22 @@ async function getProduct(req, res) {
   }
 }
 
+// GET /api/customer/products/meta/filter-options
+// Returns { colors: [...], sizes: [...] } — the distinct values actually
+// present in the DB right now, so the Flutter filter panel's Size/Color
+// lists are never out of sync with real product data.
+async function getFilterOptions(req, res) {
+  try {
+    const options = await productService.findFilterOptions();
+    res.json({ success: true, data: options });
+  } catch (err) {
+    console.error('[customer getFilterOptions]', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch filter options' });
+  }
+}
+
 module.exports = {
   listProducts,
   getProduct,
+  getFilterOptions,
 };

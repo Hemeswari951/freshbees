@@ -20,6 +20,11 @@ class ProductModel {
   final int totalStock;
   final String stockStatus;
 
+  // NEW — needed for filtering
+  final List<String> sizes;
+  final List<String> colors;
+  final double rating;
+
   ProductModel({
     required this.id,
     required this.productName,
@@ -35,6 +40,9 @@ class ProductModel {
     required this.brandName,
     required this.totalStock,
     required this.stockStatus,
+    this.sizes = const [],
+    this.colors = const [],
+    this.rating = 0.0,
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
@@ -53,6 +61,9 @@ class ProductModel {
       brandName: json['brandName'] ?? '',
       totalStock: json['totalStock'] ?? 0,
       stockStatus: json['stockStatus'] ?? '',
+      sizes: (json['sizes'] as List?)?.map((e) => e.toString()).toList() ?? [],
+      colors: (json['colors'] as List?)?.map((e) => e.toString()).toList() ?? [],
+      rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -72,6 +83,9 @@ class ProductModel {
       'brandName': brandName,
       'totalStock': totalStock,
       'stockStatus': stockStatus,
+      'sizes': sizes,
+      'colors': colors,
+      'rating': rating,
     };
   }
 }

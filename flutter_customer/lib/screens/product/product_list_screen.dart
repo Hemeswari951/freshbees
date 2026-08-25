@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/product_model.dart';
 import '../../services/api_service.dart';
+import '../../services/wishlist_service.dart';
 import '../../services/product_service.dart';
+import '../../services/search_service.dart';
 import '../../widgets/product_card.dart';
 import 'product_filters.dart';
 
@@ -11,21 +15,12 @@ import 'product_filters.dart';
 // ARGS — what to fetch (shop or search) + the title to show
 // ===========================================================================
 
-/// Carries the "which products to show" info from Home (or search bar)
-/// into ProductListScreen. Only two keys are used right now — add more
-/// later (e.g. 'categoryId') without touching anything else if needed.
 class ProductListArgs {
   static const String keyShop = 'shopId';
   static const String keySearch = 'search';
 
-  /// Which kind of filter this is — [keyShop] or [keySearch].
   final String key;
-
-  /// The value for that filter: shop id (int) for [keyShop],
-  /// the typed query (String) for [keySearch].
   final dynamic value;
-
-  /// Text shown in the header — shop name, or `Results for "query"`.
   final String title;
 
   const ProductListArgs({
@@ -52,7 +47,6 @@ class ProductListArgs {
   bool get isShop => key == keyShop;
   bool get isSearch => key == keySearch;
 
-  /// Shop id, only valid when [isShop] is true.
   int get shopId => value as int;
 }
 
@@ -61,32 +55,16 @@ class ProductListArgs {
 // ===========================================================================
 
 /// Single reusable listing screen — driven entirely by ProductModel /
-/// ProductService. Every clickable entry point on Home (nearby shop
-/// card, search bar) routes here with a [ProductListArgs]; this screen
-/// decides which API to call and applies [ProductFilters] on top.
+/// ProductService.
 ///
-/// Responsive behaviour:
-/// - Width >= [_desktopBreakpoint] → "desktop": a top bar with a back
-///   button, the title (shop name / search query), and — only for shop
-///   lists — an "Overview" button on the right. Products render in a
-///   grid on the LEFT with the filter form ([FilterPanel]) permanently
-///   visible as a sidebar on the RIGHT. Changing a filter and tapping
-///   Apply just re-runs the fetch, no navigation involved.
-/// - Below that → "mobile": a compact header — back button, title,
-///   a search icon, and a bag/cart icon. The filter/overview toolbar
-///   row ("Filters" on the left, "Overview" — shop only — on the
-///   right) now scrolls WITH the page content instead of being pinned
-///   under the header. Tapping the search icon expands an inline
-///   search field in place of the title/icons. Tapping "Filters"
-///   pushes [FilterPage] as its own full screen route and applies
-///   whatever comes back.
-///
-/// Wishlist: tapping the heart on a card checks login state first. A
-/// guest gets sent straight to `/login` — nothing is written until
-/// they're actually signed in. A logged-in tap flips the heart
-/// optimistically and calls [ProductService.addToWishlist] /
-/// [ProductService.removeFromWishlist], rolling the heart back if the
-/// API call fails.
+/// FILTERING MODEL:
+/// - `_allProducts` = raw, unfiltered list fetched once per load.
+/// - `_products` (getter) = `_allProducts` run through `_filters.matches()`.
+/// - Applying filters never re-fetches — just updates `_filters` and the
+///   grid rebuilds instantly against the already-fetched list.
+/// - `_availableSizes` / `_availableColors` = distinct values pulled from
+///   the backend (ProductService.getFilterOptions()) so the filter panel
+///   never shows a hardcoded list that's out of sync with real data.
 class ProductListScreen extends StatefulWidget {
   final ProductListArgs args;
 
@@ -101,19 +79,30 @@ class _ProductListScreenState extends State<ProductListScreen> {
   static const Color _bg = Color(0xFFFAF7F2);
   static const Color _ink = Color(0xFF1F1B16);
 
-  List<ProductModel> _products = [];
+  List<ProductModel> _allProducts = [];
   bool _isLoading = true;
   String? _error;
 
   ProductFilters _filters = const ProductFilters();
 
+  List<String> _availableSizes = [];
+  List<String> _availableColors = [];
+
+  List<ProductModel> get _products =>
+      _allProducts.where(_filters.matches).toList();
+
   final Set<int> _wishlistIds = {};
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
 
-  /// Mobile only — whether the header is showing the inline search field
-  /// in place of the title/search-icon/cart-icon row.
   bool _searchExpanded = false;
+
+  final LayerLink _searchLayerLink = LayerLink();
+  final OverlayPortalController _searchOverlayController =
+      OverlayPortalController();
+  Timer? _debounce;
+  List<SearchSuggestion> _suggestions = [];
+  bool _isSuggesting = false;
 
   @override
   void initState() {
@@ -123,10 +112,12 @@ class _ProductListScreenState extends State<ProductListScreen> {
     }
     _loadProducts();
     _loadWishlistIds();
+    _loadFilterOptions();
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
@@ -144,20 +135,11 @@ class _ProductListScreenState extends State<ProductListScreen> {
   // DATA
   // ===========================================================
 
-  /// Only place that decides which service call to make. If your real
-  /// method names/signatures differ, this is the one spot to edit.
   Future<List<ProductModel>> _fetchProducts() {
-    final queryParams = _filters.toQueryParams();
     if (widget.args.isShop) {
-      return ProductService.getProductsByShop(
-        widget.args.shopId,
-        filters: queryParams,
-      );
+      return ProductService.getProductsByShop(widget.args.shopId);
     }
-    return ProductService.searchProducts(
-      widget.args.value as String,
-      filters: queryParams,
-    );
+    return ProductService.searchProducts(widget.args.value as String);
   }
 
   Future<void> _loadProducts() async {
@@ -169,7 +151,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
       final products = await _fetchProducts();
       if (!mounted) return;
       setState(() {
-        _products = products;
+        _allProducts = products;
         _isLoading = false;
       });
     } catch (e) {
@@ -181,11 +163,24 @@ class _ProductListScreenState extends State<ProductListScreen> {
     }
   }
 
+  /// Distinct sizes/colors currently in the catalog, for the filter
+  /// panel's Size/Color lists. Failure is silent — those two filter
+  /// groups just show "No sizes/colors available" instead of breaking
+  /// the screen.
+  Future<void> _loadFilterOptions() async {
+    final options = await ProductService.getFilterOptions();
+    if (!mounted) return;
+    setState(() {
+      _availableSizes = options.sizes;
+      _availableColors = options.colors;
+    });
+  }
+
   Future<void> _loadWishlistIds() async {
-    if (!_isLoggedIn) return; // guest — hearts stay unfilled
+    if (!_isLoggedIn) return;
 
     try {
-      final items = await ProductService.getWishlist();
+      final items = await WishlistService.getWishlist();
       if (!mounted) return;
       setState(() {
         _wishlistIds
@@ -197,12 +192,8 @@ class _ProductListScreenState extends State<ProductListScreen> {
     }
   }
 
-  /// Login gate lives here: guests are routed to `/login` and nothing
-  /// is written. Logged-in users get an optimistic heart flip + the
-  /// actual API call, rolled back if that call fails.
   Future<void> _toggleWishlist(ProductModel product) async {
     if (!_isLoggedIn) {
-      // Not logged in — send them to login instead of writing anything.
       context.push('/login');
       return;
     }
@@ -220,8 +211,8 @@ class _ProductListScreenState extends State<ProductListScreen> {
     bool ok;
     try {
       ok = wasWishlisted
-          ? await ProductService.removeFromWishlist(product.id)
-          : await ProductService.addToWishlist(product.id);
+          ? await WishlistService.removeFromWishlist(product.id)
+          : await WishlistService.addToWishlist(product.id);
     } catch (_) {
       ok = false;
     }
@@ -245,7 +236,6 @@ class _ProductListScreenState extends State<ProductListScreen> {
     context.push('/products/${product.id}');
   }
 
-  /// Only relevant when we got here via a shop (widget.args.isShop).
   void _openShopOverview() {
     context.push('/shops/${widget.args.shopId}');
   }
@@ -254,55 +244,56 @@ class _ProductListScreenState extends State<ProductListScreen> {
     _goToProtected(context, '/cart');
   }
 
-  /// New search from the mobile header's search field — replaces this
-  /// screen with a fresh ProductListScreen for the new query so the
-  /// back stack still makes sense (Home -> this new search result).
   void _onSearchSubmitted(String query) {
     final trimmed = query.trim();
-
     if (trimmed.isEmpty) return;
 
     final uri = Uri(path: '/products', queryParameters: {'search': trimmed});
-
     context.pushReplacement(uri.toString());
   }
 
   void _openInlineSearch() {
     setState(() => _searchExpanded = true);
-    // Give the field a frame to build before requesting focus.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _searchFocusNode.requestFocus();
     });
   }
 
   void _closeInlineSearch() {
+    _searchOverlayController.hide();
     setState(() => _searchExpanded = false);
     _searchFocusNode.unfocus();
   }
 
-  /// Mobile: pushes the filter form as its own full page and applies
-  /// whatever comes back.
+  /// Mobile: pushes the filter page with the CURRENT filters, the
+  /// already-fetched base list (for the live "N of M products" count),
+  /// and the backend-driven size/color option lists.
   Future<void> _openFilterPage() async {
     final result = await context.push<ProductFilters>(
       '/filter',
-      extra: _filters,
+      extra: FilterPageArgs(
+        filters: _filters,
+        allProducts: _allProducts,
+        availableSizes: _availableSizes,
+        availableColors: _availableColors,
+      ),
     );
 
     if (result != null) {
       setState(() => _filters = result);
-      _loadProducts();
     }
   }
 
-  /// Desktop: sidebar's Apply just updates state in place — no route.
+  /// Desktop: sidebar's Apply just updates state in place — no route,
+  /// no refetch.
   void _applyDesktopFilters(ProductFilters filters) {
     setState(() => _filters = filters);
-    _loadProducts();
   }
 
-  // Checks login state before navigating to a protected route.
-  // If not logged in, redirects to /login and passes the intended
-  // destination so the login flow can send the user back afterwards.
+  void _clearFilters() {
+    setState(() => _filters = const ProductFilters());
+  }
+
   void _goToProtected(BuildContext context, String route) {
     final isLoggedIn =
         ApiService.getToken() != null && ApiService.getToken()!.isNotEmpty;
@@ -317,10 +308,63 @@ class _ProductListScreenState extends State<ProductListScreen> {
   }
 
   String get _emptyMessage {
+    if (_filters.activeCount > 0) {
+      return 'No products match the selected filters.';
+    }
     if (widget.args.isSearch) {
       return 'No products found for "${widget.args.value}".';
     }
     return 'No products in this shop yet.';
+  }
+
+  // ===========================================================
+  // SEARCH SUGGESTIONS
+  // ===========================================================
+
+  void _onSearchChanged(String value) {
+    setState(() {});
+    _debounce?.cancel();
+
+    if (value.trim().isEmpty) {
+      setState(() {
+        _suggestions = [];
+        _isSuggesting = false;
+      });
+      if (_searchOverlayController.isShowing) {
+        _searchOverlayController.hide();
+      }
+      return;
+    }
+
+    _debounce = Timer(const Duration(milliseconds: 350), () async {
+      setState(() => _isSuggesting = true);
+      try {
+        final results = await SearchService.getSearchSuggestions(value);
+        if (!mounted) return;
+        setState(() {
+          _suggestions = results;
+          _isSuggesting = false;
+        });
+        if (_suggestions.isNotEmpty && !_searchOverlayController.isShowing) {
+          _searchOverlayController.show();
+        } else if (_suggestions.isEmpty &&
+            _searchOverlayController.isShowing) {
+          _searchOverlayController.hide();
+        }
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _suggestions = [];
+          _isSuggesting = false;
+        });
+      }
+    });
+  }
+
+  void _onSuggestionTap(SearchSuggestion suggestion) {
+    _searchController.text = suggestion.text;
+    _searchOverlayController.hide();
+    _onSearchSubmitted(suggestion.text);
   }
 
   // ===========================================================
@@ -342,8 +386,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
   }
 
   // ===========================================================
-  // DESKTOP — back button + title (+ Overview for shop lists) top
-  // bar, then left grid / right filter sidebar
+  // DESKTOP
   // ===========================================================
 
   Widget _buildDesktopScaffold() {
@@ -373,6 +416,9 @@ class _ProductListScreenState extends State<ProductListScreen> {
                 clipBehavior: Clip.antiAlias,
                 child: FilterPanel(
                   initialFilters: _filters,
+                  allProducts: _allProducts,
+                  availableSizes: _availableSizes,
+                  availableColors: _availableColors,
                   onApply: _applyDesktopFilters,
                 ),
               ),
@@ -383,9 +429,6 @@ class _ProductListScreenState extends State<ProductListScreen> {
     );
   }
 
-  /// Back button + title (shop name / search query) on the left,
-  /// "Overview" button on the right — only shown when this list came
-  /// from a shop.
   Widget _buildDesktopTopBar() {
     return Container(
       width: double.infinity,
@@ -428,9 +471,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
   }
 
   // ===========================================================
-  // MOBILE — back+name+search-icon+cart header. Filter/Overview
-  // toolbar now scrolls WITH the product grid instead of being
-  // pinned under the header.
+  // MOBILE
   // ===========================================================
 
   Widget _buildMobileScaffold() {
@@ -450,10 +491,6 @@ class _ProductListScreenState extends State<ProductListScreen> {
     );
   }
 
-  /// Back button, screen name, a search icon, and a bag icon — all in
-  /// one row. Tapping the search icon swaps the title/icons for an
-  /// inline, auto-focused search field (with a close icon to collapse
-  /// back to the normal header).
   Widget _buildMobileHeader() {
     return Container(
       color: Colors.white,
@@ -501,46 +538,142 @@ class _ProductListScreenState extends State<ProductListScreen> {
           onPressed: _closeInlineSearch,
         ),
         Expanded(
-          child: Container(
-            height: 40,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1ECE3),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: TextField(
-              controller: _searchController,
-              focusNode: _searchFocusNode,
-              textInputAction: TextInputAction.search,
-              onSubmitted: _onSearchSubmitted,
-              style: const TextStyle(fontSize: 14, color: _ink),
-              decoration: InputDecoration(
-                isDense: true,
-                border: InputBorder.none,
-                prefixIcon: const Icon(
-                  Icons.search,
-                  size: 20,
-                  color: Colors.black45,
-                ),
-                suffixIcon: _searchController.text.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(
-                          Icons.close,
-                          size: 18,
-                          color: Colors.black45,
+          child: CompositedTransformTarget(
+            link: _searchLayerLink,
+            child: OverlayPortal(
+              controller: _searchOverlayController,
+              overlayChildBuilder: (context) {
+                return Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: () => _searchOverlayController.hide(),
+                    child: Stack(
+                      children: [
+                        CompositedTransformFollower(
+                          link: _searchLayerLink,
+                          showWhenUnlinked: false,
+                          offset: const Offset(0, 46),
+                          child: Align(
+                            alignment: Alignment.topLeft,
+                            child: Material(
+                              elevation: 4,
+                              borderRadius: BorderRadius.circular(14),
+                              color: Colors.white,
+                              child: SizedBox(
+                                width: MediaQuery.of(context).size.width - 56,
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxHeight: 320,
+                                  ),
+                                  child: ListView.separated(
+                                    shrinkWrap: true,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 6,
+                                    ),
+                                    itemCount: _suggestions.length,
+                                    separatorBuilder: (_, __) => Divider(
+                                      height: 1,
+                                      color: Colors.black.withOpacity(0.05),
+                                    ),
+                                    itemBuilder: (context, index) {
+                                      final s = _suggestions[index];
+                                      return ListTile(
+                                        dense: true,
+                                        leading: Icon(
+                                          s.isTag
+                                              ? Icons.sell_outlined
+                                              : Icons.search_rounded,
+                                          size: 18,
+                                          color: const Color(0xFF8B7355),
+                                        ),
+                                        title: Text(
+                                          s.text,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        trailing: s.isTag
+                                            ? const Text(
+                                                'tag',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.black38,
+                                                ),
+                                              )
+                                            : null,
+                                        onTap: () => _onSuggestionTap(s),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                        onPressed: () {
-                          setState(() => _searchController.clear());
-                        },
-                      ),
-                hintText: 'Search products',
-                hintStyle: const TextStyle(
-                  fontSize: 13,
-                  color: Colors.black45,
+                      ],
+                    ),
+                  ),
+                );
+              },
+              child: Container(
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1ECE3),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                child: TextField(
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (q) {
+                    _searchOverlayController.hide();
+                    _onSearchSubmitted(q);
+                  },
+                  onChanged: _onSearchChanged,
+                  style: const TextStyle(fontSize: 14, color: _ink),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    border: InputBorder.none,
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      size: 20,
+                      color: Colors.black45,
+                    ),
+                    suffixIcon: _isSuggesting
+                        ? const Padding(
+                            padding: EdgeInsets.all(10),
+                            child: SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : (_searchController.text.isEmpty
+                              ? null
+                              : IconButton(
+                                  icon: const Icon(
+                                    Icons.close,
+                                    size: 18,
+                                    color: Colors.black45,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _searchController.clear();
+                                      _suggestions = [];
+                                    });
+                                    _searchOverlayController.hide();
+                                  },
+                                )),
+                    hintText: 'Search products',
+                    hintStyle: const TextStyle(
+                      fontSize: 13,
+                      color: Colors.black45,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
               ),
-              onChanged: (_) => setState(() {}),
             ),
           ),
         ),
@@ -548,11 +681,8 @@ class _ProductListScreenState extends State<ProductListScreen> {
     );
   }
 
-  /// Slim strip — "Filters" trigger on the left, "Overview" (shop
-  /// lists only) on the right. Now placed as the first sliver in the
-  /// scroll view, so it scrolls away with the rest of the page
-  /// content instead of staying pinned under the header. Tapping
-  /// Filters pushes [FilterPage].
+  /// "Filters" trigger (with live active-count badge) on the left,
+  /// "Overview" (shop lists only) on the right.
   Widget _buildMobileFilterToolbar() {
     final count = _filters.activeCount;
 
@@ -587,10 +717,6 @@ class _ProductListScreenState extends State<ProductListScreen> {
   // GRID
   // ===========================================================
 
-  /// Column count adapts to width: 2 on phones, scales up as the
-  /// available grid width grows (desktop already loses 340px to the
-  /// sidebar, so this reads the ACTUAL remaining width, not the full
-  /// screen width).
   int _gridColumnCount(double width) {
     if (width >= 1000) return 4;
     if (width >= 700) return 3;
@@ -639,10 +765,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
                 if (_filters.activeCount > 0) ...[
                   const SizedBox(height: 8),
                   TextButton(
-                    onPressed: () {
-                      setState(() => _filters = const ProductFilters());
-                      _loadProducts();
-                    },
+                    onPressed: _clearFilters,
                     child: const Text('Clear filters'),
                   ),
                 ],
@@ -682,26 +805,3 @@ class _ProductListScreenState extends State<ProductListScreen> {
     ];
   }
 }
-
-/// ---------------------------------------------------------------------
-/// USAGE — call these from Home.
-/// ---------------------------------------------------------------------
-///
-/// Nearby shop card tapped — shopId/shopName both already sit on
-/// ProductModel, so if you're navigating from a list of products (or
-/// have the shop's name/id from wherever the card came from) this is
-/// all you need — no separate shop fetch:
-///
-/// Navigator.push(context, MaterialPageRoute(
-///   builder: (_) => ProductListScreen(
-///     args: ProductListArgs.shop(shopId: shopId, shopName: shopName),
-///   ),
-/// ));
-///
-/// Search bar submitted:
-///
-/// Navigator.push(context, MaterialPageRoute(
-///   builder: (_) => ProductListScreen(
-///     args: ProductListArgs.search(query: query),
-///   ),
-/// ));
