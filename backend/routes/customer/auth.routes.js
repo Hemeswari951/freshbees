@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
  
 const authController = require("../../controllers/customer/auth.controller");
-const customerAuth = require('../../middleware/customerAuth');
+const customerAuth = require('../../middleware/customerauth');
  
 // OTP
 router.post("/send-otp", authController.sendOtp);
