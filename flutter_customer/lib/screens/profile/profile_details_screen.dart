@@ -8,10 +8,13 @@ import '../../screens/profile/orders_screen.dart';
 import '../../screens/profile/saved_addresses_screen.dart';
 import '../../screens/profile/saved_cards_screen.dart';
 import '../../screens/profile/overview_screen.dart';
-
+ 
 import 'notifications_screen.dart';
-
-
+import 'package:flutter_thiraa/screens/profile/faq_screen.dart';
+import '../../screens/profile/about_us_screen.dart';
+import 'package:flutter_thiraa/screens/profile/terms_policies_screen.dart';
+ 
+ 
 // Same palette style as your mobile ProfileScreen — kept local to this file.
 class _Palette {
   static const Color ink = Color(0xFF1A1A1D);
@@ -22,34 +25,34 @@ class _Palette {
   static const Color accent = Color(0xFF17B978);
   static const Color accentSoft = Color(0xFFE4F7EE);
 }
-
+ 
 /// Breakpoint shared with the header's desktop nav. Below this, we render
 /// content-only (no right toggle) since the mobile ProfileScreen already
 /// gives users a way to pick a section before landing here.
 const double kDesktopBreakpoint = 900;
-
+ 
 class ProfileDetailsScreen extends StatefulWidget {
   /// Which section to open on. Comes from the `section` query param —
   /// see app_router.dart wiring below.
   final ProfileSection initialSection;
-
+ 
   const ProfileDetailsScreen({super.key, required this.initialSection});
-
+ 
   @override
   State<ProfileDetailsScreen> createState() => _ProfileDetailsScreenState();
 }
-
+ 
 class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
   late ProfileSection _selectedSection;
   String _userName = 'User';
-
+ 
   @override
   void initState() {
     super.initState();
     _selectedSection = widget.initialSection;
     _loadUserName();
   }
-
+ 
   // If someone deep-links to a different section while this screen is
   // already open (e.g. header click while ProfileDetailsScreen is active),
   // go_router rebuilds this widget with a new `initialSection` — didUpdateWidget
@@ -61,25 +64,25 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
       setState(() => _selectedSection = widget.initialSection);
     }
   }
-
+ 
   Future<void> _loadUserName() async {
     final name = await ApiService.getUserName();
     if (mounted) {
       setState(() => _userName = name ?? 'User');
     }
   }
-
+ 
   void _selectSection(ProfileSection section) {
     setState(() => _selectedSection = section);
     // Keep the URL in sync so refresh / back-button / share-link still
     // lands on the right tab, without pushing a new route each click.
     context.go('/profile/details?section=${section.slug}');
   }
-
+ 
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= kDesktopBreakpoint;
-
+ 
     return Scaffold(
       backgroundColor: _Palette.canvas,
       appBar: AppBar(
@@ -127,7 +130,7 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
       ),
     );
   }
-
+ 
   // -------------------------------------------------------------------
   // RIGHT SIDE TOGGLE (desktop only)
   // -------------------------------------------------------------------
@@ -181,7 +184,7 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
       ),
     );
   }
-
+ 
   // -------------------------------------------------------------------
   // CONTENT SWITCH — replace each placeholder with your real widgets
   // (e.g. wire OrdersScreen's body in here, not the whole Scaffold).
@@ -203,14 +206,16 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
       case ProfileSection.notificationSettings:
         return const NotificationsScreen();
       case ProfileSection.faqs:
-        return _placeholder(section);
+        return const FaqScreen();
+ 
       case ProfileSection.aboutUs:
-        return _placeholder(section);
+        return const AboutUsScreen();
+ 
       case ProfileSection.termsPolicies:
-        return _placeholder(section);
+        return const TermsPoliciesScreen();
     }
   }
-
+ 
   Widget _buildOverview() {
     return SingleChildScrollView(
       child: Column(
@@ -235,7 +240,7 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
       ),
     );
   }
-
+ 
   // Temporary placeholder so every tab renders something meaningful while
   // you build out the real screens one by one.
   Widget _placeholder(ProfileSection section) {

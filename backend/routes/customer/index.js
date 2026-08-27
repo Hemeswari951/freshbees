@@ -17,5 +17,6 @@ router.use('/products/:productId/reviews', require('./review.routes')); // NEW �
 router.use('/orders', require('./order.routes')); // NEW
 router.use('/cart', require('./cart.routes'));     // NEW — bag / add-to-cart
 router.use('/addresses', require('./address.routes')); // NEW — address book for checkout
+router.use('/settings', require('./settings.routes'));
 
 module.exports = router;

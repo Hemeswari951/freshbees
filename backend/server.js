@@ -13,4 +13,4 @@ app.use('/api/admin',    require('./routes/admin/index'));
 app.use('/api/shop-owner',     require('./routes/shop_owner/index'));
 app.use('/api/customer', require('./routes/customer/index'));
 
-app.listen(3000, () => console.log('Server running on port 3000'));
+app.listen(3000,'0.0.0.0', () => console.log('Server running on port 3000'));

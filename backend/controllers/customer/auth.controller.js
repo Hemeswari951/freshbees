@@ -3,6 +3,8 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const { sendOtpMail } = require("../../services/shared/sendotpmail.service");
+const { sendOtpSms } = require('../../services/customer/sms.service');
+
 const {
     issueTokens,
     verifyRefreshToken,
@@ -96,7 +98,10 @@ exports.sendOtp = async (req, res) => {
 
         // Send OTP via SMS or Mail
         if (isPhone(identifier)) {
-            // await sendOtpSms(identifier, otp);
+            await sendOtpSms({
+    phoneNumber: identifier,
+    otp: otp,
+  });
         } else {
             await sendOtpMail({
                 toEmail: identifier,

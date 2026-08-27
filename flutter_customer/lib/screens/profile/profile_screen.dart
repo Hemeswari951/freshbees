@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
-
+ 
 import '../../services/auth_service.dart';
 import '../../models/profile_section.dart';
-
+ 
 /// Change this manually on each release, or wire up package_info_plus
 /// if you want it to read from pubspec.yaml automatically.
 const String kAppVersion = '1.0.0';
-
+ 
 // ---------------------------------------------------------------------------
 // Palette — light, classic. Single accent color for interactive/positive
 // touches; kept local so it doesn't collide with the app-wide AppColors.
@@ -23,7 +23,7 @@ class _Palette {
   static const Color accentSoft = Color(0xFFE4F7EE);
   static const Color danger = Color(0xFFE5484D);
 }
-
+ 
 /// A shopping profile under the main account — the main account itself is
 /// always index 0 and marked as Admin.
 class _SubAccount {
@@ -31,50 +31,50 @@ class _SubAccount {
   final bool isAdmin;
   const _SubAccount({required this.name, this.isAdmin = false});
 }
-
+ 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
-
+ 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
-
+ 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   bool _isLoggedIn = false;
   String _userName = 'User';
-
+ 
   // TODO: replace with real sub-accounts from your backend once that API
   // exists. For now the main account (Admin) is seeded from _userName and
   // additions are local-only (not persisted).
   final List<_SubAccount> _subAccounts = [];
   int _selectedAccountIndex = 0;
-
+ 
   @override
   void initState() {
     super.initState();
     _loadProfileData();
   }
-
+ 
   Future<void> _loadProfileData() async {
     // ApiService caches the token in memory after app restart only if
     // loadToken() has run — make sure this is also called once at app
     // startup (e.g. in main.dart) so a cold-launched app doesn't briefly
     // read AuthService.token as null.
     await AuthService.loadTokens();
-
+ 
     final prefs = await SharedPreferences.getInstance();
-
+ 
     // ApiService only ever writes the 'user_name' key (see setToken()),
     // so that's the single source of truth here.
     final storedName = prefs.getString('user_name');
     final resolvedName = (storedName != null && storedName.isNotEmpty)
         ? storedName
         : 'User';
-
+ 
     final token = AuthService.token;
     final loggedIn = token != null && token.isNotEmpty;
-
+ 
     if (!mounted) return;
     setState(() {
       _userName = resolvedName;
@@ -89,7 +89,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     });
   }
-
+ 
   Future<void> _addSubAccount() async {
     final controller = TextEditingController();
     final name = await showDialog<String>(
@@ -124,7 +124,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
-
+ 
     if (name != null && name.isNotEmpty && mounted) {
       setState(() {
         _subAccounts.add(_SubAccount(name: name));
@@ -132,26 +132,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
       });
     }
   }
-
+ 
   Future<void> _handleLogout() async {
     setState(() => _isLoading = true);
-
+ 
     // AuthService.logout() clears the local token FIRST (before the
     // network call), so the app is "logged out" instantly regardless of
     // network state. clearToken() is idempotent, so calling it again here
     // is a harmless safety net.
     await AuthService.logout();
     await AuthService.clearTokens();
-
+ 
     if (!mounted) return;
-
+ 
     setState(() {
       _isLoggedIn = false;
       _userName = 'User';
       _isLoading = false;
     });
   }
-
+ 
   // Uses go_router (context.push) instead of the raw Navigator, so this
   // stays consistent with the rest of the app (e.g. CustomerHeader),
   // correctly registers with go_router's history/back-stack, updates the
@@ -160,7 +160,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await context.push('/login?redirect=/profile');
     if (mounted) _loadProfileData();
   }
-
+ 
   Future<void> _confirmLogout() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -184,7 +184,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
     if (confirmed == true) await _handleLogout();
   }
-
+ 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -199,7 +199,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         shadowColor: Colors.black12,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: _Palette.ink),
-          onPressed: () => context.go('/profile'),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              // No history to pop (e.g. opened via direct link/refresh) —
+              // fall back to a known safe destination.
+              context.go('/profile');
+            }
+          },
         ),
         title: const Text(
           'Profile',
@@ -230,7 +238,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
     );
   }
-
+ 
   // ---------------------------------------------------------------------
   // AVATAR / IDENTITY CARD — light card, no black background, sits under
   // the AppBar as its own clearly separate block.
@@ -300,7 +308,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
+ 
   /// Compact, stylized greeting — replaces the boxed identity card for the
   /// logged-in view. Small avatar + "Welcome back" eyebrow + name with a
   /// gradient accent underline, instead of a full profile card.
@@ -315,16 +323,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
+ 
   // ---------------------------------------------------------------------
   // SUB-ACCOUNTS — "Shopping for X" row with switchable profile avatars
   // and an Add button, e.g. for a shared family/household account.
   // ---------------------------------------------------------------------
   Widget _buildSubAccountsSection() {
     if (_subAccounts.isEmpty) return const SizedBox.shrink();
-
+ 
     final activeName = _subAccounts[_selectedAccountIndex].name;
-
+ 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -360,7 +368,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ],
     );
   }
-
+ 
   Widget _subAccountTile({
     required _SubAccount account,
     required bool isSelected,
@@ -369,7 +377,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final initial = account.name.trim().isNotEmpty
         ? account.name.trim()[0].toUpperCase()
         : '?';
-
+ 
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
@@ -442,7 +450,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
+ 
   Widget _addAccountTile() {
     return GestureDetector(
       onTap: _addSubAccount,
@@ -479,7 +487,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
+ 
   // ---------------------------------------------------------------------
   // LOGGED OUT VIEW
   // ---------------------------------------------------------------------
@@ -499,24 +507,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const SizedBox(height: 28),
         _sectionLabel('MORE'),
         const SizedBox(height: 12),
-        _infoCard(Icons.quiz_outlined, 'FAQs', () {}),
+        _infoCard(
+          Icons.quiz_outlined,
+          'FAQs',
+          () => _goToSection(ProfileSection.faqs),
+        ),
+ 
         const SizedBox(height: 10),
-        _infoCard(Icons.info_outline, 'About Us', () {}),
+ 
+        _infoCard(
+          Icons.info_outline,
+          'About Us',
+          () => _goToSection(ProfileSection.aboutUs),
+        ),
+ 
         const SizedBox(height: 10),
+ 
         _infoCard(
           Icons.description_outlined,
           'Terms, License & Policies',
-          () {},
+          () => _goToSection(ProfileSection.termsPolicies),
         ),
         const SizedBox(height: 28),
         _buildAppVersion(),
       ],
     );
   }
-
-Future<void> _goToSection(ProfileSection section) async {
-  await context.push('/profile/details?section=${section.slug}');
-}
+ 
+  Future<void> _goToSection(ProfileSection section) async {
+    await context.push('/profile/details?section=${section.slug}');
+  }
+ 
   // ---------------------------------------------------------------------
   // LOGGED IN VIEW
   // ---------------------------------------------------------------------
@@ -573,21 +594,30 @@ Future<void> _goToSection(ProfileSection section) async {
           ),
         ]),
         const SizedBox(height: 28),
-
+ 
         // FAQs / About Us / Terms — individual cards, one below another,
         // instead of a shared list or a grid tile.
         _sectionLabel('MORE'),
         const SizedBox(height: 12),
-        _infoCard(Icons.quiz_outlined, 'FAQs',
-    () => _goToSection(ProfileSection.faqs)),
-const SizedBox(height: 10),
-_infoCard(Icons.info_outline, 'About Us',
-    () => _goToSection(ProfileSection.aboutUs)),
-const SizedBox(height: 10),
-_infoCard(Icons.description_outlined, 'Terms, License & Policies',
-    () => _goToSection(ProfileSection.termsPolicies)),
+        _infoCard(
+          Icons.quiz_outlined,
+          'FAQs',
+          () => _goToSection(ProfileSection.faqs),
+        ),
+        const SizedBox(height: 10),
+        _infoCard(
+          Icons.info_outline,
+          'About Us',
+          () => _goToSection(ProfileSection.aboutUs),
+        ),
+        const SizedBox(height: 10),
+        _infoCard(
+          Icons.description_outlined,
+          'Terms, License & Policies',
+          () => _goToSection(ProfileSection.termsPolicies),
+        ),
         const SizedBox(height: 28),
-
+ 
         // Minimal, understated logout — text + icon rather than a big
         // block button, sitting quietly at the bottom.
         Center(
@@ -606,7 +636,7 @@ _infoCard(Icons.description_outlined, 'Terms, License & Policies',
       ],
     );
   }
-
+ 
   // ---------------------------------------------------------------------
   // SHARED PIECES
   // ---------------------------------------------------------------------
@@ -621,7 +651,7 @@ _infoCard(Icons.description_outlined, 'Terms, License & Policies',
       ),
     );
   }
-
+ 
   /// One standalone card per row — used for FAQs / About Us / Terms so
   /// each sits as its own distinct block instead of being grouped.
   Widget _infoCard(IconData icon, String title, VoidCallback onTap) {
@@ -670,7 +700,7 @@ _infoCard(Icons.description_outlined, 'Terms, License & Policies',
       ),
     );
   }
-
+ 
   /// Grid of square-ish tiles (icon on top, label below) for the account
   /// shortcuts — kept for quick-access items only.
   Widget _menuGrid(List<_MenuEntry> entries) {
@@ -731,7 +761,7 @@ _infoCard(Icons.description_outlined, 'Terms, License & Policies',
       },
     );
   }
-
+ 
   Widget _buildAppVersion() {
     return Center(
       child: Text(
@@ -741,7 +771,7 @@ _infoCard(Icons.description_outlined, 'Terms, License & Policies',
     );
   }
 }
-
+ 
 class _MenuEntry {
   final IconData icon;
   final String label;

@@ -1,1 +1,20 @@
+# Node
+backend/node_modules/
+
+# Environment variables
+backend/.env
+
+# General env files
+.env
+.env.*
+!.env.example
+
+# Database backups
+*.dump
+*.sql
+
+# Android signing files
+android/key/
+android/key.properties
+
 backend/uploads/
