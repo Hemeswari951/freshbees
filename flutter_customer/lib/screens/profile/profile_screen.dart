@@ -61,7 +61,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // loadToken() has run — make sure this is also called once at app
     // startup (e.g. in main.dart) so a cold-launched app doesn't briefly
     // read AuthService.token as null.
-    await AuthService.loadToken();
+    await AuthService.loadTokens();
 
     final prefs = await SharedPreferences.getInstance();
 
@@ -141,7 +141,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // network state. clearToken() is idempotent, so calling it again here
     // is a harmless safety net.
     await AuthService.logout();
-    await AuthService.clearToken();
+    await AuthService.clearTokens();
 
     if (!mounted) return;
 

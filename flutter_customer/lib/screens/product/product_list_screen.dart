@@ -127,7 +127,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
       MediaQuery.of(context).size.width >= _desktopBreakpoint;
 
   bool get _isLoggedIn {
-    final token = ApiService.getToken();
+    final token = ApiService.getAccessToken();
     return token != null && token.isNotEmpty;
   }
 
@@ -296,7 +296,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
 
   void _goToProtected(BuildContext context, String route) {
     final isLoggedIn =
-        ApiService.getToken() != null && ApiService.getToken()!.isNotEmpty;
+        ApiService.getAccessToken() != null && ApiService.getAccessToken()!.isNotEmpty;
 
     if (isLoggedIn) {
       context.go(route);

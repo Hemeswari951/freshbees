@@ -78,7 +78,7 @@ class TryOnProfileService {
   static Map<String, String> get _headers => {
         'Content-Type': 'application/json',
         'Authorization':
-            'Bearer ${ApiService.getToken()}',
+            'Bearer ${ApiService.getAccessToken()}',
       };
 
 
@@ -270,7 +270,7 @@ static Future<TryOnProfile> uploadPhoto({
 
     // Authentication
     request.headers['Authorization'] =
-        'Bearer ${ApiService.getToken()}';
+        'Bearer ${ApiService.getAccessToken()}';
 
     // Read image bytes
     final bytes = await image.readAsBytes();
@@ -333,7 +333,7 @@ static Future<TryOnProfile> uploadProfilePhoto({
     uri,
   );
 
-  final token = ApiService.getToken();
+  final token = ApiService.getAccessToken();
 
   if (token != null && token.isNotEmpty) {
     request.headers['Authorization'] = 'Bearer $token';

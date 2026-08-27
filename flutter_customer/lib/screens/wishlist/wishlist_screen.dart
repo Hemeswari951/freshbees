@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import '../../models/product_model.dart';
 import '../../services/api_service.dart';
 import '../../services/wishlist_service.dart';
+import '../../services/cart_service.dart';
+import '../cart/cart_screen.dart';
 import '../../widgets/product_card.dart';
 import '../product/product_view_screen.dart';
 
@@ -38,8 +40,8 @@ class _WishlistScreenState extends State<WishlistScreen> {
       _error = null;
     });
 
-    await ApiService.loadToken();
-    final token = ApiService.getToken();
+    await ApiService.loadTokens();
+    final token = ApiService.getAccessToken();
     final loggedIn = token != null && token.isNotEmpty;
 
     if (!loggedIn) {
@@ -96,6 +98,70 @@ class _WishlistScreenState extends State<WishlistScreen> {
     }
   }
 
+   Future<void> _confirmRemoveFromWishlist(ProductModel product) async {
+    final shouldRemove = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: const Text('Remove Item', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
+          content: const Text('Are you sure you want to remove this item from your wishlist?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false), // Returns false on CANCEL
+              child: const Text('CANCEL', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w600)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true), // Returns true on REMOVE
+              child: const Text('REMOVE', style: TextStyle(color: Color(0xFFFF3E6C), fontWeight: FontWeight.w600)),
+            ),
+          ],
+        );
+      },
+    );
+
+    // If the user clicked REMOVE, proceed with the actual removal
+    if (shouldRemove == true) {
+      _removeFromWishlist(product);
+    }
+  }
+
+
+
+  Future<void> _moveToBag(ProductModel product) async {
+    try {
+      // 1. Add the item to the cart via the API
+      await CartService.addToCart(
+        productId: product.id,
+        quantity: 1, // Default quantity when moving from wishlist
+      );
+
+      // 2. Remove it from the wishlist so it doesn't stay behind
+      await _removeFromWishlist(product);
+
+      if (!mounted) return;
+
+      // 3. Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${product.productName} moved to bag')),
+      );
+
+      // 4. Navigate directly to the Cart Screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const CartScreen(),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      // Show error if the add-to-cart fails
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
   void _openProduct(ProductModel product) {
     Navigator.push(
       context,
@@ -112,6 +178,16 @@ class _WishlistScreenState extends State<WishlistScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFFFAF7F2),
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              context.go('/home');
+            }
+          },
+        ),
         title: const Text(
           'Wishlist',
           style: TextStyle(
@@ -347,7 +423,8 @@ class _WishlistScreenState extends State<WishlistScreen> {
                   top: 8,
                   right: 8,
                   child: GestureDetector(
-                    onTap: () => _removeFromWishlist(product),
+                    // UPDATE THIS LINE to call the new confirmation dialog
+                    onTap: () => _confirmRemoveFromWishlist(product),
                     child: Container(
                       padding: const EdgeInsets.all(5),
                       decoration: const BoxDecoration(
@@ -437,7 +514,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
     );
   }
 
-  Future<void> _moveToBag(ProductModel product) async {
+  /*Future<void> _moveToBag(ProductModel product) async {
     // TODO: Call your CartService to add the item to the bag.
     // Example: await CartService.addToCart(product.id, quantity: 1);
     
@@ -447,7 +524,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
     
     // Optional: Myntra typically removes the item from the wishlist once moved to the bag.
     // _removeFromWishlist(product); 
-  }
+  }*/
 
   Widget _emptyState({
     required IconData icon,

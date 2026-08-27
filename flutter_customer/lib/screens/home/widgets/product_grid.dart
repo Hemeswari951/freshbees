@@ -43,7 +43,7 @@ class _ProductGridState extends State<ProductGrid> {
   final Set<int> _wishlistIds = {};
 
   bool get _isLoggedIn {
-    final token = ApiService.getToken();
+    final token = ApiService.getAccessToken();
     return token != null && token.isNotEmpty;
   }
 

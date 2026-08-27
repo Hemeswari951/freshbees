@@ -6,7 +6,7 @@ import 'routing/app_router.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
  
-  await ApiService.loadToken();
+  await ApiService.loadTokens();
  
   runApp(const ThiraaCustomer());
 }

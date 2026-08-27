@@ -149,7 +149,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // destination so the login flow can send the user back afterwards.
   void _goToProtected(BuildContext context, String route) {
     final isLoggedIn =
-        ApiService.getToken() != null && ApiService.getToken()!.isNotEmpty;
+        ApiService.getAccessToken() != null && ApiService.getAccessToken()!.isNotEmpty;
 
     if (isLoggedIn) {
       context.go(route);

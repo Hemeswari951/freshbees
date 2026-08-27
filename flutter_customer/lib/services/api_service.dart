@@ -27,7 +27,9 @@ class ApiService {
   static String get serverUrl => AppConfig.serverUrl;
   static String get baseUrl => '$serverUrl/api/customer';
 
-  static String? _token;
+  //static String? _token;
+  static String? _accessToken;
+static String? _refreshToken;
 
   // ============================================================
   // IMAGE URL
@@ -81,108 +83,218 @@ class ApiService {
       return true;
     }
   }
+
+  static bool _isTokenExpiredResponse(http.Response response) {
+  try {
+    final body = jsonDecode(response.body);
+
+    return body['code'] == 'TOKEN_EXPIRED';
+  } catch (_) {
+    return false;
+  }
+}
   
   // =========================
   // TOKEN MANAGEMENT
   // =========================
 
-  static Future<void> setToken(
-    String? token, {
-    Map<String, dynamic>? customer,
-  }) async {
-    _token = token;
+  static Future<void> setTokens({
+  required String accessToken,
+  String? refreshToken,
+  Map<String, dynamic>? customer,
+}) async {
+  _accessToken = accessToken;
 
-    final prefs = await SharedPreferences.getInstance();
-
-    if (token == null || token.isEmpty) {
-      await prefs.remove('customer_token');
-      await prefs.remove('user_name');
-    } else {
-      await prefs.setString('customer_token', token);
-
-      if (customer != null) {
-        String fullName =
-            '${customer['first_name'] ?? ''} ${customer['last_name'] ?? ''}'
-                .trim();
-        await prefs.setString(
-          'user_name',
-          fullName.isNotEmpty ? fullName : 'User',
-        );
-      }
-    }
+  if (refreshToken != null && refreshToken.isNotEmpty) {
+    _refreshToken = refreshToken;
   }
 
-  static Future<void> loadToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('customer_token');
+  final prefs = await SharedPreferences.getInstance();
+
+  await prefs.setString(
+    'customer_access_token',
+    accessToken,
+  );
+
+  if (refreshToken != null && refreshToken.isNotEmpty) {
+    await prefs.setString(
+      'customer_refresh_token',
+      refreshToken,
+    );
   }
 
-  static Future<void> clearToken() async {
-    _token = null;
+  if (customer != null) {
+    final fullName =
+        '${customer['first_name'] ?? ''} ${customer['last_name'] ?? ''}'
+            .trim();
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('customer_token');
-    await prefs.remove('user_name');
+    await prefs.setString(
+      'user_name',
+      fullName.isNotEmpty ? fullName : 'User',
+    );
   }
+}
+  static Future<void> loadTokens() async {
+  final prefs = await SharedPreferences.getInstance();
 
-  static String? getToken() => _token;
+  _accessToken = prefs.getString('customer_access_token');
+  _refreshToken = prefs.getString('customer_refresh_token');
+
+  debugPrint(
+    'Access token loaded: ${_accessToken != null}',
+  );
+
+  debugPrint(
+    'Refresh token loaded: ${_refreshToken != null}',
+  );
+}
+
+  static Future<void> clearTokens() async {
+  _accessToken = null;
+  _refreshToken = null;
+
+  final prefs = await SharedPreferences.getInstance();
+
+  await prefs.remove('customer_access_token');
+  await prefs.remove('customer_refresh_token');
+  await prefs.remove('user_name');
+}
+
+  //static String? getToken() => _token;
+  static String? getAccessToken() => _accessToken;
+
+static String? getRefreshToken() => _refreshToken;
 
   // =========================
   // HEADERS
   // =========================
   static Map<String, String> get headers => {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    if (_token != null && _token!.isNotEmpty) 'Authorization': 'Bearer $_token',
-  };
+  'Content-Type': 'application/json',
+  'Accept': 'application/json',
+  if (_accessToken != null && _accessToken!.isNotEmpty)
+    'Authorization': 'Bearer $_accessToken',
+};
 
   static Future<Map<String, dynamic>> get(String endpoint) async {
-    final res = await http.get(
-      Uri.parse('$baseUrl$endpoint'),
-      headers: headers,
-    );
-    return _handle(res);
+  var res = await http.get(
+    Uri.parse('$baseUrl$endpoint'),
+    headers: headers,
+  );
+
+  if (res.statusCode == 401 &&
+      _isTokenExpiredResponse(res)) {
+    final refreshed = await refreshAccessToken();
+
+    if (refreshed) {
+      res = await http.get(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: headers,
+      );
+    }
   }
 
-  static Future<Map<String, dynamic>> post(String endpoint, Map body) async {
-    final res = await http.post(
-      Uri.parse('$baseUrl$endpoint'),
-      headers: headers,
-      body: jsonEncode(body),
-    );
-    return _handle(res);
+  return _handle(res);
+}
+  static Future<Map<String, dynamic>> post(
+  String endpoint,
+  Map body,
+) async {
+  var res = await http.post(
+    Uri.parse('$baseUrl$endpoint'),
+    headers: headers,
+    body: jsonEncode(body),
+  );
+
+  if (res.statusCode == 401 &&
+      _isTokenExpiredResponse(res)) {
+    final refreshed = await refreshAccessToken();
+
+    if (refreshed) {
+      res = await http.post(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: headers,
+        body: jsonEncode(body),
+      );
+    }
   }
 
-  static Future<Map<String, dynamic>> patch(String endpoint, Map body) async {
-    final res = await http.patch(
-      Uri.parse('$baseUrl$endpoint'),
-      headers: headers,
-      body: jsonEncode(body),
-    );
-    return _handle(res);
+  return _handle(res);
+}
+
+
+  static Future<Map<String, dynamic>> patch(
+  String endpoint,
+  Map body,
+) async {
+  var res = await http.patch(
+    Uri.parse('$baseUrl$endpoint'),
+    headers: headers,
+    body: jsonEncode(body),
+  );
+
+  if (res.statusCode == 401 &&
+      _isTokenExpiredResponse(res)) {
+    final refreshed = await refreshAccessToken();
+
+    if (refreshed) {
+      res = await http.patch(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: headers,
+        body: jsonEncode(body),
+      );
+    }
   }
 
-  static Future<Map<String, dynamic>> put(
-    String endpoint,
-    Map<String, dynamic> body,
-  ) async {
-    final res = await http.put(
-      Uri.parse('$baseUrl$endpoint'),
-      headers: headers,
-      body: jsonEncode(body),
-    );
+  return _handle(res);
+}
 
-    return _handle(res);
+ static Future<Map<String, dynamic>> put(
+  String endpoint,
+  Map<String, dynamic> body,
+) async {
+  var res = await http.put(
+    Uri.parse('$baseUrl$endpoint'),
+    headers: headers,
+    body: jsonEncode(body),
+  );
+
+  if (res.statusCode == 401 &&
+      _isTokenExpiredResponse(res)) {
+    final refreshed = await refreshAccessToken();
+
+    if (refreshed) {
+      res = await http.put(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: headers,
+        body: jsonEncode(body),
+      );
+    }
   }
+
+  return _handle(res);
+}
 
   static Future<Map<String, dynamic>> delete(String endpoint) async {
-    final res = await http.delete(
-      Uri.parse('$baseUrl$endpoint'),
-      headers: headers,
-    );
+  var res = await http.delete(
+    Uri.parse('$baseUrl$endpoint'),
+    headers: headers,
+  );
 
-    return _handle(res);
+  if (res.statusCode == 401 &&
+      _isTokenExpiredResponse(res)) {
+    final refreshed = await refreshAccessToken();
+
+    if (refreshed) {
+      res = await http.delete(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: headers,
+      );
+    }
   }
+
+  return _handle(res);
+}
+
 
   static Map<String, dynamic> _handle(http.Response res) {
     print("STATUS: ${res.statusCode}");
@@ -211,4 +323,58 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('user_name');
   }
+
+  static Future<bool> refreshAccessToken() async {
+  try {
+    if (_refreshToken == null || _refreshToken!.isEmpty) {
+      debugPrint('No refresh token available');
+      return false;
+    }
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/refresh-token'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: jsonEncode({
+        'refreshToken': _refreshToken,
+      }),
+    );
+
+    debugPrint('REFRESH STATUS: ${response.statusCode}');
+    debugPrint('REFRESH BODY: ${response.body}');
+
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300) {
+      return false;
+    }
+
+    final body = jsonDecode(response.body);
+
+    final newAccessToken = body['accessToken'];
+
+    if (newAccessToken == null ||
+        newAccessToken.toString().isEmpty) {
+      return false;
+    }
+
+    _accessToken = newAccessToken.toString();
+
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.setString(
+      'customer_access_token',
+      _accessToken!,
+    );
+
+    debugPrint('Access token refreshed successfully');
+
+    return true;
+  } catch (e) {
+    debugPrint('Refresh token error: $e');
+    return false;
+  }
+}
+
 }

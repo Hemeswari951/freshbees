@@ -84,7 +84,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
 
   // Guests don't have a wishlist — heart just stays unfilled for them.
   Future<void> _checkWishlistStatus() async {
-    final token = ApiService.getToken();
+    final token = ApiService.getAccessToken();
     if (token == null || token.isEmpty) return;
     try {
       final items = await WishlistService.getWishlist();
@@ -98,7 +98,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
   }
 
   Future<void> _toggleWishlist() async {
-    final token = ApiService.getToken();
+    final token = ApiService.getAccessToken();
     if (token == null || token.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please login to use your wishlist')),
@@ -253,7 +253,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
   /// returns false (and shows the right message / navigates to login)
   /// if the flow shouldn't proceed.
   bool _passesPreChecks() {
-    final token = ApiService.getToken();
+    final token = ApiService.getAccessToken();
  
     if (token == null || token.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -286,7 +286,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
  
 
   Future<void> _handleAddToBag() async {
-  final token = ApiService.getToken();
+  final token = ApiService.getAccessToken();
 
   // ==========================================
   // GUEST USER → GO TO LOGIN

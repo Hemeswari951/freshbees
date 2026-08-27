@@ -28,7 +28,7 @@ class _TryOnEntryScreenState extends State<TryOnEntryScreen> {
     // 1. CHECK LOGIN
     // ==========================================
 
-    final token = ApiService.getToken();
+    final token = ApiService.getAccessToken();
 
     if (token == null || token.isEmpty) {
       context.go('/login?redirect=/trial');

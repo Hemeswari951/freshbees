@@ -73,7 +73,7 @@ class _ReviewsSectionState extends State<ReviewsSection> {
   // Guests don't have a token — skip the call entirely rather than
   // hitting the 401 and showing an error for something that's expected.
   Future<void> _loadEligibility() async {
-    final token = ApiService.getToken();
+    final token = ApiService.getAccessToken();
     if (token == null || token.isEmpty) {
       _eligibility = null;
       return;
@@ -113,7 +113,7 @@ class _ReviewsSectionState extends State<ReviewsSection> {
   }
 
   Future<void> _openWriteOrEditSheet() async {
-    final token = ApiService.getToken();
+    final token = ApiService.getAccessToken();
     if (token == null || token.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please login to write a review')),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../services/cart_service.dart';
 import '../address/address_screen.dart';
+import '../../services/wishlist_service.dart';
 
 /// Bag / Cart screen.
 /// e-commerce cart page.
@@ -18,12 +19,15 @@ class _CartScreenState extends State<CartScreen> {
   bool _placingOrder = false;
   List<CartItemModel> _items = [];
   double _subtotal = 0;
-
+// Track which items are currently checked/selected
+  final Set<int> _selectedCartItemIds = {};
+ 
   // cartItemId → true while that row's quantity/remove request is in flight,
   // so only that row shows a spinner instead of blocking the whole screen.
   final Set<int> _busyRows = {};
-
+  
   static const double _desktopBreakpoint = 900;
+
   static const double _maxContentWidth = 1000;
   static const Color _bg = Color(0xFFFAF7F2);
   static const Color _accent = Color(0xFF8B7355);
@@ -36,7 +40,7 @@ class _CartScreenState extends State<CartScreen> {
     _loadCart();
   }
 
-  Future<void> _loadCart() async {
+Future<void> _loadCart() async {
     setState(() {
       _loading = true;
       _error = null;
@@ -46,7 +50,12 @@ class _CartScreenState extends State<CartScreen> {
       if (!mounted) return;
       setState(() {
         _items = result.items;
-        _subtotal = result.subtotal;
+       
+        _selectedCartItemIds.retainWhere(
+          (id) => _items.any((item) => item.cartItemId == id)
+        );
+       
+        _recalculateSubtotal();
         _loading = false;
       });
     } catch (e) {
@@ -57,11 +66,35 @@ class _CartScreenState extends State<CartScreen> {
       });
     }
   }
-
+ 
   void _recalculateSubtotal() {
-    _subtotal = _items.fold(0, (sum, i) => sum + i.lineTotal);
+    _subtotal = _items
+        .where((i) => _selectedCartItemIds.contains(i.cartItemId))
+        .fold(0, (sum, i) => sum + i.lineTotal);
   }
-
+ void _toggleSelectAll() {
+    setState(() {
+      if (_selectedCartItemIds.length == _items.length) {
+        _selectedCartItemIds.clear();
+      } else {
+        _selectedCartItemIds.clear();
+        _selectedCartItemIds.addAll(_items.map((i) => i.cartItemId));
+      }
+      _recalculateSubtotal();
+    });
+  }
+ 
+  void _toggleItemSelection(int cartItemId) {
+    setState(() {
+      if (_selectedCartItemIds.contains(cartItemId)) {
+        _selectedCartItemIds.remove(cartItemId);
+      } else {
+        _selectedCartItemIds.add(cartItemId);
+      }
+      _recalculateSubtotal();
+    });
+  }
+ 
   Future<void> _changeQuantity(CartItemModel item, int newQty) async {
     if (newQty < 1) {
       _removeItem(item);
@@ -88,6 +121,7 @@ class _CartScreenState extends State<CartScreen> {
       if (!mounted) return;
       setState(() {
         _items.removeWhere((i) => i.cartItemId == item.cartItemId);
+        _selectedCartItemIds.remove(item.cartItemId);
         _recalculateSubtotal();
         _busyRows.remove(item.cartItemId);
       });
@@ -107,19 +141,77 @@ class _CartScreenState extends State<CartScreen> {
   // chosen. When that flow finishes and pops back here, we just reload the
   // cart so it reflects whatever the server actually ordered/cleared.
   Future<void> _handleBuyNow() async {
-    if (_items.isEmpty) return;
-
+    final selectedCount = _selectedCartItemIds.length;
+    if (selectedCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select at least one item to proceed')),
+      );
+      return;
+    }
+ 
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => AddressScreen(
           subtotal: _subtotal,
-          itemCount: _items.length,
+          itemCount: selectedCount,
         ),
       ),
     );
-
+ 
     if (mounted) _loadCart();
   }
+  Future<void> _confirmRemoveItem(CartItemModel item) async {
+    // Change the return type from bool to String to handle multiple button actions
+    final action = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: const Text('Move from Bag', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
+          content: const Text('Are you sure you want to move this item from your bag?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('wishlist'), // Returns 'wishlist'
+              child: const Text('MOVE TO WISHLIST', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('remove'), // Returns 'remove'
+              child: const Text('REMOVE', style: TextStyle(color: Color(0xFFFF3E6C), fontWeight: FontWeight.w600)),
+            ),
+          ],
+        );
+      },
+    );
+ 
+    // Handle standard removal
+    if (action == 'remove') {
+      _removeItem(item);
+    }
+    // Handle move to wishlist
+    else if (action == 'wishlist') {
+      // 1. Remove it from the cart
+      _removeItem(item);
+     
+      // 2. Add it to the wishlist
+      try {
+        // NOTE: Make sure `addToWishlist` (or equivalent method name) exists in your WishlistService
+        await WishlistService.addToWishlist(item.productId);
+       
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Item moved to wishlist')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+          );
+        }
+      }
+    }
+  }
+ 
 
   @override
   Widget build(BuildContext context) {
@@ -195,17 +287,23 @@ class _CartScreenState extends State<CartScreen> {
 
     final list = RefreshIndicator(
       onRefresh: _loadCart,
-      child: ListView.separated(
-        padding: EdgeInsets.fromLTRB(16, 16, 16, isDesktop ? 16 : 16),
-        itemCount: _items.length,
+       child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: _items.length + 1, // +1 for the select-all header
         separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (context, index) => _buildCartTile(_items[index]),
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return _buildSelectionHeader();
+          }
+          return _buildCartTile(_items[index - 1]);
+        },
       ),
     );
-
+ 
     if (!isDesktop) {
       return list;
     }
+ 
 
     // Desktop: centered, max-width, list on the left + a sticky order
     // summary card on the right — the familiar cart-page layout instead of
@@ -227,6 +325,32 @@ class _CartScreenState extends State<CartScreen> {
       ),
     );
   }
+  Widget _buildSelectionHeader() {
+    final allSelected = _items.isNotEmpty && _selectedCartItemIds.length == _items.length;
+ 
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _cardBorder),
+      ),
+      child: Row(
+        children: [
+          Checkbox(
+            value: allSelected,
+            activeColor: _accent,
+            onChanged: (_) => _toggleSelectAll(),
+          ),
+          Text(
+            '${_selectedCartItemIds.length}/${_items.length} ITEMS SELECTED',
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+ 
 
   Widget _buildSummaryCard() {
     return Container(
@@ -302,6 +426,7 @@ class _CartScreenState extends State<CartScreen> {
 
   Widget _buildCartTile(CartItemModel item) {
     final busy = _busyRows.contains(item.cartItemId);
+    final isSelected = _selectedCartItemIds.contains(item.cartItemId);
     final imageUrl = item.thumbnail.isNotEmpty
         ? '${ApiService.serverUrl}${item.thumbnail}'
         : null;
@@ -316,6 +441,14 @@ class _CartScreenState extends State<CartScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+           Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Checkbox(
+              value: isSelected,
+              activeColor: _accent,
+              onChanged: (_) => _toggleItemSelection(item.cartItemId),
+            ),
+          ),
           // Fixed-size box regardless of image load state, so a slow or
           // failed image never collapses the row to zero height.
           ClipRRect(
@@ -403,8 +536,9 @@ class _CartScreenState extends State<CartScreen> {
           Column(
             children: [
               IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.black45, size: 20),
-                onPressed: busy ? null : () => _removeItem(item),
+                // CHANGED: Icons.delete_outline is now Icons.close
+                icon: const Icon(Icons.close, color: Colors.black45, size: 20),
+                onPressed: busy ? null : () => _confirmRemoveItem(item),
               ),
               Text(
                 '₹${item.lineTotal.toStringAsFixed(0)}',

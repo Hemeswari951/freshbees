@@ -115,7 +115,7 @@ class _CustomerHeaderState extends State<CustomerHeader> {
   // destination so the login flow can send the user back afterwards.
   void _goToProtected(BuildContext context, String route) {
     final isLoggedIn =
-        ApiService.getToken() != null && ApiService.getToken()!.isNotEmpty;
+        ApiService.getAccessToken() != null && ApiService.getAccessToken()!.isNotEmpty;
 
     if (isLoggedIn) {
       context.go(route);
@@ -410,7 +410,7 @@ class _ProfileHoverMenuState extends State<_ProfileHoverMenu> {
   Timer? _closeTimer;
 
   bool get _isLoggedIn =>
-      ApiService.getToken() != null && ApiService.getToken()!.isNotEmpty;
+      ApiService.getAccessToken() != null && ApiService.getAccessToken()!.isNotEmpty;
 
   // TODO: wire this up to your real ApiService / user model if the
   // name source ever changes (e.g. ApiService.currentUser?.name).

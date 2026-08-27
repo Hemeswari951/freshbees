@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_thiraa/screens/profile/coupons_screen.dart';
+import 'package:flutter_thiraa/screens/profile/help_centre_screen.dart';
 import 'package:go_router/go_router.dart';
 import '../../models/profile_section.dart';
 import '../../services/api_service.dart';
@@ -6,6 +8,9 @@ import '../../screens/profile/orders_screen.dart';
 import '../../screens/profile/saved_addresses_screen.dart';
 import '../../screens/profile/saved_cards_screen.dart';
 import '../../screens/profile/overview_screen.dart';
+
+import 'notifications_screen.dart';
+
 
 // Same palette style as your mobile ProfileScreen — kept local to this file.
 class _Palette {
@@ -188,15 +193,15 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
       case ProfileSection.orders:
         return const OrdersScreen();
       case ProfileSection.coupons:
-        return _placeholder(section);
+        return const CouponsScreen();
       case ProfileSection.savedCards:
         return const SavedCardsScreen();
       case ProfileSection.savedAddress:
         return const SavedAddressesScreen();
       case ProfileSection.helpCenter:
-        return _placeholder(section);
+        return const HelpCentreScreen();
       case ProfileSection.notificationSettings:
-        return _placeholder(section);
+        return const NotificationsScreen();
       case ProfileSection.faqs:
         return _placeholder(section);
       case ProfileSection.aboutUs:

@@ -60,7 +60,7 @@ class AddressModel {
 class AddressService {
   static Map<String, String> get _headers => {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${ApiService.getToken()}',
+        'Authorization': 'Bearer ${ApiService.getAccessToken()}',
       };
 
   /// GET /api/customer/addresses

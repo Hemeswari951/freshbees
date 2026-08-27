@@ -6,7 +6,7 @@ import '../models/order_model.dart';
 
 class OrderService {
   static Future<List<OrderModel>> getMyOrders() async {
-    final token = ApiService.getToken();
+    final token = ApiService.getAccessToken();
 
     if (token == null || token.isEmpty) {
       throw Exception('Please login to view your orders');
