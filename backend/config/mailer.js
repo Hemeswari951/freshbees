@@ -38,8 +38,11 @@ if (PROVIDER === 'smtp') {
   // ---------- Brevo (HTTPS API) — works on Render free tier, no domain required ----------
   transporter = {
     async sendMail({ to, subject, html }) {
-      const safeFrom = process.env.MAIL_FROM || 'no-reply@thiraa.com';
-
+      const safeFrom = process.env.MAIL_FROM || 'dinesh20010921@gmail.com';
+       console.log('DEBUG — Provider:', PROVIDER);
+  console.log('DEBUG — API Key exists:', !!process.env.BREVO_API_KEY);
+  console.log('DEBUG — API Key length:', process.env.BREVO_API_KEY?.length);
+  console.log('DEBUG — From:', safeFrom);
       const response = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: {
