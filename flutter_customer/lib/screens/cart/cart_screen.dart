@@ -142,6 +142,7 @@ Future<void> _loadCart() async {
   // cart so it reflects whatever the server actually ordered/cleared.
   Future<void> _handleBuyNow() async {
     final selectedCount = _selectedCartItemIds.length;
+    final selectedCartItemIds = _selectedCartItemIds.toList();
     if (selectedCount == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select at least one item to proceed')),
@@ -154,6 +155,7 @@ Future<void> _loadCart() async {
         builder: (_) => AddressScreen(
           subtotal: _subtotal,
           itemCount: selectedCount,
+          cartItemIds: selectedCartItemIds,
         ),
       ),
     );
