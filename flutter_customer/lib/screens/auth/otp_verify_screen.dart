@@ -170,8 +170,8 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
         );
       }
       if (!mounted) return;
-      Navigator.of(context).popUntil((route) => route.isFirst);
-      context.go(widget.redirectRoute ?? '/home');
+
+context.go(widget.redirectRoute ?? '/home');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
