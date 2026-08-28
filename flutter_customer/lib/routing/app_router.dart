@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../widgets/customer_layout.dart';
 import '../widgets/splash_screen.dart';
+import '../services/api_service.dart';
  
 import '../screens/auth/login_screen.dart';
  
@@ -11,6 +12,7 @@ import '../screens/cart/cart_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../models/profile_section.dart';
 import '../screens/profile/profile_details_screen.dart';
+import '../screens/notifications/notifications _screen.dart';
  
 import '../screens/virtual_tryon/add_person_screen.dart';
 import '../screens/virtual_tryon/style_profile_screen.dart';
@@ -282,6 +284,24 @@ final GoRouter appRouter = GoRouter(
   builder: (context, state) => const FaqScreen(),
 ),
  
+ GoRoute(
+  path: '/notifications',
+  redirect: (context, state) {
+    final token = ApiService.getAccessToken();
+
+    if (token == null || token.isEmpty) {
+      return Uri(
+        path: '/login',
+        queryParameters: {
+          'redirect': '/notifications',
+        },
+      ).toString();
+    }
+
+    return null;
+  },
+  builder: (context, state) => const NotificationsScreen(),
+),
  
         // ─────────────────────────────────────────
         // PRODUCT LIST

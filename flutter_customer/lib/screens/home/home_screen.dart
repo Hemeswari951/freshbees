@@ -149,17 +149,22 @@ class _HomeScreenState extends State<HomeScreen> {
   // If not logged in, redirects to /login and passes the intended
   // destination so the login flow can send the user back afterwards.
   void _goToProtected(BuildContext context, String route) {
-    final isLoggedIn =
-        ApiService.getAccessToken() != null && ApiService.getAccessToken()!.isNotEmpty;
+  final token = ApiService.getAccessToken();
 
-    if (isLoggedIn) {
-      context.go(route);
-    } else {
-      context.go(
-        Uri(path: '/login', queryParameters: {'redirect': route}).toString(),
-      );
-    }
+  if (token == null || token.isEmpty) {
+    context.go(
+      Uri(
+        path: '/login',
+        queryParameters: {
+          'redirect': route,
+        },
+      ).toString(),
+    );
+    return;
   }
+
+  context.go(route);
+}
 
   @override
   Widget build(BuildContext context) {
@@ -577,13 +582,7 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(width: 8),
         _buildHeaderIconButton(
   icon: Icons.notifications_none_outlined,
-  onTap: () {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const NotificationsScreen(),
-      ),
-    );
-  },
+ onTap: () => _goToProtected(context, '/notifications'),
 ),
 
         const SizedBox(width: 8),
