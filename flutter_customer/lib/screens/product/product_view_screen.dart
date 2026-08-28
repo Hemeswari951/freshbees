@@ -267,7 +267,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
         context.go(
           Uri(
             path: '/login',
-            queryParameters: {'redirect': '/shop/${widget.productId}'},
+            queryParameters: {'redirect': '/shops/${widget.productId}'},
           ).toString(),
         );
       });
@@ -307,7 +307,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
       Uri(
         path: '/login',
         queryParameters: {
-          'redirect': '/shop/${widget.productId}',
+          'redirect': '/shops/${widget.productId}',
         },
       ).toString(),
     );
