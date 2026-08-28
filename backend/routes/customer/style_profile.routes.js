@@ -4,7 +4,7 @@ const router = express.Router();
 
 const styleProfileController = require("../../controllers/customer/style_profile.controller");
 
-const customerAuth = require("../../middleware/customerauth");
+const customerAuth = require("../../middleware/customerAuth");
 
 // Every style-profile route requires a logged-in customer.
 router.use(customerAuth);

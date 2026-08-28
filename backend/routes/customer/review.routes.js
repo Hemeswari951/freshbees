@@ -3,7 +3,7 @@ const router = express.Router({ mergeParams: true }); // so :productId (from the
 
 const reviewController = require('../../controllers/customer/review.controller');
 // TODO: confirm this path matches where customerAuth.js actually lives in your project.
-const customerAuth = require('../../middleware/customerauth');
+const customerAuth = require('../../middleware/customerAuth');
 
 // GET /api/customer/products/:productId/reviews?sort=recent&page=1&limit=10
 router.get('/', reviewController.getProductReviews);

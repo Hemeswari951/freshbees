@@ -15,7 +15,7 @@ const express = require("express");
 const router = express.Router();
 
 const orderController = require("../../controllers/customer/order.controller");
-const customerAuth = require("../../middleware/customerauth");
+const customerAuth = require("../../middleware/customerAuth");
 
 // POST /api/customer/orders  { product_id, variant_id?, quantity }
 router.post("/", customerAuth, orderController.placeOrder);

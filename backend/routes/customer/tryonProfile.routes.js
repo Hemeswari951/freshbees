@@ -6,7 +6,7 @@ const tryonProfileController =
     require("../../controllers/customer/tryonProfile.controller");
 
 const customerAuth =
-    require("../../middleware/customerauth");
+    require("../../middleware/customerAuth");
 
 const {
   upload,

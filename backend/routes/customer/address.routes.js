@@ -3,7 +3,7 @@ const express = require("express");
 const router = express.Router();
 
 const addressController = require("../../controllers/customer/address.controller");
-const customerAuth = require("../../middleware/customerauth");
+const customerAuth = require("../../middleware/customerAuth");
 
 // Every address route needs a logged-in customer.
 router.use(customerAuth);
