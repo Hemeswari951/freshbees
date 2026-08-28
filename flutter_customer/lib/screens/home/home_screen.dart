@@ -5,6 +5,7 @@ import 'dart:async';
 import '../product/product_list_screen.dart';
 import '../../services/api_service.dart';
 import '../../services/search_service.dart';
+import '../../screens/notifications/notifications _screen.dart';
 
 import 'tabs/all_tab.dart';
 import 'tabs/men_tab.dart';
@@ -575,9 +576,15 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(width: 8),
         _buildHeaderIconButton(
-          icon: Icons.notifications_none_outlined,
-          onTap: () => _goToProtected(context, '/notifications'),
-        ),
+  icon: Icons.notifications_none_outlined,
+  onTap: () {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const NotificationScreen(),
+      ),
+    );
+  },
+),
 
         const SizedBox(width: 8),
         _buildHeaderIconButton(

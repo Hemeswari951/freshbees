@@ -9,7 +9,7 @@ import '../../screens/profile/saved_addresses_screen.dart';
 import '../../screens/profile/saved_cards_screen.dart';
 import '../../screens/profile/overview_screen.dart';
  
-import 'notifications_screen.dart';
+import 'notifications_settings.dart';
 import 'package:flutter_thiraa/screens/profile/faq_screen.dart';
 import '../../screens/profile/about_us_screen.dart';
 import 'package:flutter_thiraa/screens/profile/terms_policies_screen.dart';
