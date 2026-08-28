@@ -1,0 +1,11 @@
+const express = require('express');
+const router  = express.Router();
+
+router.use('/auth',      require('./auth.routes'));
+router.use('/dashboard', require('./dashboard.routes'));
+router.use('/shops',     require('./shops.routes'));
+router.use('/products',  require('./product.routes'));
+router.use('/customers', require('./customer.route'));
+// router.use('/orders',    require('./orders.routes'));
+router.use('/settings', require('./settings.routes'));
+module.exports = router;
