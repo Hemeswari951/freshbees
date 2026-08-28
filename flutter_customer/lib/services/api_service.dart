@@ -5,8 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'dart:io';
 
 class AppConfig {
-  static const bool isDevelopment = true;
-  //static const bool isDevelopment = false;
+  //static const bool isDevelopment = true;
+  static const bool isDevelopment = false;
 
 
   static String get serverUrl {
