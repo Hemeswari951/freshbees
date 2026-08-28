@@ -6,7 +6,7 @@ const productController = require('../../controllers/admin/product.controller');
 // ⚠️ Adjust this import to match whatever admin-auth middleware your app
 // already uses elsewhere (the one that verifies the admin JWT sent as
 // `Authorization: Bearer <token>` by ApiService.headers).
-const adminAuth = require('../../middleware/adminauth');
+const adminAuth = require('../../middleware/adminAuth');
 
 // GET /api/admin/products
 // Optional query params: shopId, categoryId, isActive, search
