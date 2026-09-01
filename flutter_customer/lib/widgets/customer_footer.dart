@@ -30,9 +30,9 @@ class CustomerFooter extends StatelessWidget {
     final isLoggedIn = token != null && token.isNotEmpty;
 
     if (isLoggedIn) {
-      context.go(route);
+      context.push(route);
     } else {
-      context.go(
+      context.push(
         Uri(path: '/login', queryParameters: {'redirect': route}).toString(),
       );
     }

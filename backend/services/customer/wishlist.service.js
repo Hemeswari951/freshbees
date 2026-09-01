@@ -1,6 +1,6 @@
 // backend/services/customer/wishlist.service.js
 const pool = require('../../config/db');
- 
+
 // discount_percent is never stored — same derivation used everywhere else
 // on the customer side (see services/customer/product.service.js).
 const DISCOUNT_SQL = `
@@ -9,7 +9,7 @@ const DISCOUNT_SQL = `
     ELSE ROUND(((p.mrp - p.price) / p.mrp) * 100)::INT
   END
 `;
- 
+
 // ── Add a product to the customer's wishlist ──────────────────────────────
 // Manual existence check instead of relying on an ON CONFLICT upsert, so
 // this keeps working even if the (customer_id, product_id) unique
@@ -21,11 +21,11 @@ async function addToWishlist(customerId, productId) {
      WHERE customer_id = $1 AND product_id = $2`,
     [customerId, productId]
   );
- 
+
   if (existing.rows[0]) {
     return existing.rows[0]; // already wishlisted — nothing to do
   }
- 
+
   const { rows } = await pool.query(
     `INSERT INTO wishlist (customer_id, product_id)
      VALUES ($1, $2)
@@ -34,7 +34,7 @@ async function addToWishlist(customerId, productId) {
   );
   return rows[0] || null;
 }
- 
+
 // ── Remove a product from the customer's wishlist ─────────────────────────
 async function removeFromWishlist(customerId, productId) {
   const { rows } = await pool.query(
@@ -45,19 +45,27 @@ async function removeFromWishlist(customerId, productId) {
   );
   return rows[0] || null;
 }
- 
+
 // ── Every wishlisted product for this customer ─────────────────────────────
 // Same active-product / unblocked-shop rule as the rest of the customer
 // catalog (see findAllPublicProducts) — if the owner deactivates a product
 // or the admin blocks its shop, it simply stops appearing here. The
 // wishlist row itself is left untouched, so it reappears automatically the
 // moment the product/shop is reactivated.
+//
+// Ratings: there is no `rating` column on `products` — it has to be
+// derived from the `reviews` table (one row per customer review, 1-5
+// stars). The `rv` LATERAL/subquery below computes the average rating and
+// review count per product, same idea as the commented-out
+// `product_ratings` view in schema.sql, just inlined here so it stays in
+// one query instead of needing a real view + a join to it.
 async function getWishlistProducts(customerId) {
   const { rows } = await pool.query(
     `
     SELECT
       p.product_id,
       p.product_name,
+      p.sub_category,
       p.description,
       p.mrp,
       p.price,
@@ -69,6 +77,8 @@ async function getWishlistProducts(customerId) {
       b.brand_name,
       COALESCE(img.image_url, NULL) AS thumbnail,
       COALESCE(v.total_stock, 0) AS total_stock,
+      COALESCE(rv.avg_rating, 0)::NUMERIC(3,2) AS rating,
+      COALESCE(rv.review_count, 0) AS review_count,
       w.added_at
     FROM wishlist w
     JOIN products p ON p.product_id = w.product_id
@@ -90,6 +100,11 @@ async function getWishlistProducts(customerId) {
       FROM product_variants
       GROUP BY product_id
     ) v ON v.product_id = p.product_id
+    LEFT JOIN (
+      SELECT product_id, AVG(rating) AS avg_rating, COUNT(review_id) AS review_count
+      FROM reviews
+      GROUP BY product_id
+    ) rv ON rv.product_id = p.product_id
     WHERE w.customer_id = $1
       AND p.is_active = true
       AND s.is_blocked = false
@@ -99,7 +114,7 @@ async function getWishlistProducts(customerId) {
   );
   return rows;
 }
- 
+
 module.exports = {
   addToWishlist,
   removeFromWishlist,

@@ -46,6 +46,7 @@ class AuthService {
       if (loginResponse.success && loginResponse.token != null) {
         await ApiService.setToken(
           loginResponse.token,
+          refreshToken: loginResponse.refreshToken,
           customer: loginResponse.customer,
         );
       }
@@ -91,6 +92,7 @@ class AuthService {
       if (loginResponse.success && loginResponse.token != null) {
         await ApiService.setToken(
           loginResponse.token,
+          refreshToken: loginResponse.refreshToken,
           customer: loginResponse.customer,
         );
       }
@@ -127,6 +129,7 @@ class AuthService {
       if (loginResponse.success && loginResponse.token != null) {
         await ApiService.setToken(
           loginResponse.token,
+          refreshToken: loginResponse.refreshToken,
           customer: loginResponse.customer,
         );
       }
@@ -166,6 +169,7 @@ class AuthService {
       if (loginResponse.success && loginResponse.token != null) {
         await ApiService.setToken(
           loginResponse.token,
+          refreshToken: loginResponse.refreshToken,
           customer: loginResponse.customer,
         );
       }
@@ -196,6 +200,7 @@ class AuthService {
       return LoginResponse(
         success: false,
         message: e.toString().replaceFirst("Exception: ", ""),
+        refreshToken: null,
       );
     }
   }
@@ -226,31 +231,26 @@ class AuthService {
   //=========================
   // LOGOUT
   //=========================
-
   static Future<LoginResponse> logout() async {
-    // Clear the local token FIRST, before the network call — this is the
-    // part that actually controls whether the app treats the user as
-    // logged in. Previously this ran AFTER the /auth/logout API call
-    // finished, so the UI kept showing the old logged-in state (stale
-    // username) until that network call completed, because nothing
-    // re-rendered once the token was eventually cleared. Clearing it up
-    // front makes logout instant and independent of network/server state
-    // (expired token, no connection, slow response, etc. no longer matter).
-    await ApiService.clearToken();
+    final refreshToken = ApiService.getRefreshToken();
 
     try {
-      final response = await ApiService.post("/auth/logout", {});
-      return LoginResponse.fromJson(response);
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await ApiService.post("/auth/logout", {"refreshToken": refreshToken});
+      }
+
+      return LoginResponse(success: true, message: "Logout Successful");
     } catch (e) {
-      // Local session is already cleared above, so a failed/timed-out
-      // server call here doesn't leave the app stuck "logged in".
       return LoginResponse(
         success: false,
         message: e.toString().replaceFirst("Exception: ", ""),
       );
+    } finally {
+      // Always clear local session,
+      // even if server logout fails.
+      await ApiService.clearToken();
     }
   }
-
   //=========================
   // TOKEN HELPERS
   //=========================

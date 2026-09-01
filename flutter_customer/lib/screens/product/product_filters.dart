@@ -33,6 +33,16 @@ class FilterDataOptions {
     '2.0★ & above',
   ];
 
+  /// One small icon per left-nav category — purely cosmetic, gives the
+  /// desktop panel a bit more visual identity than plain text rows.
+  static const Map<String, IconData> categoryIcons = {
+    'Price Range': Icons.sell_outlined,
+    'Size': Icons.straighten_outlined,
+    'Color': Icons.palette_outlined,
+    'Discount': Icons.percent_rounded,
+    'Rating': Icons.star_outline_rounded,
+  };
+
   /// Best-effort color swatch for a color name coming from the backend.
   /// Falls back to grey if the name isn't recognized — this only affects
   /// the little preview circle, it never gates which colors are
@@ -94,6 +104,10 @@ class ProductFilters {
     this.selectedFilters = const {},
   });
 
+  bool get hasPriceFilter =>
+      priceRange.start > fullPriceRange.start ||
+      priceRange.end < fullPriceRange.end;
+
   int get activeCount =>
       selectedFilters.values.fold(0, (sum, set) => sum + set.length);
 
@@ -110,8 +124,6 @@ class ProductFilters {
   Map<String, String> toQueryParams() {
     final params = <String, String>{};
 
-    final hasPriceFilter = priceRange.start > fullPriceRange.start ||
-        priceRange.end < fullPriceRange.end;
     if (hasPriceFilter) {
       params['min_price'] = priceRange.start.round().toString();
       params['max_price'] = priceRange.end.round().toString();
@@ -178,6 +190,38 @@ class ProductFilters {
 
     return true;
   }
+
+  /// Value equality (not identity) so the FilterPanel can tell whether
+  /// an incoming `initialFilters` from the parent actually represents a
+  /// *different* selection than what it already has in its local draft,
+  /// vs. just being a freshly-constructed instance carrying the same
+  /// values (which happens on almost every parent rebuild).
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! ProductFilters) return false;
+    if (priceRange != other.priceRange) return false;
+    if (selectedFilters.length != other.selectedFilters.length) return false;
+    for (final entry in selectedFilters.entries) {
+      final otherSet = other.selectedFilters[entry.key];
+      if (otherSet == null || otherSet.length != entry.value.length) {
+        return false;
+      }
+      if (!entry.value.every(otherSet.contains)) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode {
+    var h = priceRange.hashCode;
+    final keys = selectedFilters.keys.toList()..sort();
+    for (final k in keys) {
+      final values = selectedFilters[k]!.toList()..sort();
+      h = Object.hash(h, k, Object.hashAll(values));
+    }
+    return h;
+  }
 }
 
 /// Bundle passed to the mobile /filter route via go_router's `extra`.
@@ -213,6 +257,17 @@ class ThiraaCompleteFilterPanel extends StatefulWidget {
 
   final ValueChanged<ProductFilters>? onApply;
 
+  /// When true (desktop sidebar usage):
+  ///  - every checkbox/radio toggle calls [onApply] immediately, so the
+  ///    product grid updates live without any explicit "Apply" step.
+  ///  - the bottom Cancel / Show-Products bar is hidden entirely, since
+  ///    there's nothing left to "apply" or "cancel" — every change is
+  ///    already live.
+  /// When false (mobile full-page usage, default): behavior is
+  /// unchanged — user edits filters freely and only Cancel/Apply
+  /// commits or discards the result via Navigator.pop.
+  final bool isDesktop;
+
   const ThiraaCompleteFilterPanel({
     super.key,
     this.initialFilters,
@@ -220,6 +275,7 @@ class ThiraaCompleteFilterPanel extends StatefulWidget {
     this.availableSizes = const [],
     this.availableColors = const [],
     this.onApply,
+    this.isDesktop = false,
   });
 
   @override
@@ -233,13 +289,43 @@ class _ThiraaCompleteFilterPanelState extends State<ThiraaCompleteFilterPanel> {
   int _selectedCategoryIndex = 0;
 
   static const Color primaryGold = Color(0xFF9E6B27);
+  static const Color primaryGoldSoft = Color(0xFFF3E7D6);
   static const Color lightBg = Color(0xFFFAF7F2);
   static const Color borderCol = Color(0xFFE5DCD3);
 
   @override
   void initState() {
     super.initState();
-    final filters = widget.initialFilters ?? const ProductFilters();
+    _syncFrom(widget.initialFilters ?? const ProductFilters());
+  }
+
+  /// Keeps this widget in sync whenever the PARENT hands it a different
+  /// filter value than what it currently holds — e.g. the "Clear
+  /// filters" link shown on the empty-results state resets
+  /// ProductListScreen's `_filters` to defaults, which flows back down
+  /// here as a new `initialFilters`. Without this, the panel's own
+  /// internal `_selectedFilters` would keep showing the old ticks even
+  /// though the grid outside had already gone back to "all products".
+  ///
+  /// Comparing against the CURRENT local draft (not the previous
+  /// `oldWidget.initialFilters`) means a rebuild triggered by the
+  /// panel's own edit (onApply -> parent setState -> new widget config
+  /// with the *same* value) never stomps on what the user is doing,
+  /// since `incoming == current` in that case and nothing happens.
+  @override
+  void didUpdateWidget(covariant ThiraaCompleteFilterPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final incoming = widget.initialFilters ?? const ProductFilters();
+    final current = ProductFilters(
+      priceRange: _priceRange,
+      selectedFilters: _selectedFilters,
+    );
+    if (incoming != current) {
+      _syncFrom(incoming);
+    }
+  }
+
+  void _syncFrom(ProductFilters filters) {
     _priceRange = filters.priceRange;
     _selectedFilters = {
       for (final entry in filters.selectedFilters.entries)
@@ -252,6 +338,16 @@ class _ThiraaCompleteFilterPanelState extends State<ThiraaCompleteFilterPanel> {
 
   bool _isSelected(String groupKey, String item) =>
       (_selectedFilters[groupKey] ?? const {}).contains(item);
+
+  /// Desktop-only: pushes the current draft filters straight to the
+  /// parent (ProductListScreen -> _applyDesktopFilters) so the grid on
+  /// the left re-filters immediately, with no Apply button needed.
+  void _applyIfDesktop() {
+    if (!widget.isDesktop) return;
+    widget.onApply?.call(
+      ProductFilters(priceRange: _priceRange, selectedFilters: _selectedFilters),
+    );
+  }
 
   void _toggleSelection(String groupKey, String item) {
     setState(() {
@@ -267,6 +363,7 @@ class _ThiraaCompleteFilterPanelState extends State<ThiraaCompleteFilterPanel> {
         _selectedFilters = {..._selectedFilters, groupKey: current};
       }
     });
+    _applyIfDesktop();
   }
 
   void _selectSingle(String groupKey, String item) {
@@ -278,13 +375,32 @@ class _ThiraaCompleteFilterPanelState extends State<ThiraaCompleteFilterPanel> {
         _selectedFilters = {..._selectedFilters, groupKey: {item}};
       }
     });
+    _applyIfDesktop();
   }
 
   void _removeSelection(String groupKey, String item) =>
       _toggleSelection(groupKey, item);
 
+  /// Clears just ONE group's selections (Size only, Color only, etc.)
+  /// without touching any other filter — used by the per-section
+  /// "Clear" link shown at the top of the right-hand panel.
+  void _clearGroup(String groupKey) {
+    if ((_selectedFilters[groupKey] ?? const {}).isEmpty) return;
+    setState(() {
+      _selectedFilters = {..._selectedFilters}..remove(groupKey);
+    });
+    _applyIfDesktop();
+  }
+
+  void _clearPriceRange() {
+    if (!ProductFilters(priceRange: _priceRange).hasPriceFilter) return;
+    setState(() => _priceRange = ProductFilters.fullPriceRange);
+    _applyIfDesktop();
+  }
+
   /// Live count of how many of widget.allProducts match the filters
-  /// AS CURRENTLY BEING EDITED (not yet applied).
+  /// AS CURRENTLY BEING EDITED (not yet applied on mobile; already
+  /// applied on desktop since every change pushes to the parent too).
   int get _liveMatchCount {
     final draft = ProductFilters(
       priceRange: _priceRange,
@@ -300,187 +416,315 @@ class _ThiraaCompleteFilterPanelState extends State<ThiraaCompleteFilterPanel> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      // No AppBar — no back / close icons. Cancel at the bottom is the
-      // way out without applying.
+      // No AppBar — no back / close icons. On mobile, Cancel at the
+      // bottom is the way out without applying. On desktop there's no
+      // bottom bar at all — every toggle is already live.
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Filters',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      total > 0 ? '$matched of $total products' : 'Refine your search',
-                      style: const TextStyle(fontSize: 11, color: Colors.grey),
-                    ),
-                  ],
-                ),
-                TextButton.icon(
-                  onPressed: () => setState(() => _selectedFilters = {}),
-                  icon: const Icon(Icons.refresh, size: 14, color: primaryGold),
-                  label: const Text(
-                    'Reset All',
-                    style: TextStyle(
-                        color: primaryGold, fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (_selectedFilters.isNotEmpty)
-            Container(
-              width: double.infinity,
-              color: lightBg,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    const Text(
-                      'SELECTIONS: ',
-                      style: TextStyle(
-                          fontSize: 9, fontWeight: FontWeight.bold, color: Colors.black54),
-                    ),
-                    for (final entry in ProductFilters(
-                      selectedFilters: _selectedFilters,
-                    ).flattenedSelections)
-                      Container(
-                        margin: const EdgeInsets.only(right: 6),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: borderCol),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(entry.value,
-                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500)),
-                            const SizedBox(width: 4),
-                            GestureDetector(
-                              onTap: () => _removeSelection(entry.key, entry.value),
-                              child: const Icon(Icons.close, size: 10, color: Colors.black54),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
+          _buildHeader(total, matched),
+          if (_selectedFilters.isNotEmpty) _buildSelectionsStrip(),
           const Divider(height: 1, color: borderCol),
           Expanded(
             child: Row(
               children: [
-                Container(
-                  width: 135,
-                  color: lightBg,
-                  child: ListView.builder(
-                    itemCount: _currentLeftNav.length,
-                    itemBuilder: (context, index) {
-                      final isSelected = index == _selectedCategoryIndex;
-                      final groupKey = _currentLeftNav[index];
-                      final groupCount = _selectedFilters[groupKey]?.length ?? 0;
-                      return InkWell(
-                        onTap: () => setState(() => _selectedCategoryIndex = index),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 10),
-                          decoration: BoxDecoration(
-                            color: isSelected ? Colors.white : lightBg,
-                            border: Border(
-                              left: BorderSide(
-                                color: isSelected ? primaryGold : Colors.transparent,
-                                width: 3.5,
-                              ),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  groupKey,
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                    color: isSelected ? primaryGold : Colors.black87,
-                                  ),
-                                ),
-                              ),
-                              if (groupCount > 0)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: primaryGold,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text('$groupCount',
-                                      style: const TextStyle(
-                                          fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold)),
-                                ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
+                _buildLeftNav(),
                 const VerticalDivider(width: 1, color: borderCol),
                 Expanded(child: _buildRightSelectionArea()),
               ],
             ),
           ),
+          // Desktop: no Cancel/Show-Products bar — every toggle above is
+          // already pushed live to the parent via _applyIfDesktop().
+          // Mobile: keep the original commit/discard bar.
+          if (!widget.isDesktop) _buildCommitBar(total, matched),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // HEADER
+  // ---------------------------------------------------------------------
+
+  Widget _buildHeader(int total, int matched) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 16, 12, 14),
+      decoration: const BoxDecoration(
+        color: lightBg,
+        border: Border(bottom: BorderSide(color: borderCol)),
+      ),
+      child: Row(
+        children: [
           Container(
-            padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: borderCol)),
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: primaryGoldSoft,
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Row(
+            child: const Icon(Icons.tune_rounded, size: 18, color: primaryGold),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: primaryGold),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    onPressed: () => Navigator.maybePop(context),
-                    child: const Text('CANCEL',
-                        style: TextStyle(color: primaryGold, fontWeight: FontWeight.bold, fontSize: 11)),
-                  ),
+                const Text(
+                  'Filters',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryGold,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    onPressed: () {
-                      final result = ProductFilters(
-                        priceRange: _priceRange,
-                        selectedFilters: _selectedFilters,
-                      );
-                      widget.onApply?.call(result);
-                      Navigator.maybePop(context, result);
-                    },
-                    child: Text(
-                      total > 0 ? 'SHOW $matched PRODUCTS' : 'APPLY FILTERS',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
-                    ),
-                  ),
+                Text(
+                  total > 0 ? '$matched of $total products' : 'Refine your search',
+                  style: const TextStyle(fontSize: 11, color: Colors.black54),
                 ),
               ],
             ),
           ),
+          TextButton.icon(
+            onPressed: () {
+              setState(() {
+                _selectedFilters = {};
+                _priceRange = ProductFilters.fullPriceRange;
+              });
+              _applyIfDesktop();
+            },
+            icon: const Icon(Icons.refresh_rounded, size: 14, color: primaryGold),
+            label: const Text(
+              'Reset All',
+              style: TextStyle(
+                  color: primaryGold, fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: const BorderSide(color: borderCol),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectionsStrip() {
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final entry in ProductFilters(
+              selectedFilters: _selectedFilters,
+            ).flattenedSelections)
+              Container(
+                margin: const EdgeInsets.only(right: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: primaryGoldSoft,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(entry.value,
+                        style: const TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: primaryGold)),
+                    const SizedBox(width: 5),
+                    GestureDetector(
+                      onTap: () => _removeSelection(entry.key, entry.value),
+                      child: const Icon(Icons.close_rounded,
+                          size: 12, color: primaryGold),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // LEFT NAV
+  // ---------------------------------------------------------------------
+
+  Widget _buildLeftNav() {
+    return Container(
+      width: 140,
+      color: lightBg,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: ListView.builder(
+        itemCount: _currentLeftNav.length,
+        itemBuilder: (context, index) {
+          final isSelected = index == _selectedCategoryIndex;
+          final groupKey = _currentLeftNav[index];
+          final groupCount = _selectedFilters[groupKey]?.length ?? 0;
+          final icon = FilterDataOptions.categoryIcons[groupKey];
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            child: Material(
+              color: isSelected ? Colors.white : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => setState(() => _selectedCategoryIndex = index),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 11, horizontal: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: isSelected
+                        ? Border.all(color: primaryGold.withOpacity(0.35))
+                        : null,
+                  ),
+                  child: Row(
+                    children: [
+                      if (icon != null) ...[
+                        Icon(icon,
+                            size: 15,
+                            color: isSelected ? primaryGold : Colors.black45),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(
+                        child: Text(
+                          groupKey,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight:
+                                isSelected ? FontWeight.w700 : FontWeight.w500,
+                            color: isSelected ? primaryGold : Colors.black87,
+                          ),
+                        ),
+                      ),
+                      if (groupCount > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: primaryGold,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text('$groupCount',
+                              style: const TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold)),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // COMMIT BAR (mobile only)
+  // ---------------------------------------------------------------------
+
+  Widget _buildCommitBar(int total, int matched) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: borderCol)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: primaryGold),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              onPressed: () => Navigator.maybePop(context),
+              child: const Text('CANCEL',
+                  style: TextStyle(
+                      color: primaryGold,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11)),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryGold,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              onPressed: () {
+                final result = ProductFilters(
+                  priceRange: _priceRange,
+                  selectedFilters: _selectedFilters,
+                );
+                widget.onApply?.call(result);
+                Navigator.maybePop(context, result);
+              },
+              child: Text(
+                total > 0 ? 'SHOW $matched PRODUCTS' : 'APPLY FILTERS',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // RIGHT PANEL — per-section header (with its own Clear) + content
+  // ---------------------------------------------------------------------
+
+  /// Every section in the right pane gets the same header shape: an
+  /// icon + label on the left, and — only when that specific group has
+  /// an active selection — a "Clear" link on the right that resets
+  /// JUST that group, leaving every other filter untouched.
+  Widget _sectionHeader(String label, {required VoidCallback? onClear}) {
+    final icon = FilterDataOptions.categoryIcons[label];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 14, color: primaryGold),
+            const SizedBox(width: 6),
+          ],
+          Expanded(
+            child: Text(
+              label.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.4,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+          if (onClear != null)
+            GestureDetector(
+              onTap: onClear,
+              child: const Text(
+                'Clear',
+                style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: primaryGold),
+              ),
+            ),
         ],
       ),
     );
@@ -489,49 +733,111 @@ class _ThiraaCompleteFilterPanelState extends State<ThiraaCompleteFilterPanel> {
   Widget _buildRightSelectionArea() {
     switch (_currentGroupKey) {
       case 'Price Range':
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('PRICE RANGE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-              RangeSlider(
-                values: _priceRange,
-                min: 0,
-                max: 5000,
-                activeColor: primaryGold,
-                onChanged: (val) => setState(() => _priceRange = val),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        final hasPriceFilter =
+            ProductFilters(priceRange: _priceRange).hasPriceFilter;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionHeader('Price Range',
+                onClear: hasPriceFilter ? _clearPriceRange : null),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('₹${_priceRange.start.round()}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                  Text('₹${_priceRange.end.round()}+',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  RangeSlider(
+                    values: _priceRange,
+                    min: 0,
+                    max: 5000,
+                    activeColor: primaryGold,
+                    onChanged: (val) => setState(() => _priceRange = val),
+                    // Apply on release, not on every drag frame — avoids
+                    // re-filtering the whole grid dozens of times a
+                    // second while the thumb is being dragged.
+                    onChangeEnd: (val) {
+                      setState(() => _priceRange = val);
+                      _applyIfDesktop();
+                    },
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('₹${_priceRange.start.round()}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 12)),
+                      Text('₹${_priceRange.end.round()}+',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 12)),
+                    ],
+                  ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         );
       case 'Size':
-        if (widget.availableSizes.isEmpty) {
-          return const Center(
-            child: Text('No sizes available', style: TextStyle(fontSize: 12, color: Colors.grey)),
-          );
-        }
-        return _buildGridList('Size', widget.availableSizes);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionHeader('Size',
+                onClear: (_selectedFilters['Size'] ?? const {}).isNotEmpty
+                    ? () => _clearGroup('Size')
+                    : null),
+            Expanded(
+              child: widget.availableSizes.isEmpty
+                  ? const Center(
+                      child: Text('No sizes available',
+                          style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    )
+                  : _buildGridList('Size', widget.availableSizes),
+            ),
+          ],
+        );
       case 'Color':
-        if (widget.availableColors.isEmpty) {
-          return const Center(
-            child: Text('No colors available', style: TextStyle(fontSize: 12, color: Colors.grey)),
-          );
-        }
-        return _buildColorList('Color', widget.availableColors);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionHeader('Color',
+                onClear: (_selectedFilters['Color'] ?? const {}).isNotEmpty
+                    ? () => _clearGroup('Color')
+                    : null),
+            Expanded(
+              child: widget.availableColors.isEmpty
+                  ? const Center(
+                      child: Text('No colors available',
+                          style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    )
+                  : _buildColorList('Color', widget.availableColors),
+            ),
+          ],
+        );
       case 'Discount':
-        return _buildRadioList('Discount', FilterDataOptions.discountOptions);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionHeader('Discount',
+                onClear: (_selectedFilters['Discount'] ?? const {}).isNotEmpty
+                    ? () => _clearGroup('Discount')
+                    : null),
+            Expanded(
+              child: _buildRadioList(
+                  'Discount', FilterDataOptions.discountOptions),
+            ),
+          ],
+        );
       case 'Rating':
-        return _buildRadioList('Rating', FilterDataOptions.ratingOptions);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionHeader('Rating',
+                onClear: (_selectedFilters['Rating'] ?? const {}).isNotEmpty
+                    ? () => _clearGroup('Rating')
+                    : null),
+            Expanded(
+              child: _buildRadioList('Rating', FilterDataOptions.ratingOptions),
+            ),
+          ],
+        );
       default:
         return const SizedBox.shrink();
     }
@@ -569,7 +875,7 @@ class _ThiraaCompleteFilterPanelState extends State<ThiraaCompleteFilterPanel> {
 
   Widget _buildGridList(String groupKey, List<String> list) {
     return GridView.builder(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         childAspectRatio: 2.3,
@@ -582,10 +888,11 @@ class _ThiraaCompleteFilterPanelState extends State<ThiraaCompleteFilterPanel> {
         final isSelected = _isSelected(groupKey, item);
         return InkWell(
           onTap: () => _toggleSelection(groupKey, item),
+          borderRadius: BorderRadius.circular(6),
           child: Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: isSelected ? lightBg : Colors.white,
+              color: isSelected ? primaryGoldSoft : Colors.white,
               border: Border.all(color: isSelected ? primaryGold : borderCol, width: isSelected ? 1.5 : 1),
               borderRadius: BorderRadius.circular(6),
             ),

@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
 import '../services/search_service.dart';
-import '../screens/product/product_list_screen.dart'; // adjust path if different
 import './app_colors.dart';
 
 class CustomerHeader extends StatefulWidget {
@@ -88,21 +87,19 @@ class _CustomerHeaderState extends State<CustomerHeader> {
   }
 
   void _handleSearch(String query) {
-    if (query.trim().isEmpty) return;
+    final trimmed = query.trim();
+
+    if (trimmed.isEmpty) return;
+
     if (_searchOverlayController.isShowing) {
       _searchOverlayController.hide();
     }
+
     _searchFocusNode.unfocus();
-    // Same destination as the mobile HomeScreen search bar — direct to
-    // ProductListScreen, not a separate /search route.
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ProductListScreen(
-          args: ProductListArgs.search(query: query.trim()),
-        ),
-      ),
-    );
+
+    final uri = Uri(path: '/products', queryParameters: {'search': trimmed});
+
+    context.push(uri.toString());
   }
 
   void _onSuggestionTap(SearchSuggestion suggestion) {
@@ -118,9 +115,9 @@ class _CustomerHeaderState extends State<CustomerHeader> {
         ApiService.getToken() != null && ApiService.getToken()!.isNotEmpty;
 
     if (isLoggedIn) {
-      context.go(route);
+      context.push(route);
     } else {
-      context.go(
+      context.push(
         Uri(path: '/login', queryParameters: {'redirect': route}).toString(),
       );
     }
@@ -136,7 +133,7 @@ class _CustomerHeaderState extends State<CustomerHeader> {
         children: [
           // Logo
           InkWell(
-            onTap: () => context.go('/home'),
+            onTap: () => context.push('/home'),
             child: const Text(
               'Thiraa',
               style: TextStyle(
@@ -156,7 +153,7 @@ class _CustomerHeaderState extends State<CustomerHeader> {
                   (link) => Padding(
                     padding: const EdgeInsets.only(right: 22),
                     child: InkWell(
-                      onTap: () => context.go(link.route),
+                      onTap: () => context.push(link.route),
                       child: Text(
                         link.label,
                         style: const TextStyle(
@@ -201,14 +198,17 @@ class _CustomerHeaderState extends State<CustomerHeader> {
                                 borderRadius: BorderRadius.circular(12),
                                 color: AppColors.white,
                                 child: SizedBox(
-                                  width: 420, // roughly matches the search bar width
+                                  width:
+                                      420, // roughly matches the search bar width
                                   child: ConstrainedBox(
-                                    constraints:
-                                        const BoxConstraints(maxHeight: 320),
+                                    constraints: const BoxConstraints(
+                                      maxHeight: 320,
+                                    ),
                                     child: ListView.separated(
                                       shrinkWrap: true,
-                                      padding:
-                                          const EdgeInsets.symmetric(vertical: 6),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 6,
+                                      ),
                                       itemCount: _suggestions.length,
                                       separatorBuilder: (_, __) =>
                                           const Divider(height: 1),
@@ -263,8 +263,11 @@ class _CustomerHeaderState extends State<CustomerHeader> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.search,
-                          size: 20, color: AppColors.textGrey),
+                      const Icon(
+                        Icons.search,
+                        size: 20,
+                        color: AppColors.textGrey,
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: TextField(
@@ -389,12 +392,24 @@ class _ProfileMenuItem {
 const List<_ProfileMenuItem> _profileMenuItems = [
   _ProfileMenuItem(Icons.dashboard_outlined, 'Overview', 'overview'),
   _ProfileMenuItem(Icons.receipt_long_outlined, 'Orders', 'orders'),
-  _ProfileMenuItem(Icons.favorite_border, 'Wishlist', '/wishlist'), // separate route, not a tab
+  _ProfileMenuItem(
+    Icons.favorite_border,
+    'Wishlist',
+    '/wishlist',
+  ), // separate route, not a tab
   _ProfileMenuItem(Icons.local_offer_outlined, 'Coupons', 'coupons'),
   _ProfileMenuItem(Icons.help_outline, 'Help Center', 'help-center'),
   _ProfileMenuItem(Icons.credit_card_outlined, 'Saved Cards', 'saved-cards'),
-  _ProfileMenuItem(Icons.location_on_outlined, 'Saved Address', 'saved-address'),
-  _ProfileMenuItem(Icons.notifications_none, 'Notification Settings', 'notification-settings'),
+  _ProfileMenuItem(
+    Icons.location_on_outlined,
+    'Saved Address',
+    'saved-address',
+  ),
+  _ProfileMenuItem(
+    Icons.notifications_none,
+    'Notification Settings',
+    'notification-settings',
+  ),
 ];
 
 class _ProfileHoverMenu extends StatefulWidget {
@@ -408,27 +423,43 @@ class _ProfileHoverMenuState extends State<_ProfileHoverMenu> {
   final LayerLink _layerLink = LayerLink();
   final OverlayPortalController _overlayController = OverlayPortalController();
   Timer? _closeTimer;
+  Timer? _authPollTimer; // ADD
 
-  bool get _isLoggedIn =>
-      ApiService.getToken() != null && ApiService.getToken()!.isNotEmpty;
-
-  // TODO: wire this up to your real ApiService / user model if the
-  // name source ever changes (e.g. ApiService.currentUser?.name).
+  bool _isLoggedIn = false; // CHANGED: was a getter, now a real field
   String _userName = 'My Account';
 
   @override
   void initState() {
     super.initState();
-    _loadUserName();
+    _refreshAuthState();
+    // Since the header lives inside a ShellRoute and /login is pushed
+    // OUTSIDE the shell, popping back from login never rebuilds this
+    // widget. Polling every second is a cheap, self-contained way to
+    // pick up the login/logout without wiring a global notifier.
+    _authPollTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _refreshAuthState(),
+    );
   }
 
-  Future<void> _loadUserName() async {
-    final name = await ApiService.getUserName();
+  Future<void> _refreshAuthState() async {
+    final loggedIn =
+        ApiService.getToken() != null && ApiService.getToken()!.isNotEmpty;
 
-    if (mounted) {
+    if (loggedIn != _isLoggedIn) {
+      // Login/logout state flipped — reload the name too.
+      final name = loggedIn ? await ApiService.getUserName() : null;
+      if (!mounted) return;
       setState(() {
+        _isLoggedIn = loggedIn;
         _userName = name ?? 'My Account';
       });
+    } else if (loggedIn && _userName == 'My Account') {
+      // Still logged in but name hasn't loaded yet (e.g. first check
+      // right after token was set, before prefs write completed).
+      final name = await ApiService.getUserName();
+      if (!mounted) return;
+      if (name != null) setState(() => _userName = name);
     }
   }
 
@@ -439,8 +470,6 @@ class _ProfileHoverMenuState extends State<_ProfileHoverMenu> {
     }
   }
 
-  // Small delay so moving the mouse from the icon into the dropdown
-  // panel doesn't close it in between.
   void _scheduleClose() {
     _closeTimer?.cancel();
     _closeTimer = Timer(const Duration(milliseconds: 150), () {
@@ -449,55 +478,41 @@ class _ProfileHoverMenuState extends State<_ProfileHoverMenu> {
   }
 
   void _navigate(String routeOrSlug) {
-  _overlayController.hide();
+    _overlayController.hide();
+    final String target = routeOrSlug.startsWith('/')
+        ? routeOrSlug
+        : '/profile/details?section=$routeOrSlug';
 
-  // Wishlist has its own top-level route — everything else is a
-  // ProfileDetailsScreen tab, addressed via ?section=<slug>.
-  final String target = routeOrSlug.startsWith('/')
-      ? routeOrSlug
-      : '/profile/details?section=$routeOrSlug';
-
-  if (_isLoggedIn) {
-    context.go(target);
-  } else {
-    context.go(
-      Uri(path: '/login', queryParameters: {'redirect': target}).toString(),
-    );
+    if (_isLoggedIn) {
+      context.push(target);
+    } else {
+      context.push(
+        Uri(path: '/login', queryParameters: {'redirect': target}).toString(),
+      );
+    }
   }
-}
 
-  // TODO: point this at your real sign-out logic
-  // (e.g. ApiService.clearToken() / ApiService.logout()).
   Future<void> _logout() async {
     _overlayController.hide();
-    // IMPORTANT: await this. AuthService.logout() clears the local token
-    // (now synchronously up front, see auth_service.dart) — but the
-    // header only re-renders with the new logged-out state once setState
-    // below runs. If we don't await, setState can fire before the token
-    // is actually cleared and the header keeps showing the old username.
     await AuthService.logout();
     if (!mounted) return;
     setState(() {
+      _isLoggedIn = false;
       _userName = 'My Account';
     });
-    context.go('/home');
+    context.push('/home');
   }
 
   @override
   void dispose() {
+    _authPollTimer?.cancel(); // ADD
     _closeTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // If the user just logged in (isLoggedIn is now true) but we still
-    // have the placeholder name, fetch it — without this, the header
-    // keeps showing "Profile"/placeholder until a manual refresh since
-    // _loadUserName() otherwise only runs once in initState().
-    if (_isLoggedIn && _userName == 'My Account') {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadUserName());
-    }
+    // REMOVE the old postFrameCallback check — polling now handles this.
 
     return CompositedTransformTarget(
       link: _layerLink,
@@ -523,10 +538,9 @@ class _ProfileHoverMenuState extends State<_ProfileHoverMenu> {
                         isLoggedIn: _isLoggedIn,
                         userName: _userName,
                         onItemTap: _navigate,
-                        // Single combined action: goes straight to /login.
                         onLoginTap: () {
                           _overlayController.hide();
-                          context.go('/login');
+                          context.push('/login');
                         },
                         onLogoutTap: _logout,
                       ),
@@ -543,7 +557,8 @@ class _ProfileHoverMenuState extends State<_ProfileHoverMenu> {
           child: _ProfileTrigger(
             isLoggedIn: _isLoggedIn,
             userName: _userName,
-            onTap: () => _open,
+            onTap:
+                _open, // also fixed: was `() => _open` (bug, never called it)
           ),
         ),
       ),
@@ -634,14 +649,22 @@ class _ProfileDropdownPanel extends StatelessWidget {
                     ElevatedButton(
                       onPressed: onLoginTap, // navigates to /login
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color.fromARGB(255, 96, 213, 234), // attractive coral accent
+                        backgroundColor: const Color.fromARGB(
+                          255,
+                          96,
+                          213,
+                          234,
+                        ), // attractive coral accent
                         foregroundColor: AppColors.white,
                         elevation: 0,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
                         shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(4), // square-ish corners
+                          borderRadius: BorderRadius.circular(
+                            4,
+                          ), // square-ish corners
                         ),
                       ),
                       child: const Text(
@@ -668,7 +691,7 @@ class _ProfileDropdownPanel extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                       'WelCome $userName',
+                        'WelCome $userName',
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                         style: const TextStyle(
@@ -696,7 +719,9 @@ class _ProfileDropdownPanel extends StatelessWidget {
                     onTap: () => onItemTap(item.route),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       child: Row(
                         children: [
                           Icon(item.icon, size: 18, color: AppColors.black),
@@ -724,8 +749,7 @@ class _ProfileDropdownPanel extends StatelessWidget {
               InkWell(
                 onTap: onLogoutTap,
                 child: const Padding(
-                  padding:
-                      EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(
                     children: [
                       Icon(Icons.logout, size: 18, color: Colors.red),

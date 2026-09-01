@@ -5,6 +5,11 @@ const productService = require('../../services/customer/product.service');
 // Flutter filter panel actually filters on. Without them, ProductModel
 // gets empty sizes/colors/rating=0 for every product and Size/Color/
 // Rating filters silently match nothing.
+//
+// reviewCount added — service now selects review_count on every list
+// query (findAllPublicProducts, findPublicProductsByShop,
+// findPublicProductsBySearch), so this just needs to forward it into the
+// JSON the same way rating already is.
 function mapListItem(row) {
   return {
     id: row.product_id,
@@ -25,6 +30,7 @@ function mapListItem(row) {
     sizes: row.sizes || [],
     colors: row.colors || [],
     rating: row.rating != null ? Number(row.rating) : 0,
+    reviewCount: Number(row.review_count) || 0,
   };
 }
 

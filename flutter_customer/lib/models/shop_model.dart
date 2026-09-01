@@ -15,6 +15,8 @@ class ShopModel {
   final String? state;
   final String? address;
 
+  final String? phone; // ADDED PHONE PROPERTY
+
   final double rating;
   final int ratingCount;
 
@@ -23,7 +25,7 @@ class ShopModel {
   final String? ownerEmail;
   final String? ownerPhone;
   final String? ownerProfileImage;
-  
+
   ShopModel({
     required this.id,
     required this.shopName,
@@ -34,6 +36,7 @@ class ShopModel {
     this.city,
     this.state,
     this.address,
+    this.phone, // ADDED TO CONSTRUCTOR
     this.rating = 0.0,
     this.ratingCount = 0,
     this.status = 'Active',
@@ -60,12 +63,7 @@ class ShopModel {
           .where((e) => e.isNotEmpty)
           .toList();
     } else {
-      // Support old API response:
-      // "category": "Men"
-      // "categoryLabel": "Men"
-
       final String? category = json['category']?.toString();
-
       final String? categoryLabel = json['categoryLabel']?.toString();
 
       if (category != null && category.isNotEmpty) {
@@ -106,74 +104,26 @@ class ShopModel {
     }
 
     return ShopModel(
-      // ------------------------------------------------------------
-      // ID
-      // ------------------------------------------------------------
-
       id: json['id'] ?? json['shop_id'] ?? 0,
-
-      // ------------------------------------------------------------
-      // Shop Name
-      // ------------------------------------------------------------
       shopName: (json['shopName'] ?? json['shop_name'] ?? '').toString(),
-
-      // ------------------------------------------------------------
-      // Description
-      // ------------------------------------------------------------
       description: json['description']?.toString(),
-
-      // ------------------------------------------------------------
-      // Shop Logo
-      //
-      // Supports:
-      // logoUrl
-      // shopLogo
-      // shop_logo
-      // ------------------------------------------------------------
       shopLogo: (json['logoUrl'] ?? json['shopLogo'] ?? json['shop_logo'])
           ?.toString(),
-
-      // ------------------------------------------------------------
-      // Shop Banner
-      //
-      // Supports:
-      // shopBanner
-      // bannerUrl
-      // shop_banner
-      // ------------------------------------------------------------
       shopBanner:
           (json['shopBanner'] ?? json['bannerUrl'] ?? json['shop_banner'])
               ?.toString(),
-
-      // ------------------------------------------------------------
-      // Categories
-      // ------------------------------------------------------------
       categories: parsedCategories,
-
-      // ------------------------------------------------------------
-      // Location
-      // ------------------------------------------------------------
       city: json['city']?.toString(),
-
       state: json['state']?.toString(),
-
       address: json['address']?.toString(),
 
-      // ------------------------------------------------------------
-      // Rating
-      // ------------------------------------------------------------
+      // PARSE PHONE NUMBER FROM MULTIPLE POSSIBLE KEYS
+      phone: (json['phone'] ?? json['shop_phone'] ?? json['contact'])
+          ?.toString(),
+
       rating: parsedRating,
-
-      // ------------------------------------------------------------
-      // Rating Count
-      // ------------------------------------------------------------
       ratingCount: parsedRatingCount,
-
-      // ------------------------------------------------------------
-      // Status
-      // ------------------------------------------------------------
       status: (json['status'] ?? 'Active').toString(),
-
       ownerName: json['ownerName']?.toString(),
       ownerEmail: json['ownerEmail']?.toString(),
       ownerPhone: json['ownerPhone']?.toString(),
@@ -189,7 +139,6 @@ class ShopModel {
     if (categories.isNotEmpty) {
       return categories.join(', ');
     }
-
     return 'Shop';
   }
 
@@ -202,10 +151,8 @@ class ShopModel {
       if (state != null && state!.isNotEmpty) {
         return '$city, $state';
       }
-
       return city!;
     }
-
     return address ?? '';
   }
 
@@ -217,13 +164,9 @@ class ShopModel {
     if (shopLogo == null || shopLogo!.isEmpty) {
       return null;
     }
-
-    // If backend already returns a complete URL
     if (shopLogo!.startsWith('http://') || shopLogo!.startsWith('https://')) {
       return shopLogo;
     }
-
-    // If backend returns relative path
     return '${ApiService.serverUrl}$shopLogo';
   }
 
@@ -235,14 +178,10 @@ class ShopModel {
     if (shopBanner == null || shopBanner!.isEmpty) {
       return null;
     }
-
-    // If backend already returns a complete URL
     if (shopBanner!.startsWith('http://') ||
         shopBanner!.startsWith('https://')) {
       return shopBanner;
     }
-
-    // If backend returns relative path
     return '${ApiService.serverUrl}$shopBanner';
   }
 

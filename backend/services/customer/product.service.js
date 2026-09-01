@@ -89,6 +89,37 @@ const FILTER_SELECT_COLS = `
 `;
 
 // -----------------------------------------------------------------------------
+// REVIEW COUNT JOIN
+// -----------------------------------------------------------------------------
+// Separate from FILTER_JOINS above because FILTER_JOINS' rating_agg only
+// computes avg_rating (used for the `rating` field / filter panel).
+// findAllPublicProducts already had its own inline `rv` join for
+// review_count — pulled out here so findPublicProductsByShop and
+// findPublicProductsBySearch can reuse it instead of duplicating it.
+// Without this, shop-page and search-result products always came back
+// with reviewCount = 0 even when reviews existed.
+// -----------------------------------------------------------------------------
+
+const REVIEW_JOIN = `
+  LEFT JOIN (
+    SELECT
+      product_id,
+      COUNT(*) AS review_count,
+      AVG(rating) AS avg_rating
+    FROM reviews
+    GROUP BY product_id
+  ) rv
+    ON rv.product_id = p.product_id
+`;
+
+const REVIEW_SELECT_COLS = `
+  COALESCE(
+    rv.review_count,
+    0
+  ) AS review_count
+`;
+
+// -----------------------------------------------------------------------------
 // FIND ALL PUBLIC PRODUCTS
 // -----------------------------------------------------------------------------
 // Used for:
@@ -330,7 +361,7 @@ async function findAllPublicProducts({
         SUM(stock_quantity) AS total_stock
 
       FROM product_variants
-
+      
       GROUP BY product_id
 
     ) v
@@ -662,6 +693,8 @@ async function findPublicProductsByShop(shopId) {
         0
       ) AS total_stock,
 
+      ${REVIEW_SELECT_COLS},
+
       ${FILTER_SELECT_COLS}
 
     FROM products p
@@ -720,6 +753,12 @@ async function findPublicProductsByShop(shopId) {
 
     ) v
       ON v.product_id = p.product_id
+
+    -- -------------------------------------------------------------------------
+    -- REVIEW COUNT
+    -- -------------------------------------------------------------------------
+
+    ${REVIEW_JOIN}
 
     -- -------------------------------------------------------------------------
     -- SIZE / COLOR / RATING
@@ -777,6 +816,8 @@ async function findPublicProductsBySearch(searchQuery) {
         0
       ) AS total_stock,
 
+      ${REVIEW_SELECT_COLS},
+
       ${FILTER_SELECT_COLS}
 
     FROM products p
@@ -835,6 +876,12 @@ async function findPublicProductsBySearch(searchQuery) {
 
     ) v
       ON v.product_id = p.product_id
+
+    -- -------------------------------------------------------------------------
+    -- REVIEW COUNT
+    -- -------------------------------------------------------------------------
+
+    ${REVIEW_JOIN}
 
     -- -------------------------------------------------------------------------
     -- FILTER DATA

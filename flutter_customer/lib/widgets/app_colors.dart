@@ -34,7 +34,7 @@ class AppColors {
   // Borders / Dividers
   // ==========================================================
   static const Color border = Color(0xFFF0E9E3);
-
+  static const Color surface = Colors.white;
   // ==========================================================
   // Navigation
   // ==========================================================

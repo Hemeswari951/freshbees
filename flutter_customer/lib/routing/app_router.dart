@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../widgets/customer_layout.dart';
@@ -278,9 +279,13 @@ final GoRouter appRouter = GoRouter(
         //
         // /products?shopId=10&shopName=Surya%20Fashion
         //
-        // or
-        //
         // /products?search=tshirt
+        //
+        // /products?search=&focus=true   <- opens list screen with the
+        //   inline search box auto-expanded and focused, nothing typed
+        //   yet. Used by ProductViewScreen's search bar tap so the user
+        //   lands on the list screen ready to type, instead of the
+        //   HomeScreen fallback.
         //
         // This allows browser Back / Forward to work.
         // ─────────────────────────────────────────
@@ -294,6 +299,8 @@ final GoRouter appRouter = GoRouter(
 
             final search = state.uri.queryParameters['search'];
 
+            final focusSearch = state.uri.queryParameters['focus'] == 'true';
+
             // -----------------------------------------
             // Shop products
             // -----------------------------------------
@@ -304,17 +311,32 @@ final GoRouter appRouter = GoRouter(
                 shopName: shopName,
               );
 
-              return ProductListScreen(args: args);
+              return ProductListScreen(
+                key: ValueKey('shop-$shopId'),
+                args: args,
+              );
             }
 
             // -----------------------------------------
-            // Search products
+            // Search products (also covers the
+            // "search=&focus=true" empty-search case used
+            // to open the list screen with search focused)
             // -----------------------------------------
 
-            if (search != null && search.isNotEmpty) {
-              final args = ProductListArgs.search(query: search);
+            if (search != null) {
+              final args = search.isEmpty
+                  ? const ProductListArgs(
+                      key: ProductListArgs.keySearch,
+                      value: '',
+                      title: 'Search Products',
+                    )
+                  : ProductListArgs.search(query: search);
 
-              return ProductListScreen(args: args);
+              return ProductListScreen(
+                key: ValueKey('search-$search'),
+                args: args,
+                autoFocusSearch: focusSearch,
+              );
             }
 
             // -----------------------------------------
@@ -335,16 +357,32 @@ final GoRouter appRouter = GoRouter(
         // ─────────────────────────────────────────
         // PRODUCT VIEW
         // ─────────────────────────────────────────
+        //
+        // shopId/shopName are OPTIONAL query params carried over when
+        // the product was opened from a shop's product list
+        // (see ProductListScreen._openProduct). ProductViewScreen uses
+        // them to build its desktop breadcrumb ("Home / <Shop> /
+        // <Category>") so it reflects where the user actually came
+        // from, instead of a hardcoded/guessed shop name.
+        //
+        // /products/42                              <- opened directly
+        //   (e.g. from home, search, wishlist) — no shop context.
+        // /products/42?shopId=10&shopName=Surya%20Fashion
+        //   <- opened from that shop's product list.
+        // ─────────────────────────────────────────
         GoRoute(
-          path: '/products/:productId',
-
+          path: '/products/:id',
           builder: (context, state) {
-            final productId = state.pathParameters['productId'];
+            final productId = int.parse(state.pathParameters['id']!);
 
-            return ProductViewScreen(productId: int.parse(productId!));
+            return ProductViewScreen(
+              productId: productId,
+              shopId: int.tryParse(state.uri.queryParameters['shopId'] ?? ''),
+              shopName: state.uri.queryParameters['shopName'],
+              searchQuery: state.uri.queryParameters['search'],
+            );
           },
         ),
-
         // ─────────────────────────────────────────
         // SHOP OVERVIEW
         // ─────────────────────────────────────────

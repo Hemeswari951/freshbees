@@ -152,9 +152,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ApiService.getToken() != null && ApiService.getToken()!.isNotEmpty;
 
     if (isLoggedIn) {
-      context.go(route);
+      context.push(route);
     } else {
-      context.go(
+      context.push(
         Uri(path: '/login', queryParameters: {'redirect': route}).toString(),
       );
     }
@@ -173,8 +173,8 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 20,
+                  horizontal: 10,
+                  vertical: 10,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -183,8 +183,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     // ==========================================
                     // AI VIRTUAL TRY-ON BANNER
                     // ==========================================
-
-                    const SizedBox(height: 20),
 
                     Container(
                       width: double.infinity,

@@ -9,11 +9,13 @@ import '../payment/payment_screen.dart';
 class AddressScreen extends StatefulWidget {
   final double subtotal;
   final int itemCount;
+  final List<int> cartItemIds;
 
   const AddressScreen({
     super.key,
     required this.subtotal,
     required this.itemCount,
+    required this.cartItemIds,
   });
 
   @override
@@ -72,6 +74,7 @@ class _AddressScreenState extends State<AddressScreen> {
           address: address,
           subtotal: widget.subtotal,
           itemCount: widget.itemCount,
+          cartItemIds: widget.cartItemIds,
         ),
       ),
     );

@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
+
 import 'package:go_router/go_router.dart';
 import '../../models/profile_section.dart';
 import '../../services/api_service.dart';
-import '../../screens/profile/orders_screen.dart';
-import '../../screens/profile/saved_addresses_screen.dart';
-import '../../screens/profile/saved_cards_screen.dart';
-import '../../screens/profile/overview_screen.dart';
+import 'orders_screen.dart';
+import 'saved_addresses_screen.dart';
+import 'saved_cards_screen.dart';
+import 'overview_screen.dart';
+
+import 'notifications_screen.dart';
+import 'coupons_screen.dart';
+import 'help_centre_screen.dart';
+import 'faq_screen.dart';
+import 'about_us_screen.dart';
+import 'terms_policies_screen.dart';
 
 // Same palette style as your mobile ProfileScreen — kept local to this file.
 class _Palette {
@@ -37,6 +45,7 @@ class ProfileDetailsScreen extends StatefulWidget {
 class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
   late ProfileSection _selectedSection;
   String _userName = 'User';
+  String? _userEmail;
 
   @override
   void initState() {
@@ -77,45 +86,27 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
 
     return Scaffold(
       backgroundColor: _Palette.canvas,
-      appBar: AppBar(
-        backgroundColor: _Palette.surface,
-        surfaceTintColor: _Palette.surface,
-        elevation: 0,
-        scrolledUnderElevation: 1,
-        shadowColor: Colors.black12,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: _Palette.ink),
-          onPressed: () => context.go('/profile'),
-        ),
-        title: Text(
-          isDesktop ? 'My Account' : _selectedSection.label,
-          style: const TextStyle(
-            color: _Palette.ink,
-            fontWeight: FontWeight.w700,
-            fontSize: 17,
-          ),
-        ),
-        centerTitle: false,
-      ),
       body: SafeArea(
         child: isDesktop
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Left: content for the selected section.
-                  Expanded(
-                    flex: 3,
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: _buildContent(_selectedSection),
-                    ),
-                  ),
-                  const VerticalDivider(width: 1, color: _Palette.line),
-                  // Right: toggle list of every section.
-                  _buildRightToggleList(),
-                ],
+            ? SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 20,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Left: profile header + toggle list.
+                    _buildRightToggleList(),
+
+                    const SizedBox(width: 24),
+
+                    // Right: content for the selected section.
+                    Expanded(flex: 3, child: _buildContent(_selectedSection)),
+                  ],
+                ),
               )
-            : Padding(
+            : SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: _buildContent(_selectedSection),
               ),
@@ -124,55 +115,124 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
   }
 
   // -------------------------------------------------------------------
-  // RIGHT SIDE TOGGLE (desktop only)
+  // RIGHT SIDE: profile header + TOGGLE (desktop only)
   // -------------------------------------------------------------------
   Widget _buildRightToggleList() {
     return Container(
       width: 260,
-      color: _Palette.surface,
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        itemCount: ProfileSection.values.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 2),
-        itemBuilder: (context, index) {
-          final section = ProfileSection.values[index];
-          final isSelected = section == _selectedSection;
-          return InkWell(
-            onTap: () => _selectSection(section),
-            child: Container(
-              decoration: BoxDecoration(
-                color: isSelected ? _Palette.accentSoft : Colors.transparent,
-                border: Border(
-                  left: BorderSide(
-                    color: isSelected ? _Palette.accent : Colors.transparent,
-                    width: 3,
-                  ),
-                ),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
-              child: Row(
-                children: [
-                  Icon(
-                    section.icon,
-                    size: 18,
-                    color: isSelected ? _Palette.accent : _Palette.ink,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      section.label,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                        color: isSelected ? _Palette.ink : _Palette.ink.withOpacity(0.8),
-                      ),
+      color: _Palette.canvas,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Profile image + username, above the section toggle.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 26,
+                  backgroundColor: _Palette.accentSoft,
+                  child: Text(
+                    _userName.isNotEmpty ? _userName[0].toUpperCase() : 'U',
+                    style: const TextStyle(
+                      color: _Palette.accent,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
                     ),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _userName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: _Palette.ink,
+                        ),
+                      ),
+                      if (_userEmail != null)
+                        Text(
+                          _userEmail!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: _Palette.muted,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          );
-        },
+          ),
+          const SizedBox(height: 8),
+          const Divider(height: 1, color: _Palette.line),
+          const SizedBox(height: 8),
+          // Section toggle — Column instead of ListView so the whole
+          // page (left content + right toggle) shares one scroll.
+          Column(
+            children: List.generate(ProfileSection.values.length, (index) {
+              final section = ProfileSection.values[index];
+              final isSelected = section == _selectedSection;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: InkWell(
+                  onTap: () => _selectSection(section),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? _Palette.accentSoft
+                          : Colors.transparent,
+                      border: Border(
+                        left: BorderSide(
+                          color: isSelected
+                              ? _Palette.accent
+                              : Colors.transparent,
+                          width: 3,
+                        ),
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 13,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          section.icon,
+                          size: 18,
+                          color: isSelected ? _Palette.accent : _Palette.ink,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            section.label,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isSelected
+                                  ? _Palette.ink
+                                  : _Palette.ink.withOpacity(0.8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
       ),
     );
   }
@@ -188,71 +248,23 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
       case ProfileSection.orders:
         return const OrdersScreen();
       case ProfileSection.coupons:
-        return _placeholder(section);
+        return const CouponsScreen();
       case ProfileSection.savedCards:
         return const SavedCardsScreen();
       case ProfileSection.savedAddress:
         return const SavedAddressesScreen();
       case ProfileSection.helpCenter:
-        return _placeholder(section);
+        return const HelpCentreScreen();
       case ProfileSection.notificationSettings:
-        return _placeholder(section);
+        return const NotificationsScreen();
       case ProfileSection.faqs:
-        return _placeholder(section);
+        return const FaqScreen();
+
       case ProfileSection.aboutUs:
-        return _placeholder(section);
+        return const AboutUsScreen();
+
       case ProfileSection.termsPolicies:
-        return _placeholder(section);
+        return const TermsPoliciesScreen();
     }
-  }
-
-  Widget _buildOverview() {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Welcome, $_userName',
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: _Palette.ink,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'This is your account overview.',
-            style: TextStyle(color: _Palette.muted, fontSize: 13),
-          ),
-          const SizedBox(height: 24),
-          // TODO: recent orders summary, quick stats, etc.
-        ],
-      ),
-    );
-  }
-
-  // Temporary placeholder so every tab renders something meaningful while
-  // you build out the real screens one by one.
-  Widget _placeholder(ProfileSection section) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            section.label,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: _Palette.ink,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${section.label} content goes here.',
-            style: const TextStyle(color: _Palette.muted, fontSize: 13),
-          ),
-        ],
-      ),
-    );
   }
 }

@@ -10,12 +10,15 @@ class PaymentScreen extends StatefulWidget {
   final AddressModel address;
   final double subtotal;
   final int itemCount;
+  final List<int> cartItemIds;
+  
 
   const PaymentScreen({
     super.key,
     required this.address,
     required this.subtotal,
     required this.itemCount,
+    required this.cartItemIds,
   });
 
   @override
@@ -80,6 +83,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       final result = await CartService.checkout(
         addressId: widget.address.addressId,
          paymentMethod: _selected.apiValue,
+         cartItemIds: widget.cartItemIds,
       );
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(

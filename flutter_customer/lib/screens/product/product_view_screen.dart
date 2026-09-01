@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../widgets/app_colors.dart';
 import '../../services/product_service.dart';
+import '../../services/search_service.dart';
 import '../../models/product_details_model.dart';
 import '../../services/api_service.dart';
 import '../../services/cart_service.dart';
@@ -13,21 +14,35 @@ import '../../models/review_model.dart';
 
 class ProductViewScreen extends StatefulWidget {
   final int productId;
+  final int? shopId;
+  final String? shopName;
+  final String? searchQuery;
 
-  const ProductViewScreen({super.key, required this.productId});
+  const ProductViewScreen({
+    super.key,
+    required this.productId,
+    this.shopId,
+    this.shopName,
+    this.searchQuery,
+  });
 
   @override
   State<ProductViewScreen> createState() => _ProductViewScreenState();
 }
 
 class _ProductViewScreenState extends State<ProductViewScreen> {
+  // Header breakpoint — desktop gets the breadcrumb, mobile gets the
+  // back/search/cart bar. Separate from the 640px breakpoint below
+  // (that one is only about gallery/details layout, not the header).
+  static const double _desktopHeaderBreakpoint = 900;
+
   ProductDetailsModel? _product;
   ReviewSummaryModel? _liveSummary;
   bool _loading = true;
   String? _error;
   bool _addingToBag = false;
   bool _buyingNow = false;
- 
+
   // Wishlist heart state for THIS product — separate from the list-screen
   // pattern (which tracks a Set<int> of many products) since this screen
   // only ever cares about one product.
@@ -44,6 +59,20 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
 
   late final PageController _pageController;
 
+  // ── Inline mobile search — same pattern as product_list_screen.dart's
+  // search bar, so tapping the search field here behaves identically:
+  // shows a live suggestion dropdown, and only navigates away once the
+  // user actually submits a query.
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  bool _searchExpanded = false;
+  final LayerLink _searchLayerLink = LayerLink();
+  final OverlayPortalController _searchOverlayController =
+      OverlayPortalController();
+  Timer? _searchDebounce;
+  List<SearchSuggestion> _suggestions = [];
+  bool _isSuggesting = false;
+
   @override
   void initState() {
     super.initState();
@@ -54,7 +83,18 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
   @override
   void dispose() {
     _pageController.dispose();
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  bool _isDesktop(BuildContext context) =>
+      MediaQuery.of(context).size.width >= _desktopHeaderBreakpoint;
+
+  bool get _isLoggedIn {
+    final token = ApiService.getToken();
+    return token != null && token.isNotEmpty;
   }
 
   Future<void> _load() async {
@@ -63,8 +103,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
       _error = null;
     });
     try {
-      final product =
-          await ProductService.getProductDetails(widget.productId);
+      final product = await ProductService.getProductDetails(widget.productId);
       setState(() {
         _product = product;
         _loading = false;
@@ -84,8 +123,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
 
   // Guests don't have a wishlist — heart just stays unfilled for them.
   Future<void> _checkWishlistStatus() async {
-    final token = ApiService.getToken();
-    if (token == null || token.isEmpty) return;
+    if (!_isLoggedIn) return;
     try {
       final items = await WishlistService.getWishlist();
       if (!mounted) return;
@@ -97,20 +135,59 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     }
   }
 
+  // ──────────────────────────────────────────────────────────────────
+  // Same helper used across the other modules — gates a protected
+  // route behind login. If logged in, pushes straight there. If not,
+  // pushes to /login with `route` as the redirect target, so login
+  // sends the user back to exactly where they were headed.
+  // ──────────────────────────────────────────────────────────────────
+  void _goToProtected(BuildContext context, String route) {
+    if (_isLoggedIn) {
+      context.push(route);
+    } else {
+      context.push(
+        Uri(path: '/login', queryParameters: {'redirect': route}).toString(),
+      );
+    }
+  }
+
+  // Safe go_router back — used by the mobile header's back button and
+  // the desktop breadcrumb's shop-fallback tap. context.canPop() checks
+  // GoRouter's own stack (not the raw Navigator), so this correctly
+  // detects the "arrived here via a redirect/deep-link with nothing
+  // behind it" case and falls back to Home instead of doing nothing.
+  void _goBack(BuildContext context) {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/home');
+    }
+  }
+
+  void _openCart() {
+    _goToProtected(context, '/cart');
+  }
+
   Future<void> _toggleWishlist() async {
-    final token = ApiService.getToken();
-    if (token == null || token.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please login to use your wishlist')),
+    if (!_isLoggedIn) {
+      _goToProtected(
+        context,
+        Uri(
+          path: '/products/${widget.productId}',
+          queryParameters: {
+            if (widget.shopId != null) 'shopId': widget.shopId.toString(),
+            if (widget.shopName != null) 'shopName': widget.shopName!,
+          },
+        ).toString(),
       );
       return;
     }
- 
+
     final wasWishlisted = _isWishlisted;
- 
+
     // Optimistic UI update, reconciled with the backend call below.
     setState(() => _isWishlisted = !wasWishlisted);
- 
+
     bool ok;
     try {
       ok = wasWishlisted
@@ -119,7 +196,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     } catch (_) {
       ok = false;
     }
- 
+
     // Roll back on failure so the heart doesn't lie about what's saved.
     if (!ok && mounted) {
       setState(() => _isWishlisted = wasWishlisted);
@@ -154,7 +231,6 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     return variants[_selectedSizeIndex!];
   }
 
-
   // ── Product specifications — everything captured on Add Product that
   // isn't already shown elsewhere on this page. SKU is intentionally
   // NOT included (internal detail, not something a customer needs to
@@ -184,7 +260,8 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
 
   List<ProductTagModel> get _tags => _product?.tags ?? [];
 
-  List<ProductAttributeModel> get _extraAttributes => _product?.attributes ?? [];
+  List<ProductAttributeModel> get _extraAttributes =>
+      _product?.attributes ?? [];
 
   /// Builds the gallery sequence for the active color: photos in order,
   /// with any group of images tagged type: '360' collapsed into ONE spin
@@ -250,135 +327,79 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
   }
 
   /// Shared guest/size checks for both "Add to Cart" and "Buy Now" —
-  /// returns false (and shows the right message / navigates to login)
-  /// if the flow shouldn't proceed.
+  /// returns false (and redirects to login via _goToProtected, or shows
+  /// the size-required message) if the flow shouldn't proceed.
   bool _passesPreChecks() {
-    final token = ApiService.getToken();
- 
-    if (token == null || token.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please login to continue'),
-          duration: Duration(seconds: 2),
-        ),
+    if (!_isLoggedIn) {
+      _goToProtected(
+        context,
+        Uri(
+          path: '/products/${widget.productId}',
+          queryParameters: {
+            if (widget.shopId != null) 'shopId': widget.shopId.toString(),
+            if (widget.shopName != null) 'shopName': widget.shopName!,
+          },
+        ).toString(),
       );
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (!mounted) return;
-        context.go(
-          Uri(
-            path: '/login',
-            queryParameters: {'redirect': '/shop/${widget.productId}'},
-          ).toString(),
-        );
-      });
       return false;
     }
- 
+
     if (_activeVariants.isNotEmpty && _selectedVariant == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a size')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select a size')));
       return false;
     }
- 
+
     return true;
   }
- 
 
   Future<void> _handleAddToBag() async {
-  final token = ApiService.getToken();
+    if (!_passesPreChecks()) return;
 
-  // ==========================================
-  // GUEST USER → GO TO LOGIN
-  // ==========================================
-  if (token == null || token.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Please login to add items to your bag'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+    setState(() => _addingToBag = true);
 
-    await Future.delayed(const Duration(milliseconds: 500));
+    try {
+      await CartService.addToCart(
+        productId: widget.productId,
+        variantId: _selectedVariant?.variantId,
+        quantity: 1,
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    context.go(
-      Uri(
-        path: '/login',
-        queryParameters: {
-          'redirect': '/shop/${widget.productId}',
-        },
-      ).toString(),
-    );
-
-    return;
-  }
-
-  // ==========================================
-  // SIZE VALIDATION
-  // ==========================================
-  if (_activeVariants.isNotEmpty && _selectedVariant == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Please select a size'),
-      ),
-    );
-    return;
-  }
-
-  // ==========================================
-  // ADD TO BAG
-  // ==========================================
-  setState(() => _addingToBag = true);
-
-  try {
-    await CartService.addToCart(
-      productId: widget.productId,
-      variantId: _selectedVariant?.variantId,
-      quantity: 1,
-    );
-
-    if (!mounted) return;
-
-    // 1. Capture the messenger locally so it works even if you navigate away
+      // 1. Capture the messenger locally so it works even if you navigate away
       final scaffoldMessenger = ScaffoldMessenger.of(context);
-     
+
       scaffoldMessenger.clearSnackBars();
       scaffoldMessenger.showSnackBar(
         SnackBar(
-          content: const Text('Added to Bag'),
+          content: const Text('Added to Cart'),
           behavior: SnackBarBehavior.floating,
-         // width: 400,
           duration: const Duration(seconds: 3),
           action: SnackBarAction(
-            label: 'VIEW BAG',
+            label: 'VIEW CART',
             onPressed: () {
               scaffoldMessenger.hideCurrentSnackBar();
               Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const CartScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const CartScreen()),
               );
             },
           ),
         ),
       );
- 
+
       // 2. Force the SnackBar to close after 3 seconds, bypassing the mouse-hover pause
       Future.delayed(const Duration(seconds: 3), () {
         scaffoldMessenger.hideCurrentSnackBar();
       });
- 
     } catch (e) {
       if (!mounted) return;
- 
+
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            e.toString().replaceFirst('Exception: ', ''),
-          ),
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -388,38 +409,33 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
       }
     }
   }
- 
 
-/// "Buy Now" — adds the selected item to the cart (same as Add to Cart)
+  /// "Buy Now" — adds the selected item to the cart (same as Add to Cart)
   /// then jumps straight to checkout instead of staying on this page.
   /// TODO: swap CartScreen for your actual checkout screen/route once
   /// that exists — this currently opens the cart as the next step.
   Future<void> _handleBuyNow() async {
     if (!_passesPreChecks()) return;
- 
+
     setState(() => _buyingNow = true);
- 
+
     try {
       await CartService.addToCart(
         productId: widget.productId,
         variantId: _selectedVariant?.variantId,
         quantity: 1,
       );
- 
+
       if (!mounted) return;
- 
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (context) => const CartScreen()),
-      );
+
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (context) => const CartScreen()));
     } catch (e) {
       if (!mounted) return;
- 
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.toString().replaceFirst('Exception: ', ''),
-          ),
-        ),
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
     } finally {
       if (mounted) {
@@ -427,35 +443,110 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
       }
     }
   }
- 
 
+  // ── Inline search — mirrors product_list_screen.dart exactly, so the
+  // suggestion dropdown behaves identically wherever the user opens it.
+  void _openInlineSearch() {
+    setState(() => _searchExpanded = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _searchFocusNode.requestFocus();
+    });
+  }
+
+  void _closeInlineSearch() {
+    _searchOverlayController.hide();
+    setState(() => _searchExpanded = false);
+    _searchFocusNode.unfocus();
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() {});
+    _searchDebounce?.cancel();
+
+    if (value.trim().isEmpty) {
+      setState(() {
+        _suggestions = [];
+        _isSuggesting = false;
+      });
+      if (_searchOverlayController.isShowing) {
+        _searchOverlayController.hide();
+      }
+      return;
+    }
+
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () async {
+      setState(() => _isSuggesting = true);
+      try {
+        final results = await SearchService.getSearchSuggestions(value);
+        if (!mounted) return;
+        setState(() {
+          _suggestions = results;
+          _isSuggesting = false;
+        });
+        if (_suggestions.isNotEmpty && !_searchOverlayController.isShowing) {
+          _searchOverlayController.show();
+        } else if (_suggestions.isEmpty && _searchOverlayController.isShowing) {
+          _searchOverlayController.hide();
+        }
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _suggestions = [];
+          _isSuggesting = false;
+        });
+      }
+    });
+  }
+
+  // Only THIS actually navigates away — pressing enter / submitting a
+  // real query. Typing itself just shows suggestions in place.
+  void _onSearchSubmitted(String query) {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return;
+
+    _searchFocusNode.unfocus();
+    _searchOverlayController.hide();
+    setState(() => _searchExpanded = false);
+
+    final uri = Uri(path: '/products', queryParameters: {'search': trimmed});
+    context.push(uri.toString());
+  }
+
+  void _onSuggestionTap(SearchSuggestion suggestion) {
+    _searchController.text = suggestion.text;
+    _searchOverlayController.hide();
+    _onSearchSubmitted(suggestion.text);
+  }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.ink.withOpacity(0.7)),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton(onPressed: _load, child: const Text('Retry')),
-            ],
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _error!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.ink.withOpacity(0.7)),
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton(onPressed: _load, child: const Text('Retry')),
+              ],
+            ),
           ),
         ),
       );
     }
 
     final product = _product!;
+    final isDesktop = _isDesktop(context);
 
     // Base product price/mrp/discount.
     double price = product.price;
@@ -481,42 +572,55 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFAF7F2), // Matches the thiraa app theme
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.ink),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      // Desktop gets no AppBar at all — just the breadcrumb row inside
+      // the body below. Mobile gets the back/search/cart bar.
+      appBar: isDesktop
+          ? null
+          : PreferredSize(
+              preferredSize: const Size.fromHeight(56),
+              child: _mobileHeader(),
+            ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
-            child: LayoutBuilder(
-              builder: (context, c) {
-                final wide = c.maxWidth >= 640;
-                final gallery = wide
-                    ? _desktopGallery(items)
-                    : _mobileGallery(items);
-                final details = _detailsSection(price, mrp, discountPercent);
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isDesktop) ...[
+                  _desktopBreadcrumb(product),
+                  const SizedBox(height: 16),
+                ],
+                LayoutBuilder(
+                  builder: (context, c) {
+                    final wide = c.maxWidth >= 640;
+                    final gallery = wide
+                        ? _desktopGallery(items)
+                        : _mobileGallery(items);
+                    final details = _detailsSection(
+                      price,
+                      mrp,
+                      discountPercent,
+                    );
 
-                if (wide) {
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(width: 380, child: gallery),
-                      const SizedBox(width: 32),
-                      Expanded(child: details),
-                    ],
-                  );
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [gallery, const SizedBox(height: 24), details],
-                );
-              },
+                    if (wide) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(width: 380, child: gallery),
+                          const SizedBox(width: 32),
+                          Expanded(child: details),
+                        ],
+                      );
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [gallery, const SizedBox(height: 24), details],
+                    );
+                  },
+                ),
+              ],
             ),
           ),
         ),
@@ -539,14 +643,20 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: (_addingToBag || _buyingNow) ? null : _handleAddToBag,
+                  onPressed: (_addingToBag || _buyingNow)
+                      ? null
+                      : _handleAddToBag,
                   icon: _addingToBag
                       ? const SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.shopping_bag_outlined, color: AppColors.ink, size: 20),
+                      : const Icon(
+                          Icons.shopping_bag_outlined,
+                          color: AppColors.ink,
+                          size: 20,
+                        ),
                   label: Text(
                     _addingToBag ? 'ADDING...' : 'ADD TO CART',
                     style: const TextStyle(
@@ -568,7 +678,9 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: (_addingToBag || _buyingNow) ? null : _handleBuyNow,
+                  onPressed: (_addingToBag || _buyingNow)
+                      ? null
+                      : _handleBuyNow,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.ink,
                     foregroundColor: Colors.white,
@@ -582,7 +694,10 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                       ? const SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Text(
                           'BUY NOW',
@@ -598,6 +713,318 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  // ── Mobile header: swaps between title-row (back / search-bar /
+  // cart) and search-row (back-to-close / live textfield + suggestion
+  // dropdown), exactly like product_list_screen.dart's header.
+  Widget _mobileHeader() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
+      child: SafeArea(
+        bottom: false,
+        child: _searchExpanded ? _buildSearchRow() : _buildTitleRow(),
+      ),
+    );
+  }
+
+  Widget _buildTitleRow() {
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_back, color: AppColors.ink),
+          onPressed: () => _goBack(context),
+        ),
+        Expanded(
+          child: GestureDetector(
+            onTap: _openInlineSearch,
+            child: Container(
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1ECE3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.search, size: 20, color: Colors.black45),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Search products',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.black.withOpacity(0.45),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.shopping_cart_outlined, color: AppColors.ink),
+          onPressed: _openCart,
+        ),
+      ],
+    );
+  }
+
+  // Live search field + suggestion dropdown — identical structure to
+  // product_list_screen.dart's _buildSearchRow, so behaviour matches.
+  Widget _buildSearchRow() {
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_back, color: AppColors.ink),
+          onPressed: _closeInlineSearch,
+        ),
+        Expanded(
+          child: CompositedTransformTarget(
+            link: _searchLayerLink,
+            child: OverlayPortal(
+              controller: _searchOverlayController,
+              overlayChildBuilder: (context) {
+                return Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: () => _searchOverlayController.hide(),
+                    child: Stack(
+                      children: [
+                        CompositedTransformFollower(
+                          link: _searchLayerLink,
+                          showWhenUnlinked: false,
+                          offset: const Offset(0, 46),
+                          child: Align(
+                            alignment: Alignment.topLeft,
+                            child: Material(
+                              elevation: 4,
+                              borderRadius: BorderRadius.circular(14),
+                              color: Colors.white,
+                              child: SizedBox(
+                                width: MediaQuery.of(context).size.width - 56,
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxHeight: 320,
+                                  ),
+                                  child: ListView.separated(
+                                    shrinkWrap: true,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 6,
+                                    ),
+                                    itemCount: _suggestions.length,
+                                    separatorBuilder: (_, __) => Divider(
+                                      height: 1,
+                                      color: Colors.black.withOpacity(0.05),
+                                    ),
+                                    itemBuilder: (context, index) {
+                                      final s = _suggestions[index];
+                                      return ListTile(
+                                        dense: true,
+                                        leading: Icon(
+                                          s.isTag
+                                              ? Icons.sell_outlined
+                                              : Icons.search_rounded,
+                                          size: 18,
+                                          color: const Color(0xFF8B7355),
+                                        ),
+                                        title: Text(
+                                          s.text,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        trailing: s.isTag
+                                            ? const Text(
+                                                'tag',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.black38,
+                                                ),
+                                              )
+                                            : null,
+                                        onTap: () => _onSuggestionTap(s),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+              child: Container(
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1ECE3),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (q) {
+                    _searchOverlayController.hide();
+                    _onSearchSubmitted(q);
+                  },
+                  onChanged: _onSearchChanged,
+                  style: const TextStyle(fontSize: 14, color: AppColors.ink),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    border: InputBorder.none,
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      size: 20,
+                      color: Colors.black45,
+                    ),
+                    suffixIcon: _isSuggesting
+                        ? const Padding(
+                            padding: EdgeInsets.all(10),
+                            child: SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : (_searchController.text.isEmpty
+                              ? null
+                              : IconButton(
+                                  icon: const Icon(
+                                    Icons.close,
+                                    size: 18,
+                                    color: Colors.black45,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _searchController.clear();
+                                      _suggestions = [];
+                                    });
+                                    _searchOverlayController.hide();
+                                  },
+                                )),
+                    hintText: 'Search products',
+                    hintStyle: const TextStyle(
+                      fontSize: 13,
+                      color: Colors.black45,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Desktop breadcrumb: Home / <Shop> / <Category> — replaces the
+  // AppBar entirely on wide screens.
+  Widget _desktopBreadcrumb(ProductDetailsModel product) {
+    TextStyle crumbStyle({bool active = false}) => TextStyle(
+      fontSize: 13,
+      fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+      color: active ? AppColors.ink : AppColors.ink.withOpacity(0.5),
+    );
+
+    final search = widget.searchQuery?.trim();
+
+    // If product was opened from search results
+    // If product was opened from search results
+    if (search != null && search.isNotEmpty) {
+      return Row(
+        children: [
+          GestureDetector(
+            onTap: () => context.go('/home'),
+            child: Text('Home', style: crumbStyle()),
+          ),
+          Text('  /  ', style: crumbStyle()),
+          GestureDetector(
+            onTap: () {
+              final uri = Uri(
+                path: '/products',
+                queryParameters: {'search': search},
+              );
+              context.push(uri.toString());
+            },
+            child: Text('Search Results for "$search"', style: crumbStyle()),
+          ),
+          Text('  /  ', style: crumbStyle()),
+          Expanded(
+            child: Text(
+              product.productName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: crumbStyle(active: true),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Direct navigation — no shop, no search (came straight from Home/
+    // Wishlist/etc). Just Home / Product name, nothing else.
+    if (widget.shopId == null) {
+      return Row(
+        children: [
+          GestureDetector(
+            onTap: () => context.go('/home'),
+            child: Text('Home', style: crumbStyle()),
+          ),
+          Text('  /  ', style: crumbStyle()),
+          Expanded(
+            child: Text(
+              product.productName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: crumbStyle(active: true),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Shop navigation — Home / Shop / Category
+    final shopLabel = widget.shopName ?? 'Shop';
+
+    final categoryLabel =
+        (product.subCategory != null && product.subCategory!.trim().isNotEmpty)
+        ? product.subCategory!
+        : null;
+
+    return Row(
+      children: [
+        GestureDetector(
+          onTap: () => context.go('/home'),
+          child: Text('Home', style: crumbStyle()),
+        ),
+        Text('  /  ', style: crumbStyle()),
+        GestureDetector(
+          onTap: () {
+            final uri = Uri(
+              path: '/products',
+              queryParameters: {
+                'shopId': widget.shopId.toString(),
+                if (widget.shopName != null &&
+                    widget.shopName!.trim().isNotEmpty)
+                  'shopName': widget.shopName!,
+              },
+            );
+            context.push(uri.toString());
+          },
+          child: Text(shopLabel, style: crumbStyle()),
+        ),
+        if (categoryLabel != null) ...[
+          Text('  /  ', style: crumbStyle()),
+          Text(categoryLabel, style: crumbStyle(active: true)),
+        ],
+      ],
     );
   }
 
@@ -749,10 +1176,10 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
   }
 
   Widget _emptyImagePlaceholder() => Container(
-        color: AppColors.blush,
-        alignment: Alignment.center,
-        child: const Icon(Icons.checkroom, size: 56, color: AppColors.inkSoft),
-      );
+    color: AppColors.blush,
+    alignment: Alignment.center,
+    child: const Icon(Icons.checkroom, size: 56, color: AppColors.inkSoft),
+  );
 
   // ── Details column ────────────────────────────────────────────────────
   Widget _detailsSection(double price, double? mrp, int discountPercent) {
@@ -761,7 +1188,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-       // Name — bold, dark, tighter than before (Myntra-style brand/name line)
+        // Name — bold, dark, tighter than before (Myntra-style brand/name line)
         // + wishlist heart, right-aligned on the same line.
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -785,7 +1212,9 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                 child: Icon(
                   _isWishlisted ? Icons.favorite : Icons.favorite_border,
                   size: 24,
-                  color: _isWishlisted ? Colors.red : AppColors.ink.withOpacity(0.45),
+                  color: _isWishlisted
+                      ? Colors.red
+                      : AppColors.ink.withOpacity(0.45),
                 ),
               ),
             ),
@@ -812,7 +1241,10 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 7,
+                  vertical: 3.5,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.green,
                   borderRadius: BorderRadius.circular(4),
@@ -822,24 +1254,39 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                   children: [
                     Text(
                       _liveSummary!.avgRating.toStringAsFixed(1),
-                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white),
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(width: 3),
-                    const Icon(Icons.star_rounded, size: 13, color: Colors.white),
+                    const Icon(
+                      Icons.star_rounded,
+                      size: 13,
+                      color: Colors.white,
+                    ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 '${_liveSummary!.totalReviews} ${_liveSummary!.totalReviews == 1 ? 'Rating' : 'Ratings'}',
-                style: TextStyle(fontSize: 13, color: AppColors.ink.withOpacity(0.55), fontWeight: FontWeight.w500),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.ink.withOpacity(0.55),
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           )
         else
           Text(
             'No ratings yet',
-            style: TextStyle(fontSize: 12.5, color: AppColors.ink.withOpacity(0.5)),
+            style: TextStyle(
+              fontSize: 12.5,
+              color: AppColors.ink.withOpacity(0.5),
+            ),
           ),
         Divider(color: Colors.grey.withOpacity(0.45), thickness: 1, height: 20),
         const SizedBox(height: 10),
@@ -996,7 +1443,7 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
           const SizedBox(height: 24),
         ],
 
-       ReviewsSection(
+        ReviewsSection(
           productId: product.id,
           onSummaryChanged: (summary) => setState(() => _liveSummary = summary),
         ),
@@ -1113,20 +1560,11 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
   // block: a bold section title, then pairs of (muted label / bold value)
   // arranged two-per-row, each pair separated by a thin divider line.
   Widget _specificationsSection() {
-    // Build one flat list of label/value pairs from both the fixed
-    // schema fields (_specifications) and any free-form EAV attributes,
-    // so they render in the same grid without the caller needing to
-    // know which source each one came from.
     final pairs = <MapEntry<String, String>>[
       ..._specifications,
       ..._extraAttributes
           .where((a) => a.label.trim().isNotEmpty)
-          .map(
-            (a) => MapEntry(
-              a.label,
-              a.value,
-            ),
-          ),
+          .map((a) => MapEntry(a.label, a.value)),
     ];
 
     return Column(
@@ -1188,111 +1626,17 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
       ],
     );
   }
- 
-  // // ── Ratings & reviews — read-only, shown at the very end of the details.
-  // Widget _ratingsAndReviews() {
-  //   final reviews = _reviews;
-
-  //   return Column(
-  //     crossAxisAlignment: CrossAxisAlignment.start,
-  //     children: [
-  //       _sectionTitle('RATINGS & REVIEWS'),
-  //       const SizedBox(height: 14),
-  //       if (reviews.isEmpty)
-  //         Text(
-  //           'No reviews yet.',
-  //           style: TextStyle(
-  //             fontSize: 13,
-  //             color: AppColors.ink.withOpacity(0.5),
-  //           ),
-  //         )
-  //       else
-  //         Column(
-  //           children: List.generate(reviews.length, (i) {
-  //             final r = reviews[i];
-
-  //             final rating = r.rating.toDouble();
-
-  //             // Backend currently doesn't send customerName
-  //             final name = 'Customer #${r.customerId}';
-
-  //             final comment = r.reviewText;
-
-  //             final date =
-  //                 "${r.createdAt.day}/${r.createdAt.month}/${r.createdAt.year}";
-  //             return Padding(
-  //               padding: EdgeInsets.only(
-  //                 bottom: i == reviews.length - 1 ? 0 : 16,
-  //               ),
-  //               child: Column(
-  //                 crossAxisAlignment: CrossAxisAlignment.start,
-  //                 children: [
-  //                   Row(
-  //                     children: [
-  //                       Expanded(
-  //                         child: Text(
-  //                           name,
-  //                           style: const TextStyle(
-  //                             fontSize: 13,
-  //                             fontWeight: FontWeight.w700,
-  //                             color: AppColors.ink,
-  //                           ),
-  //                         ),
-  //                       ),
-  //                       Row(
-  //                         children: List.generate(
-  //                           5,
-  //                           (star) => Icon(
-  //                             star < rating.round()
-  //                                 ? Icons.star_rounded
-  //                                 : Icons.star_border_rounded,
-  //                             size: 14,
-  //                             color: AppColors.gold,
-  //                           ),
-  //                         ),
-  //                       ),
-  //                     ],
-  //                   ),
-  //                   if (date.isNotEmpty) ...[
-  //                     const SizedBox(height: 2),
-  //                     Text(
-  //                       date,
-  //                       style: TextStyle(
-  //                         fontSize: 10.5,
-  //                         color: AppColors.ink.withOpacity(0.4),
-  //                       ),
-  //                     ),
-  //                   ],
-  //                   if (comment.isNotEmpty) ...[
-  //                     const SizedBox(height: 6),
-  //                     Text(
-  //                       comment,
-  //                       style: const TextStyle(
-  //                         fontSize: 12.5,
-  //                         color: AppColors.ink,
-  //                         height: 1.4,
-  //                       ),
-  //                     ),
-  //                   ],
-  //                 ],
-  //               ),
-  //             );
-  //           }),
-  //         ),
-  //     ],
-  //   );
-  // }
 
   Widget _sectionTitle(String title) => Text(
-        title,
-        style: const TextStyle(
-          fontFamily: 'Fraunces',
-          fontSize: 15,
-          fontWeight: FontWeight.w700,
-          color: AppColors.ink,
-          letterSpacing: 0.3,
-        ),
-      );
+    title,
+    style: const TextStyle(
+      fontFamily: 'Fraunces',
+      fontSize: 15,
+      fontWeight: FontWeight.w700,
+      color: AppColors.ink,
+      letterSpacing: 0.3,
+    ),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────

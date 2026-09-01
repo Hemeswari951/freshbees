@@ -64,8 +64,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       setState(() {
         _profiles = [];
         _loadingProfiles = false;
-        _profileError =
-            e.toString().replaceFirst('Exception: ', '');
+        _profileError = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -75,10 +74,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   // ============================================================
 
   void _openProfile(TryOnProfile profile) {
-    context.push(
-      '/virtual-tryon/photo',
-      extra: profile,
-    );
+    context.push('/virtual-tryon/photo', extra: profile);
   }
 
   // ============================================================
@@ -106,35 +102,27 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _bg,
-      body: RefreshIndicator(
-        color: _accent,
-        onRefresh: _loadProfiles,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildWelcomeSection(),
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildWelcomeSection(),
 
-              const SizedBox(height: 24),
+          const SizedBox(height: 24),
 
-              _buildQuickActions(),
+          _buildQuickActions(),
 
-              const SizedBox(height: 28),
+          const SizedBox(height: 28),
 
-              _buildTryOnProfilesSection(),
+          _buildTryOnProfilesSection(),
 
-              const SizedBox(height: 28),
+          const SizedBox(height: 28),
 
-              _buildAccountSection(),
+          _buildAccountSection(),
 
-              const SizedBox(height: 30),
-            ],
-          ),
-        ),
+          const SizedBox(height: 30),
+        ],
       ),
     );
   }
@@ -157,15 +145,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
           Container(
             width: 52,
             height: 52,
-            decoration: BoxDecoration(
-              color: _softBg,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.person_outline,
-              color: _accent,
-              size: 28,
-            ),
+            decoration: BoxDecoration(color: _softBg, shape: BoxShape.circle),
+            child: const Icon(Icons.person_outline, color: _accent, size: 28),
           ),
 
           const SizedBox(width: 14),
@@ -174,10 +155,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
             child: FutureBuilder<String?>(
               future: ApiService.getUserName(),
               builder: (context, snapshot) {
-                final name =
-                    snapshot.data?.trim().isNotEmpty == true
-                        ? snapshot.data!
-                        : 'Welcome';
+                final name = snapshot.data?.trim().isNotEmpty == true
+                    ? snapshot.data!
+                    : 'Welcome';
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -207,10 +187,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
                     const Text(
                       'Discover fashion made for you.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.black54,
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                   ],
                 );
@@ -250,9 +227,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 title: 'My Orders',
                 subtitle: 'Track orders',
                 onTap: () {
-                  context.go(
-                    '/profile/details?section=orders',
-                  );
+                  context.go('/profile/details?section=orders');
                 },
               ),
             ),
@@ -265,9 +240,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 title: 'Address',
                 subtitle: 'Saved addresses',
                 onTap: () {
-                  context.go(
-                    '/profile/details?section=saved-address',
-                  );
+                  context.go('/profile/details?section=saved-address');
                 },
               ),
             ),
@@ -302,11 +275,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 color: _softBg,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(
-                icon,
-                color: _accent,
-                size: 22,
-              ),
+              child: Icon(icon, color: _accent, size: 22),
             ),
 
             const SizedBox(width: 10),
@@ -327,10 +296,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: Colors.black45,
-                    ),
+                    style: const TextStyle(fontSize: 10, color: Colors.black45),
                   ),
                 ],
               ),
@@ -368,10 +334,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 onTap: _viewAllProfiles,
                 borderRadius: BorderRadius.circular(6),
                 child: const Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 4,
-                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                   child: Text(
                     'View All',
                     style: TextStyle(
@@ -401,10 +364,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       return SizedBox(
         height: 120,
         child: Center(
-          child: CircularProgressIndicator(
-            color: _accent,
-            strokeWidth: 2,
-          ),
+          child: CircularProgressIndicator(color: _accent, strokeWidth: 2),
         ),
       );
     }
@@ -426,16 +386,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: visibleProfiles.length + 1,
-        separatorBuilder: (_, __) =>
-            const SizedBox(width: 10),
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
           if (index == visibleProfiles.length) {
             return _buildAddProfileCard();
           }
 
-          return _buildProfileCard(
-            visibleProfiles[index],
-          );
+          return _buildProfileCard(visibleProfiles[index]);
         },
       ),
     );
@@ -451,17 +408,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
       borderRadius: BorderRadius.circular(14),
       child: Container(
         width: 95,
-        padding: const EdgeInsets.symmetric(
-          horizontal: 8,
-          vertical: 10,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
         decoration: BoxDecoration(
           color: _cardBg,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: profile.isDefault
-                ? _accent
-                : _border,
+            color: profile.isDefault ? _accent : _border,
             width: profile.isDefault ? 1.2 : 1,
           ),
         ),
@@ -473,16 +425,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
             const SizedBox(height: 8),
 
             Text(
-              profile.profileName.isNotEmpty
-                  ? profile.profileName
-                  : 'Profile',
+              profile.profileName.isNotEmpty ? profile.profileName : 'Profile',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
 
             if (profile.isDefault) ...[
@@ -509,8 +456,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   Widget _buildProfileAvatar(TryOnProfile profile) {
     final photoUrl = profile.photoUrl;
 
-    if (photoUrl != null &&
-        photoUrl.trim().isNotEmpty) {
+    if (photoUrl != null && photoUrl.trim().isNotEmpty) {
       final imageUrl = ApiService.imageUrl(photoUrl);
 
       return Container(
@@ -518,9 +464,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
         height: 54,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(
-            color: _border,
-          ),
+          border: Border.all(color: _border),
         ),
         child: ClipOval(
           child: Image.network(
@@ -541,15 +485,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
     return Container(
       width: 54,
       height: 54,
-      decoration: const BoxDecoration(
-        color: _softBg,
-        shape: BoxShape.circle,
-      ),
-      child: const Icon(
-        Icons.person_outline,
-        color: _accent,
-        size: 25,
-      ),
+      decoration: const BoxDecoration(color: _softBg, shape: BoxShape.circle),
+      child: const Icon(Icons.person_outline, color: _accent, size: 25),
     );
   }
 
@@ -566,18 +503,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
         decoration: BoxDecoration(
           color: _softBg,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: _border,
-          ),
+          border: Border.all(color: _border),
         ),
         child: const Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.add,
-              color: _accent,
-              size: 27,
-            ),
+            Icon(Icons.add, color: _accent, size: 27),
 
             SizedBox(height: 8),
 
@@ -610,20 +541,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
       ),
       child: Column(
         children: [
-          const Icon(
-            Icons.person_add_alt_1_outlined,
-            size: 34,
-            color: _accent,
-          ),
+          const Icon(Icons.person_add_alt_1_outlined, size: 34, color: _accent),
 
           const SizedBox(height: 10),
 
           const Text(
             'Create your first try-on profile',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           ),
 
           const SizedBox(height: 4),
@@ -631,10 +555,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
           const Text(
             'Add a profile to make virtual try-on easier.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.black45,
-            ),
+            style: TextStyle(fontSize: 11, color: Colors.black45),
           ),
 
           const SizedBox(height: 14),
@@ -643,13 +564,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
             height: 38,
             child: ElevatedButton.icon(
               onPressed: _addProfile,
-              icon: const Icon(
-                Icons.add,
-                size: 17,
-              ),
-              label: const Text(
-                'Add Profile',
-              ),
+              icon: const Icon(Icons.add, size: 17),
+              label: const Text('Add Profile'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _accent,
                 foregroundColor: Colors.white,
@@ -680,31 +596,20 @@ class _OverviewScreenState extends State<OverviewScreen> {
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.error_outline,
-            color: Colors.black45,
-          ),
+          const Icon(Icons.error_outline, color: Colors.black45),
 
           const SizedBox(width: 10),
 
           Expanded(
             child: Text(
               _profileError!,
-              style: const TextStyle(
-                fontSize: 11,
-                color: Colors.black54,
-              ),
+              style: const TextStyle(fontSize: 11, color: Colors.black54),
             ),
           ),
 
           TextButton(
             onPressed: _loadProfiles,
-            child: const Text(
-              'Retry',
-              style: TextStyle(
-                color: _accent,
-              ),
-            ),
+            child: const Text('Retry', style: TextStyle(color: _accent)),
           ),
         ],
       ),
@@ -736,7 +641,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
           title: 'Personal Details',
           subtitle: 'Manage your profile information',
           onTap: () {
-             context.push('/virtual-tryon/style-profile');
+            context.push('/virtual-tryon/style-profile');
           },
         ),
 
@@ -745,9 +650,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
           title: 'Saved Cards',
           subtitle: 'Manage your saved payment methods',
           onTap: () {
-            context.go(
-              '/profile/details?section=saved-cards',
-            );
+            context.go('/profile/details?section=saved-cards');
           },
         ),
 
@@ -756,9 +659,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
           title: 'Saved Addresses',
           subtitle: 'Manage your delivery addresses',
           onTap: () {
-            context.go(
-              '/profile/details?section=saved-address',
-            );
+            context.go('/profile/details?section=saved-address');
           },
         ),
       ],
@@ -791,19 +692,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 color: _softBg,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(
-                icon,
-                color: _accent,
-                size: 21,
-              ),
+              child: Icon(icon, color: _accent, size: 21),
             ),
 
             const SizedBox(width: 12),
 
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
@@ -817,20 +713,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: Colors.black45,
-                    ),
+                    style: const TextStyle(fontSize: 10, color: Colors.black45),
                   ),
                 ],
               ),
             ),
 
-            const Icon(
-              Icons.chevron_right,
-              size: 20,
-              color: Colors.black26,
-            ),
+            const Icon(Icons.chevron_right, size: 20, color: Colors.black26),
           ],
         ),
       ),
