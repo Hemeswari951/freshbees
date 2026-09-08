@@ -1,12 +1,5 @@
-const pool = require('../../config/db'); // same pool path as product.service.js
+const pool = require('../../config/db');
 
-/**
- * GET /api/customer/search/suggestions?q=ts
- * Small, fast lookup for the search-bar dropdown — matches product
- * names and tag names separately, capped low so it stays snappy while
- * typing. Only surfaces products from active shops (unblocked, active
- * product) so a tag/name suggestion never leads to a dead search.
- */
 async function getSearchSuggestions(req, res) {
   try {
     const q = (req.query.q || '').trim();
@@ -19,6 +12,17 @@ async function getSearchSuggestions(req, res) {
     const { rows } = await pool.query(
       `
       (
+        SELECT DISTINCT ON (s.shop_name)
+          s.shop_name AS text,
+          'shop' AS type,
+          s.shop_id AS ref_id
+        FROM shops s
+        WHERE s.shop_name ILIKE $1
+          AND s.is_blocked = false
+        LIMIT 4
+      )
+      UNION ALL
+      (
         SELECT DISTINCT ON (p.product_name)
           p.product_name AS text,
           'product' AS type,
@@ -28,7 +32,7 @@ async function getSearchSuggestions(req, res) {
         WHERE p.product_name ILIKE $1
           AND p.is_active = true
           AND s.is_blocked = false
-        LIMIT 6
+        LIMIT 4
       )
       UNION ALL
       (
@@ -43,9 +47,9 @@ async function getSearchSuggestions(req, res) {
         WHERE t.tag_name ILIKE $1
           AND p.is_active = true
           AND s.is_blocked = false
-        LIMIT 6
+        LIMIT 2
       )
-      LIMIT 10
+      LIMIT 8
       `,
       [likeParam]
     );

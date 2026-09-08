@@ -11,6 +11,7 @@ import './app_colors.dart';
 import '../services/cart_count.dart';
 import '../services/cart_service.dart';
 
+
 class CustomerHeader extends StatefulWidget {
   const CustomerHeader({super.key});
 
@@ -130,8 +131,31 @@ class _CustomerHeaderState extends State<CustomerHeader> {
   }
 
   void _onSuggestionTap(SearchSuggestion suggestion) {
-    _searchController.text = suggestion.text;
-    _handleSearch(suggestion.text);
+    final query = suggestion.text.trim();
+
+    if (query.isEmpty) return;
+
+    _searchController.text = query;
+
+    if (_searchOverlayController.isShowing) {
+      _searchOverlayController.hide();
+    }
+
+    _searchFocusNode.unfocus();
+
+    if (suggestion.isShop) {
+      context.push(
+        Uri(
+          path: '/shops',
+          queryParameters: {'category': 'All', 'search': query},
+        ).toString(),
+      );
+      return;
+    }
+
+    context.push(
+      Uri(path: '/products', queryParameters: {'search': query}).toString(),
+    );
   }
 
   // ===========================================================================
@@ -164,7 +188,6 @@ class _CustomerHeaderState extends State<CustomerHeader> {
         // =====================================================================
         // TOP BLACK BAR
         // =====================================================================
-
         Container(
           width: double.infinity,
           height: 48,
@@ -178,7 +201,6 @@ class _CustomerHeaderState extends State<CustomerHeader> {
               // This is your existing LocationBar.
               // No new location logic is created here.
               // ---------------------------------------------------------------
-
               Container(
                 decoration: BoxDecoration(
                   color: AppColors.white,
@@ -245,7 +267,6 @@ class _CustomerHeaderState extends State<CustomerHeader> {
               // ---------------------------------------------------------------
               // THIRAA LOGO
               // ---------------------------------------------------------------
-
               InkWell(
                 onTap: () {
                   context.push('/home');
@@ -316,11 +337,15 @@ class _CustomerHeaderState extends State<CustomerHeader> {
                                             return ListTile(
                                               dense: true,
                                               leading: Icon(
-                                                suggestion.isTag
+                                                suggestion.isShop
+                                                    ? Icons.storefront_outlined
+                                                    : suggestion.isTag
                                                     ? Icons.sell_outlined
                                                     : Icons.search_rounded,
                                                 size: 18,
-                                                color: AppColors.textGrey,
+                                                color: suggestion.isShop
+                                                    ? AppColors.black
+                                                    : AppColors.textGrey,
                                               ),
                                               title: Text(
                                                 suggestion.text,
@@ -520,8 +545,6 @@ class _NavLink {
 
   const _NavLink(this.label, this.route);
 }
-
-
 
 class _HeaderAction extends StatelessWidget {
   final IconData icon;
@@ -961,7 +984,6 @@ class _ProfileDropdownPanel extends StatelessWidget {
             // -----------------------------------------------------------------
             // LOGGED OUT
             // -----------------------------------------------------------------
-
             if (!isLoggedIn)
               Padding(
                 padding: const EdgeInsets.all(16),

@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    
+       <!-- Location Permissions -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <!-- URL Launcher Intent Queries for Call, WhatsApp, Web, and Maps -->
     <queries>
         <!-- Text Process (Default Flutter Engine Requirement) -->

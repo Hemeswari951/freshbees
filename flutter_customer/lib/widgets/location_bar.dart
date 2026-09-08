@@ -69,7 +69,7 @@ class _LocationBarState extends State<LocationBar> {
                 _showLocationSelector(context, _manager);
               }
 
-              return;
+            
             }
 
             // -----------------------------------------------------------

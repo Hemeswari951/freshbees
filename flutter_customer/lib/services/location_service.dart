@@ -1,5 +1,5 @@
 import 'dart:convert';
-
+import 'dart:io' show Platform;   // ← IDHA ADD PANNUNGA
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
@@ -28,17 +28,14 @@ class LocationService {
       // -----------------------------------------------------------------------
       // Check location service on native platforms.
       // -----------------------------------------------------------------------
-
-      if (!kIsWeb) {
-        final serviceEnabled =
-            await Geolocator.isLocationServiceEnabled();
-
-        if (!serviceEnabled) {
-          debugPrint(
-            'LocationService: Location service disabled.',
+        
+      if (!kIsWeb && Platform.isIOS) {
+        final accuracyStatus = await Geolocator.getLocationAccuracy();
+        if (accuracyStatus == LocationAccuracyStatus.reduced) {
+          await Geolocator.requestTemporaryFullAccuracy(
+            purposeKey: 'ThiraaPreciseLocation',
           );
-
-          return null;
+           debugPrint('Requested full accuracy');
         }
       }
 
@@ -49,12 +46,13 @@ class LocationService {
       // used.
       // -----------------------------------------------------------------------
 
-      final position =
-          await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
+     final position = await Geolocator.getCurrentPosition(
+  locationSettings: const LocationSettings(
+    accuracy: LocationAccuracy.best,
+  ),
+);
+
+debugPrint('LocationService: Accuracy = ${position.accuracy} meters');
 
       final latitude = position.latitude;
       final longitude = position.longitude;
@@ -90,7 +88,7 @@ class LocationService {
       debugPrint(
         'LocationService: displayName = $displayName',
       );
-
+debugPrint('RAW GPS: lat=$latitude, lng=$longitude');
       return LocationResult(
         latitude: latitude,
         longitude: longitude,

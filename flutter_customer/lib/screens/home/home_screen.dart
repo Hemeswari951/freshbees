@@ -5,11 +5,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../services/cart_service.dart';
 import '../../services/cart_count.dart';
-
-import '../product/product_list_screen.dart';
 import '../../services/api_service.dart';
 import '../../services/search_service.dart';
+
 import '../../widgets/location_bar.dart';
+
+
+
 
 import 'tabs/all_tab.dart';
 import 'tabs/men_tab.dart';
@@ -37,9 +39,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // =========================================================================
+  // ===========================================================================
   // SEARCH
-  // =========================================================================
+  // ===========================================================================
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -56,9 +58,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _isSuggesting = false;
 
-  // =========================================================================
+  // ===========================================================================
   // CATEGORY
-  // =========================================================================
+  // ===========================================================================
 
   late String _selectedCategory = widget.initialCategory;
 
@@ -70,42 +72,56 @@ class _HomeScreenState extends State<HomeScreen> {
     {'label': 'Beauty', 'icon': Icons.clean_hands_outlined},
   ];
 
+  // ===========================================================================
+  // INIT
+  // ===========================================================================
+
   @override
   void initState() {
     super.initState();
+
     _syncCartCount();
   }
 
+  // ===========================================================================
+  // CART COUNT
+  // ===========================================================================
+
   Future<void> _syncCartCount() async {
     final token = ApiService.getToken();
+
     if (token == null || token.isEmpty) {
       cartItemCount.value = 0;
       return;
     }
+
     try {
       final cart = await CartService.getCart();
+
       cartItemCount.value = cart.items.length;
     } catch (_) {
       // Silent — badge just stays at whatever it was.
     }
   }
-  // =========================================================================
+
+  // ===========================================================================
   // LIFECYCLE
-  // =========================================================================
+  // ===========================================================================
 
   @override
   void dispose() {
     _debounce?.cancel();
 
     _searchFocusNode.dispose();
+
     _searchController.dispose();
 
     super.dispose();
   }
 
-  // =========================================================================
+  // ===========================================================================
   // PROTECTED ROUTES
-  // =========================================================================
+  // ===========================================================================
 
   void _goToProtected(BuildContext context, String route) {
     final token = ApiService.getToken();
@@ -121,9 +137,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // =========================================================================
-  // SEARCH
-  // =========================================================================
+  // ===========================================================================
+  // SEARCH SUGGESTIONS
+  // ===========================================================================
 
   void _onSearchChanged(String value) {
     _debounce?.cancel();
@@ -142,6 +158,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     _debounce = Timer(const Duration(milliseconds: 350), () async {
+      if (!mounted) return;
+
       setState(() {
         _isSuggesting = true;
       });
@@ -168,12 +186,31 @@ class _HomeScreenState extends State<HomeScreen> {
           _suggestions = [];
           _isSuggesting = false;
         });
+
+        if (_searchOverlayController.isShowing) {
+          _searchOverlayController.hide();
+        }
       }
     });
   }
 
+  // ===========================================================================
+  // SEARCH SUBMIT
+  //
+  // IMPORTANT:
+  // If the user simply types something and presses Enter,
+  // we ALWAYS go to ProductListScreen.
+  //
+  // Shop navigation happens ONLY when the user selects a
+  // shop suggestion.
+  // ===========================================================================
+
   void _goToSearch(String query) {
-    if (query.trim().isEmpty) return;
+    final trimmedQuery = query.trim();
+
+    if (trimmedQuery.isEmpty) {
+      return;
+    }
 
     if (_searchOverlayController.isShowing) {
       _searchOverlayController.hide();
@@ -181,25 +218,64 @@ class _HomeScreenState extends State<HomeScreen> {
 
     _searchFocusNode.unfocus();
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ProductListScreen(
-          args: ProductListArgs.search(query: query.trim()),
-        ),
-      ),
+     context.push(
+      Uri(path: '/products', queryParameters: {'search': query}).toString(),
     );
   }
 
+  // ===========================================================================
+  // SUGGESTION TAP
+  //
+  // SHOP  -> ShopListScreen
+  // PRODUCT -> ProductListScreen
+  // TAG -> ProductListScreen
+  // ===========================================================================
+
   void _onSuggestionTap(SearchSuggestion suggestion) {
+    final query = suggestion.text.trim();
+
+    if (query.isEmpty) {
+      return;
+    }
+
+    // Put selected suggestion text inside search box.
     _searchController.text = suggestion.text;
 
-    _goToSearch(suggestion.text);
+    // Hide suggestion overlay.
+    if (_searchOverlayController.isShowing) {
+      _searchOverlayController.hide();
+    }
+
+    // Remove keyboard focus.
+    _searchFocusNode.unfocus();
+
+    // -------------------------------------------------------------------------
+    // SHOP SUGGESTION
+    // -------------------------------------------------------------------------
+
+    if (suggestion.isShop) {
+      context.push(
+        Uri(
+          path: '/shops',
+          queryParameters: {'category': 'All', 'search': query},
+        ).toString(),
+      );
+
+      return;
+    }
+
+    // -------------------------------------------------------------------------
+    // PRODUCT / TAG SUGGESTION
+    // -------------------------------------------------------------------------
+
+     context.push(
+      Uri(path: '/products', queryParameters: {'search': query}).toString(),
+    );
   }
 
-  // =========================================================================
+  // ===========================================================================
   // CATEGORY
-  // =========================================================================
+  // ===========================================================================
 
   void _selectCategory(String label) {
     setState(() {
@@ -211,9 +287,9 @@ class _HomeScreenState extends State<HomeScreen> {
     context.go(route);
   }
 
-  // =========================================================================
+  // ===========================================================================
   // BUILD
-  // =========================================================================
+  // ===========================================================================
 
   @override
   Widget build(BuildContext context) {
@@ -233,38 +309,29 @@ class _HomeScreenState extends State<HomeScreen> {
                   horizontal: 10,
                   vertical: 10,
                 ),
-
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-
                   children: [
-                    // =======================================================
+                    // =========================================================
                     // AI VIRTUAL TRY-ON BANNER
-                    // =======================================================
-
+                    // =========================================================
                     Container(
                       width: double.infinity,
-
                       decoration: BoxDecoration(
                         color: const Color(0xFFF2ECE4),
                         borderRadius: BorderRadius.circular(20),
                       ),
-
                       child: Row(
                         children: [
-                          // -------------------------------------------------
+                          // ---------------------------------------------------
                           // LEFT CONTENT
-                          // -------------------------------------------------
-
+                          // ---------------------------------------------------
                           Expanded(
                             flex: 3,
-
                             child: Padding(
                               padding: const EdgeInsets.all(20),
-
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-
                                 children: [
                                   const Text(
                                     'AI VIRTUAL TRY-ON',
@@ -304,28 +371,22 @@ class _HomeScreenState extends State<HomeScreen> {
                                     onPressed: () {
                                       context.go('/trial');
                                     },
-
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.black,
                                       foregroundColor: Colors.white,
-
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 16,
                                         vertical: 10,
                                       ),
-
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(10),
                                       ),
-
                                       elevation: 0,
                                     ),
-
                                     label: const Text(
                                       'Try Now',
                                       style: TextStyle(fontSize: 12),
                                     ),
-
                                     icon: const Icon(
                                       Icons.arrow_forward,
                                       size: 14,
@@ -336,22 +397,18 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
 
-                          // -------------------------------------------------
+                          // ---------------------------------------------------
                           // RIGHT IMAGE / PLACEHOLDER
-                          // -------------------------------------------------
+                          // ---------------------------------------------------
                           Expanded(
                             flex: 2,
-
                             child: ClipRRect(
                               borderRadius: const BorderRadius.horizontal(
                                 right: Radius.circular(20),
                               ),
-
                               child: Container(
                                 height: 210,
-
                                 color: const Color(0xFFE8DFD1),
-
                                 child: const Icon(
                                   Icons.person,
                                   size: 50,
@@ -366,9 +423,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     const SizedBox(height: 24),
 
-                    // =======================================================
+                    // =========================================================
                     // CATEGORY CONTENT
-                    // =======================================================
+                    // =========================================================
                     _buildSelectedCategoryContent(),
                   ],
                 ),
@@ -377,14 +434,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-
-      // Bottom navigation is handled by the shared shell.
     );
   }
 
-  // =========================================================================
+  // ===========================================================================
   // CATEGORY CONTENT
-  // =========================================================================
+  // ===========================================================================
 
   Widget _buildSelectedCategoryContent() {
     switch (_selectedCategory) {
@@ -406,17 +461,15 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // =========================================================================
+  // ===========================================================================
   // HEADER
-  // =========================================================================
+  // ===========================================================================
 
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-
       decoration: BoxDecoration(
         color: const Color(0xFFFAF7F2),
-
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.06),
@@ -425,12 +478,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-
         children: [
-          // Shared across every screen — reads/writes LocationManager().
+          // Shared across every screen.
           const LocationBar(),
 
           const SizedBox(height: 14),
@@ -445,9 +496,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // =========================================================================
+  // ===========================================================================
   // SEARCH ROW
-  // =========================================================================
+  // ===========================================================================
 
   Widget _buildSearchRow() {
     return Row(
@@ -455,7 +506,6 @@ class _HomeScreenState extends State<HomeScreen> {
         Expanded(
           child: CompositedTransformTarget(
             link: _searchLayerLink,
-
             child: OverlayPortal(
               controller: _searchOverlayController,
 
@@ -472,7 +522,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         CompositedTransformFollower(
                           link: _searchLayerLink,
-
                           showWhenUnlinked: false,
 
                           offset: const Offset(0, 52),
@@ -515,26 +564,42 @@ class _HomeScreenState extends State<HomeScreen> {
                                       return ListTile(
                                         dense: true,
 
+                                        // =================================================
+                                        // ICON
+                                        // =================================================
                                         leading: Icon(
-                                          suggestion.isTag
+                                          suggestion.isShop
+                                              ? Icons.storefront_outlined
+                                              : suggestion.isTag
                                               ? Icons.sell_outlined
                                               : Icons.search_rounded,
-
                                           size: 18,
-
                                           color: const Color(0xFF8B7355),
                                         ),
 
+                                        // =================================================
+                                        // TEXT
+                                        // =================================================
                                         title: Text(
                                           suggestion.text,
-
                                           style: const TextStyle(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w500,
                                           ),
                                         ),
 
-                                        trailing: suggestion.isTag
+                                        // =================================================
+                                        // TYPE
+                                        // =================================================
+                                        trailing: suggestion.isShop
+                                            ? const Text(
+                                                'shop',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.black38,
+                                                ),
+                                              )
+                                            : suggestion.isTag
                                             ? const Text(
                                                 'tag',
                                                 style: TextStyle(
@@ -544,8 +609,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                               )
                                             : null,
 
-                                        onTap: () =>
-                                            _onSuggestionTap(suggestion),
+                                        // =================================================
+                                        // TAP
+                                        // =================================================
+                                        onTap: () {
+                                          _onSuggestionTap(suggestion);
+                                        },
                                       );
                                     },
                                   ),
@@ -560,6 +629,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               },
 
+              // =================================================================
+              // SEARCH BOX
+              // =================================================================
               child: Container(
                 height: 46,
 
@@ -567,7 +639,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 decoration: BoxDecoration(
                   color: const Color(0xFFF2ECE4),
-
                   borderRadius: BorderRadius.circular(14),
                 ),
 
@@ -601,24 +672,37 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: Colors.black87,
                         ),
 
+                        // =====================================================
+                        // USER TYPES
+                        // =====================================================
                         onChanged: _onSearchChanged,
 
+                        // =====================================================
+                        // USER PRESSES ENTER
+                        //
+                        // Always ProductListScreen
+                        // =====================================================
                         onSubmitted: _goToSearch,
                       ),
                     ),
 
+                    // =========================================================
+                    // LOADING
+                    // =========================================================
                     if (_isSuggesting)
                       const SizedBox(
                         width: 14,
                         height: 14,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
+                    // =========================================================
+                    // MIC + CAMERA
+                    // =========================================================
                     else ...[
                       GestureDetector(
                         onTap: () {
                           // TODO: voice search
                         },
-
                         child: const Icon(
                           Icons.mic_none_rounded,
                           size: 20,
@@ -632,7 +716,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         onTap: () {
                           // TODO: visual search
                         },
-
                         child: const Icon(
                           Icons.camera_alt_outlined,
                           size: 20,
@@ -649,6 +732,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
         const SizedBox(width: 8),
 
+        // =====================================================================
+        // NOTIFICATIONS
+        // =====================================================================
         _buildHeaderIconButton(
           icon: Icons.notifications_none_outlined,
           onTap: () => _goToProtected(context, '/notifications'),
@@ -656,8 +742,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
         const SizedBox(width: 8),
 
+        // =====================================================================
+        // CART
+        // =====================================================================
         ValueListenableBuilder<int>(
           valueListenable: cartItemCount,
+
           builder: (context, count, child) {
             return _buildHeaderIconButton(
               icon: Icons.shopping_cart_outlined,
@@ -670,9 +760,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // =========================================================================
+  // ===========================================================================
   // HEADER ICON BUTTON
-  // =========================================================================
+  // ===========================================================================
 
   Widget _buildHeaderIconButton({
     required IconData icon,
@@ -692,27 +782,35 @@ class _HomeScreenState extends State<HomeScreen> {
 
             decoration: BoxDecoration(
               color: const Color(0xFFF2ECE4),
-
               borderRadius: BorderRadius.circular(12),
             ),
 
             child: Icon(icon, size: 19, color: Colors.black87),
           ),
 
+          // =================================================================
+          // CART BADGE
+          // =================================================================
           if (badgeCount > 0)
             Positioned(
               top: -2,
               right: -2,
+
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+
                 constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+
                 decoration: const BoxDecoration(
                   color: Colors.red,
                   shape: BoxShape.circle,
                 ),
+
                 alignment: Alignment.center,
+
                 child: Text(
                   badgeCount > 99 ? '99+' : '$badgeCount',
+
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 9,
@@ -726,9 +824,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // =========================================================================
+  // ===========================================================================
   // CATEGORY TOGGLE
-  // =========================================================================
+  // ===========================================================================
 
   Widget _buildCategoryToggle() {
     return SizedBox(
@@ -782,6 +880,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Icon(
                     icon,
+
                     size: 17,
 
                     color: isSelected

@@ -2,6 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+<dict>
+    <key>ThiraaPreciseLocation</key>
+    <string>Thiraa needs your precise location to show nearby shops and accurate delivery estimates.</string>
+</dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -79,5 +84,17 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+
+	<key>NSLocationWhenInUseUsageDescription</key>
+<string>Thiraa needs your location to show nearby shops and delivery options.</string>
+
+<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+<string>Thiraa needs your location to show nearby shops and delivery options.</string>
+
+<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+<dict>
+    <key>ThiraaPreciseLocation</key>
+    <string>Thiraa needs your precise location to show nearby shops and accurate delivery estimates.</string>
+</dict>
 </dict>
 </plist>

@@ -1,26 +1,30 @@
 import 'api_service.dart';
 
-/// Shared suggestion row used by BOTH the mobile HomeScreen search bar
-/// and the desktop CustomerHeader search bar — public (not private to
-/// one file) so both screens can import and use it.
 class SearchSuggestion {
   final String text;
   final bool isTag;
+  final bool isShop;
+  final int? refId;
 
-  const SearchSuggestion({required this.text, required this.isTag});
+  const SearchSuggestion({
+    required this.text,
+    required this.isTag,
+    required this.isShop,
+    this.refId,
+  });
 
   factory SearchSuggestion.fromJson(Map<String, dynamic> json) {
+    final type = json['type'] as String?;
     return SearchSuggestion(
       text: json['text'] as String,
-      isTag: json['type'] == 'tag',
+      isTag: type == 'tag',
+      isShop: type == 'shop',
+      refId: json['ref_id'] as int?,
     );
   }
 }
 
 class SearchService {
-  /// Search-bar suggestions — matches product names AND tags. Used by
-  /// both the mobile HomeScreen header and the desktop CustomerHeader,
-  /// so the debounce/overlay UI in each screen just calls this.
   static Future<List<SearchSuggestion>> getSearchSuggestions(
     String query,
   ) async {

@@ -76,7 +76,6 @@ final GoRouter appRouter = GoRouter(
     // ─────────────────────────────────────────────────────────
     // Splash
     // ─────────────────────────────────────────────────────────
-
     GoRoute(
       path: '/splash',
       builder: (context, state) {
@@ -114,7 +113,6 @@ final GoRouter appRouter = GoRouter(
         // ─────────────────────────────────────────
         // HOME
         // ─────────────────────────────────────────
-
         GoRoute(
           path: '/home',
 
@@ -394,7 +392,9 @@ final GoRouter appRouter = GoRouter(
           builder: (context, state) {
             final category = state.uri.queryParameters['category'] ?? 'All';
 
-            return ShopListScreen(categoryTitle: category);
+            final search = state.uri.queryParameters['search'];
+
+            return ShopListScreen(categoryTitle: category, searchQuery: search);
           },
         ),
 
