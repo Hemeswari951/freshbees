@@ -1,6 +1,6 @@
 // backend/services/customer/wishlist.service.js
 const pool = require('../../config/db');
-
+ 
 // discount_percent is never stored — same derivation used everywhere else
 // on the customer side (see services/customer/product.service.js).
 const DISCOUNT_SQL = `
@@ -9,7 +9,7 @@ const DISCOUNT_SQL = `
     ELSE ROUND(((p.mrp - p.price) / p.mrp) * 100)::INT
   END
 `;
-
+ 
 // ── Add a product to the customer's wishlist ──────────────────────────────
 // Manual existence check instead of relying on an ON CONFLICT upsert, so
 // this keeps working even if the (customer_id, product_id) unique
@@ -21,11 +21,11 @@ async function addToWishlist(customerId, productId) {
      WHERE customer_id = $1 AND product_id = $2`,
     [customerId, productId]
   );
-
+ 
   if (existing.rows[0]) {
     return existing.rows[0]; // already wishlisted — nothing to do
   }
-
+ 
   const { rows } = await pool.query(
     `INSERT INTO wishlist (customer_id, product_id)
      VALUES ($1, $2)
@@ -34,7 +34,7 @@ async function addToWishlist(customerId, productId) {
   );
   return rows[0] || null;
 }
-
+ 
 // ── Remove a product from the customer's wishlist ─────────────────────────
 async function removeFromWishlist(customerId, productId) {
   const { rows } = await pool.query(
@@ -45,7 +45,7 @@ async function removeFromWishlist(customerId, productId) {
   );
   return rows[0] || null;
 }
-
+ 
 // ── Every wishlisted product for this customer ─────────────────────────────
 // Same active-product / unblocked-shop rule as the rest of the customer
 // catalog (see findAllPublicProducts) — if the owner deactivates a product
@@ -60,7 +60,8 @@ async function removeFromWishlist(customerId, productId) {
 // `product_ratings` view in schema.sql, just inlined here so it stays in
 // one query instead of needing a real view + a join to it.
 async function getWishlistProducts(customerId) {
-  const { rows } = await pool.query(
+ 
+ const { rows } = await pool.query(
     `
     SELECT
       p.product_id,
@@ -77,6 +78,8 @@ async function getWishlistProducts(customerId) {
       b.brand_name,
       COALESCE(img.image_url, NULL) AS thumbnail,
       COALESCE(v.total_stock, 0) AS total_stock,
+      v.sizes,
+      c.colors, /* <-- FIXED: Fetch colors from the new subquery */
       COALESCE(rv.avg_rating, 0)::NUMERIC(3,2) AS rating,
       COALESCE(rv.review_count, 0) AS review_count,
       w.added_at
@@ -96,10 +99,21 @@ async function getWishlistProducts(customerId) {
       LIMIT 1
     ) img ON true
     LEFT JOIN (
-      SELECT product_id, SUM(stock_quantity) AS total_stock
+      SELECT
+        product_id,
+        SUM(stock_quantity) AS total_stock,
+        ARRAY_AGG(DISTINCT size) AS sizes
       FROM product_variants
       GROUP BY product_id
     ) v ON v.product_id = p.product_id
+    /* <-- FIXED: Added a separate join specifically for product colors */
+    LEFT JOIN (
+      SELECT
+        product_id,
+        ARRAY_AGG(DISTINCT color_name) AS colors /* NOTE: If your column is just named 'color', change 'color_name' to 'color' */
+      FROM product_colors
+      GROUP BY product_id
+    ) c ON c.product_id = p.product_id
     LEFT JOIN (
       SELECT product_id, AVG(rating) AS avg_rating, COUNT(review_id) AS review_count
       FROM reviews
@@ -113,8 +127,9 @@ async function getWishlistProducts(customerId) {
     [customerId]
   );
   return rows;
+ 
 }
-
+ 
 module.exports = {
   addToWishlist,
   removeFromWishlist,

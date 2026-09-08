@@ -7,17 +7,23 @@ class ShopGrid extends StatelessWidget {
   final List<ShopModel> shops;
   final Function(ShopModel) onShopTap;
   final String category;
+  final int? maxItems; // Limit items for home preview (e.g. max 4)
 
   const ShopGrid({
     super.key,
     required this.shops,
     required this.onShopTap,
     required this.category,
+    this.maxItems,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (shops.isEmpty) {
+    final displayShops = maxItems != null && shops.length > maxItems!
+        ? shops.take(maxItems!).toList()
+        : shops;
+
+    if (displayShops.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 40),
         child: Center(
@@ -34,23 +40,23 @@ class ShopGrid extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double availableWidth = constraints.maxWidth;
-
-        // ==========================================================
-        // DESKTOP → 4 CARDS
-        // MOBILE  → 2 CARDS
-        // ==========================================================
+        final double availableWidth =
+            constraints.maxWidth.isFinite && constraints.maxWidth > 0
+                ? constraints.maxWidth
+                : 0;
 
         final bool isDesktop = availableWidth >= 768;
-
         final int visibleCards = isDesktop ? 4 : 2;
-
         const double spacing = 16;
+        const double fallbackCardWidth = 140;
+
+        final double rawCardWidth =
+            (availableWidth - (spacing * (visibleCards - 1))) / visibleCards;
 
         final double cardWidth =
-            (availableWidth -
-                    (spacing * (visibleCards - 1))) /
-                visibleCards;
+            rawCardWidth.isFinite && rawCardWidth > 0
+                ? rawCardWidth
+                : fallbackCardWidth;
 
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -58,13 +64,13 @@ class ShopGrid extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: List.generate(
-              shops.length,
+              displayShops.length,
               (index) {
-                final ShopModel shop = shops[index];
+                final ShopModel shop = displayShops[index];
 
                 return Padding(
                   padding: EdgeInsets.only(
-                    right: index == shops.length - 1 ? 0 : spacing,
+                    right: index == displayShops.length - 1 ? 0 : spacing,
                   ),
                   child: ShopCard(
                     shop: shop,

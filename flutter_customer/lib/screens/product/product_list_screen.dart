@@ -10,6 +10,7 @@ import '../../services/product_service.dart';
 import '../../services/search_service.dart';
 import '../../widgets/product_card.dart';
 import 'product_filters.dart';
+import '../../services/cart_count.dart';
 
 // ===========================================================================
 // ARGS — what to fetch (shop or search) + the title to show
@@ -35,16 +36,10 @@ class ProductListArgs {
     required int shopId,
     required String shopName,
   }) {
-    return ProductListArgs(
-      key: keyShop,
-      value: shopId,
-      title: shopName,
-    );
+    return ProductListArgs(key: keyShop, value: shopId, title: shopName);
   }
 
-  factory ProductListArgs.search({
-    required String query,
-  }) {
+  factory ProductListArgs.search({required String query}) {
     return ProductListArgs(
       key: keySearch,
       value: query,
@@ -207,9 +202,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
       return ProductService.getProductsByShop(widget.args.shopId);
     }
 
-    return ProductService.searchProducts(
-      widget.args.value as String,
-    );
+    return ProductService.searchProducts(widget.args.value as String);
   }
 
   Future<void> _loadProducts() async {
@@ -274,10 +267,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
 
   Future<void> _toggleWishlist(ProductModel product) async {
     if (!_isLoggedIn) {
-      _goToProtected(
-        context,
-        GoRouterState.of(context).uri.toString(),
-      );
+      _goToProtected(context, GoRouterState.of(context).uri.toString());
       return;
     }
 
@@ -382,12 +372,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
       _searchExpanded = false;
     });
 
-    final uri = Uri(
-      path: '/products',
-      queryParameters: {
-        'search': trimmed,
-      },
-    );
+    final uri = Uri(path: '/products', queryParameters: {'search': trimmed});
 
     context.go(uri.toString());
   }
@@ -463,12 +448,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
       context.push(route);
     } else {
       context.push(
-        Uri(
-          path: '/login',
-          queryParameters: {
-            'redirect': route,
-          },
-        ).toString(),
+        Uri(path: '/login', queryParameters: {'redirect': route}).toString(),
       );
     }
   }
@@ -517,43 +497,37 @@ class _ProductListScreenState extends State<ProductListScreen> {
       return;
     }
 
-    _debounce = Timer(
-      const Duration(milliseconds: 350),
-      () async {
+    _debounce = Timer(const Duration(milliseconds: 350), () async {
+      if (!mounted) return;
+
+      setState(() {
+        _isSuggesting = true;
+      });
+
+      try {
+        final results = await SearchService.getSearchSuggestions(value);
+
         if (!mounted) return;
 
         setState(() {
-          _isSuggesting = true;
+          _suggestions = results;
+          _isSuggesting = false;
         });
 
-        try {
-          final results =
-              await SearchService.getSearchSuggestions(value);
-
-          if (!mounted) return;
-
-          setState(() {
-            _suggestions = results;
-            _isSuggesting = false;
-          });
-
-          if (_suggestions.isNotEmpty &&
-              !_searchOverlayController.isShowing) {
-            _searchOverlayController.show();
-          } else if (_suggestions.isEmpty &&
-              _searchOverlayController.isShowing) {
-            _searchOverlayController.hide();
-          }
-        } catch (_) {
-          if (!mounted) return;
-
-          setState(() {
-            _suggestions = [];
-            _isSuggesting = false;
-          });
+        if (_suggestions.isNotEmpty && !_searchOverlayController.isShowing) {
+          _searchOverlayController.show();
+        } else if (_suggestions.isEmpty && _searchOverlayController.isShowing) {
+          _searchOverlayController.hide();
         }
-      },
-    );
+      } catch (_) {
+        if (!mounted) return;
+
+        setState(() {
+          _suggestions = [];
+          _isSuggesting = false;
+        });
+      }
+    });
   }
 
   void _onSuggestionTap(SearchSuggestion suggestion) {
@@ -577,9 +551,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
       body: SafeArea(
         top: isDesktop,
         bottom: false,
-        child: isDesktop
-            ? _buildDesktopScaffold()
-            : _buildMobileScaffold(),
+        child: isDesktop ? _buildDesktopScaffold() : _buildMobileScaffold(),
       ),
     );
   }
@@ -600,30 +572,19 @@ class _ProductListScreenState extends State<ProductListScreen> {
               Expanded(
                 child: CustomScrollView(
                   slivers: [
-                    ..._buildProductSlivers(
-                      isDesktopLayout: true,
-                    ),
-                    const SliverToBoxAdapter(
-                      child: SizedBox(height: 24),
-                    ),
+                    ..._buildProductSlivers(isDesktopLayout: true),
+                    const SliverToBoxAdapter(child: SizedBox(height: 24)),
                   ],
                 ),
               ),
 
               Container(
                 width: 340,
-                margin: const EdgeInsets.fromLTRB(
-                  0,
-                  16,
-                  24,
-                  16,
-                ),
+                margin: const EdgeInsets.fromLTRB(0, 16, 24, 16),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.black12,
-                  ),
+                  border: Border.all(color: Colors.black12),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: FilterPanel(
@@ -645,31 +606,19 @@ class _ProductListScreenState extends State<ProductListScreen> {
   Widget _buildDesktopTopBar() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(
-        4,
-        14,
-        24,
-        0,
-      ),
+      padding: const EdgeInsets.fromLTRB(4, 14, 24, 0),
       child: Row(
         children: [
-          Expanded(
-            child: _desktopBreadcrumb(),
-          ),
+          Expanded(child: _desktopBreadcrumb()),
 
           if (widget.args.isShop)
             OutlinedButton.icon(
               onPressed: _openShopOverview,
-              icon: const Icon(
-                Icons.storefront_outlined,
-                size: 16,
-              ),
+              icon: const Icon(Icons.storefront_outlined, size: 16),
               label: const Text('Overview'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: _ink,
-                side: const BorderSide(
-                  color: Colors.black26,
-                ),
+                side: const BorderSide(color: Colors.black26),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 8,
@@ -682,16 +631,11 @@ class _ProductListScreenState extends State<ProductListScreen> {
   }
 
   Widget _desktopBreadcrumb() {
-    TextStyle crumbStyle({
-      bool active = false,
-    }) {
+    TextStyle crumbStyle({bool active = false}) {
       return TextStyle(
         fontSize: 15,
-        fontWeight:
-            active ? FontWeight.w700 : FontWeight.w500,
-        color: active
-            ? _ink
-            : _ink.withOpacity(0.5),
+        fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+        color: active ? _ink : _ink.withOpacity(0.5),
       );
     }
 
@@ -699,16 +643,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
       children: [
         GestureDetector(
           onTap: () => context.go('/home'),
-          child: Text(
-            'Home',
-            style: crumbStyle(),
-          ),
+          child: Text('Home', style: crumbStyle()),
         ),
 
-        Text(
-          '  /  ',
-          style: crumbStyle(),
-        ),
+        Text('  /  ', style: crumbStyle()),
 
         Expanded(
           child: Text(
@@ -736,17 +674,11 @@ class _ProductListScreenState extends State<ProductListScreen> {
         Expanded(
           child: CustomScrollView(
             slivers: [
-              SliverToBoxAdapter(
-                child: _buildMobileFilterToolbar(),
-              ),
+              SliverToBoxAdapter(child: _buildMobileFilterToolbar()),
 
-              ..._buildProductSlivers(
-                isDesktopLayout: false,
-              ),
+              ..._buildProductSlivers(isDesktopLayout: false),
 
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 24),
-              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
             ],
           ),
         ),
@@ -757,15 +689,8 @@ class _ProductListScreenState extends State<ProductListScreen> {
   Widget _buildMobileHeader() {
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(
-        4,
-        8,
-        12,
-        8,
-      ),
-      child: _searchExpanded
-          ? _buildSearchRow()
-          : _buildTitleRow(),
+      padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
+      child: _searchExpanded ? _buildSearchRow() : _buildTitleRow(),
     );
   }
 
@@ -773,10 +698,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
     return Row(
       children: [
         IconButton(
-          icon: const Icon(
-            Icons.arrow_back,
-            color: _ink,
-          ),
+          icon: const Icon(Icons.arrow_back, color: _ink),
           onPressed: () => _goBack(context),
         ),
 
@@ -794,19 +716,51 @@ class _ProductListScreenState extends State<ProductListScreen> {
         ),
 
         IconButton(
-          icon: const Icon(
-            Icons.search,
-            color: _ink,
-          ),
+          icon: const Icon(Icons.search, color: _ink),
           onPressed: _openInlineSearch,
         ),
 
-        IconButton(
-          icon: const Icon(
-            Icons.shopping_cart_outlined,
-            color: _ink,
-          ),
-          onPressed: _openCart,
+        ValueListenableBuilder<int>(
+          valueListenable: cartItemCount,
+          builder: (context, count, child) {
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.shopping_cart_outlined, color: _ink),
+                  onPressed: _openCart,
+                ),
+                if (count > 0)
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        count > 99 ? '99+' : '$count',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
       ],
     );
@@ -816,10 +770,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
     return Row(
       children: [
         IconButton(
-          icon: const Icon(
-            Icons.arrow_back,
-            color: _ink,
-          ),
+          icon: const Icon(Icons.arrow_back, color: _ink),
           onPressed: _closeInlineSearch,
         ),
 
@@ -831,8 +782,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
               overlayChildBuilder: (context) {
                 return Positioned.fill(
                   child: GestureDetector(
-                    behavior:
-                        HitTestBehavior.translucent,
+                    behavior: HitTestBehavior.translucent,
                     onTap: () {
                       _searchOverlayController.hide();
                     },
@@ -846,83 +796,54 @@ class _ProductListScreenState extends State<ProductListScreen> {
                             alignment: Alignment.topLeft,
                             child: Material(
                               elevation: 4,
-                              borderRadius:
-                                  BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(14),
                               color: Colors.white,
                               child: SizedBox(
-                                width:
-                                    MediaQuery.of(context)
-                                            .size
-                                            .width -
-                                        56,
+                                width: MediaQuery.of(context).size.width - 56,
                                 child: ConstrainedBox(
-                                  constraints:
-                                      const BoxConstraints(
+                                  constraints: const BoxConstraints(
                                     maxHeight: 320,
                                   ),
-                                  child:
-                                      ListView.separated(
+                                  child: ListView.separated(
                                     shrinkWrap: true,
-                                    padding:
-                                        const EdgeInsets
-                                            .symmetric(
+                                    padding: const EdgeInsets.symmetric(
                                       vertical: 6,
                                     ),
-                                    itemCount:
-                                        _suggestions.length,
-                                    separatorBuilder:
-                                        (_, __) =>
-                                            Divider(
+                                    itemCount: _suggestions.length,
+                                    separatorBuilder: (_, __) => Divider(
                                       height: 1,
-                                      color: Colors.black
-                                          .withOpacity(0.05),
+                                      color: Colors.black.withOpacity(0.05),
                                     ),
-                                    itemBuilder:
-                                        (context, index) {
-                                      final suggestion =
-                                          _suggestions[index];
+                                    itemBuilder: (context, index) {
+                                      final suggestion = _suggestions[index];
 
                                       return ListTile(
                                         dense: true,
                                         leading: Icon(
                                           suggestion.isTag
-                                              ? Icons
-                                                  .sell_outlined
-                                              : Icons
-                                                  .search_rounded,
+                                              ? Icons.sell_outlined
+                                              : Icons.search_rounded,
                                           size: 18,
-                                          color:
-                                              const Color(
-                                            0xFF8B7355,
-                                          ),
+                                          color: const Color(0xFF8B7355),
                                         ),
                                         title: Text(
                                           suggestion.text,
-                                          style:
-                                              const TextStyle(
+                                          style: const TextStyle(
                                             fontSize: 13,
-                                            fontWeight:
-                                                FontWeight.w500,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
-                                        trailing:
-                                            suggestion.isTag
-                                                ? const Text(
-                                                    'tag',
-                                                    style:
-                                                        TextStyle(
-                                                      fontSize:
-                                                          11,
-                                                      color:
-                                                          Colors
-                                                              .black38,
-                                                    ),
-                                                  )
-                                                : null,
+                                        trailing: suggestion.isTag
+                                            ? const Text(
+                                                'tag',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.black38,
+                                                ),
+                                              )
+                                            : null,
                                         onTap: () =>
-                                            _onSuggestionTap(
-                                          suggestion,
-                                        ),
+                                            _onSuggestionTap(suggestion),
                                       );
                                     },
                                   ),
@@ -940,23 +861,18 @@ class _ProductListScreenState extends State<ProductListScreen> {
                 height: 40,
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1ECE3),
-                  borderRadius:
-                      BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: TextField(
                   controller: _searchController,
                   focusNode: _searchFocusNode,
-                  textInputAction:
-                      TextInputAction.search,
+                  textInputAction: TextInputAction.search,
                   onSubmitted: (query) {
                     _searchOverlayController.hide();
                     _onSearchSubmitted(query);
                   },
                   onChanged: _onSearchChanged,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: _ink,
-                  ),
+                  style: const TextStyle(fontSize: 14, color: _ink),
                   decoration: InputDecoration(
                     isDense: true,
                     border: InputBorder.none,
@@ -971,42 +887,32 @@ class _ProductListScreenState extends State<ProductListScreen> {
                             child: SizedBox(
                               width: 14,
                               height: 14,
-                              child:
-                                  CircularProgressIndicator(
-                                strokeWidth: 2,
-                              ),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             ),
                           )
-                        : (_searchController
-                                .text
-                                .isEmpty
-                            ? null
-                            : IconButton(
-                                icon: const Icon(
-                                  Icons.close,
-                                  size: 18,
-                                  color: Colors.black45,
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    _searchController
-                                        .clear();
-                                    _suggestions = [];
-                                  });
+                        : (_searchController.text.isEmpty
+                              ? null
+                              : IconButton(
+                                  icon: const Icon(
+                                    Icons.close,
+                                    size: 18,
+                                    color: Colors.black45,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _searchController.clear();
+                                      _suggestions = [];
+                                    });
 
-                                  _searchOverlayController
-                                      .hide();
-                                },
-                              )),
+                                    _searchOverlayController.hide();
+                                  },
+                                )),
                     hintText: 'Search products',
                     hintStyle: const TextStyle(
                       fontSize: 13,
                       color: Colors.black45,
                     ),
-                    contentPadding:
-                        const EdgeInsets.symmetric(
-                      vertical: 10,
-                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
                   ),
                 ),
               ),
@@ -1025,12 +931,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
     final count = _filters.activeCount;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(
-        12,
-        10,
-        16,
-        10,
-      ),
+      padding: const EdgeInsets.fromLTRB(12, 10, 16, 10),
       child: Row(
         children: [
           TextButton.icon(
@@ -1038,15 +939,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
             icon: Badge(
               isLabelVisible: count > 0,
               label: Text('$count'),
-              child: const Icon(
-                Icons.tune,
-                size: 18,
-              ),
+              child: const Icon(Icons.tune, size: 18),
             ),
             label: const Text('Filters'),
-            style: TextButton.styleFrom(
-              foregroundColor: _ink,
-            ),
+            style: TextButton.styleFrom(foregroundColor: _ink),
           ),
 
           const Spacer(),
@@ -1054,14 +950,9 @@ class _ProductListScreenState extends State<ProductListScreen> {
           if (widget.args.isShop)
             TextButton.icon(
               onPressed: _openShopOverview,
-              icon: const Icon(
-                Icons.storefront_outlined,
-                size: 16,
-              ),
+              icon: const Icon(Icons.storefront_outlined, size: 16),
               label: const Text('Overview'),
-              style: TextButton.styleFrom(
-                foregroundColor: _ink,
-              ),
+              style: TextButton.styleFrom(foregroundColor: _ink),
             ),
         ],
       ),
@@ -1080,16 +971,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
     return 2;
   }
 
-  List<Widget> _buildProductSlivers({
-    required bool isDesktopLayout,
-  }) {
+  List<Widget> _buildProductSlivers({required bool isDesktopLayout}) {
     if (_isLoading) {
       return const [
-        SliverFillRemaining(
-          child: Center(
-            child: CircularProgressIndicator(),
-          ),
-        ),
+        SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
       ];
     }
 
@@ -1100,12 +985,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  _error!,
-                  style: const TextStyle(
-                    color: Colors.black54,
-                  ),
-                ),
+                Text(_error!, style: const TextStyle(color: Colors.black54)),
                 const SizedBox(height: 12),
                 TextButton(
                   onPressed: _loadProducts,
@@ -1127,18 +1007,14 @@ class _ProductListScreenState extends State<ProductListScreen> {
               children: [
                 Text(
                   _emptyMessage,
-                  style: const TextStyle(
-                    color: Colors.black54,
-                  ),
+                  style: const TextStyle(color: Colors.black54),
                 ),
 
                 if (_filters.activeCount > 0) ...[
                   const SizedBox(height: 8),
                   TextButton(
                     onPressed: _clearFilters,
-                    child: const Text(
-                      'Clear filters',
-                    ),
+                    child: const Text('Clear filters'),
                   ),
                 ],
               ],
@@ -1151,65 +1027,42 @@ class _ProductListScreenState extends State<ProductListScreen> {
     return [
       SliverLayoutBuilder(
         builder: (context, constraints) {
-          final crossAxisCount =
-              _gridColumnCount(
-            constraints.crossAxisExtent,
-          );
+          final crossAxisCount = _gridColumnCount(constraints.crossAxisExtent);
 
           return SliverPadding(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              isDesktopLayout ? 16 : 8,
-              16,
-              8,
-            ),
+            padding: EdgeInsets.fromLTRB(16, isDesktopLayout ? 16 : 8, 16, 8),
             sliver: SliverGrid(
-              gridDelegate:
-                  SliverGridDelegateWithFixedCrossAxisCount(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: crossAxisCount,
                 crossAxisSpacing: 16,
                 mainAxisSpacing: 16,
                 childAspectRatio: 0.62,
               ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final product = _products[index];
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final product = _products[index];
 
-                  final isUpdating =
-                      _wishlistUpdatingIds
-                          .contains(product.id);
+                final isUpdating = _wishlistUpdatingIds.contains(product.id);
 
-                  return ProductCard(
-                    // IMPORTANT:
-                    // Stable key prevents Flutter from incorrectly
-                    // reusing a hovered card for another product when
-                    // the wishlist state changes.
-                    key: ValueKey(
-                      'product_${product.id}',
-                    ),
+                return ProductCard(
+                  // IMPORTANT:
+                  // Stable key prevents Flutter from incorrectly
+                  // reusing a hovered card for another product when
+                  // the wishlist state changes.
+                  key: ValueKey('product_${product.id}'),
 
-                    product: product,
+                  product: product,
 
-                    isWishlisted:
-                        _wishlistIds.contains(
-                      product.id,
-                    ),
+                  isWishlisted: _wishlistIds.contains(product.id),
 
-                    isWishlistUpdating:
-                        isUpdating,
+                  isWishlistUpdating: isUpdating,
 
-                    onWishlistTap:
-                        isUpdating
-                            ? null
-                            : () =>
-                                _toggleWishlist(product),
+                  onWishlistTap: isUpdating
+                      ? null
+                      : () => _toggleWishlist(product),
 
-                    onTap: () =>
-                        _openProduct(product),
-                  );
-                },
-                childCount: _products.length,
-              ),
+                  onTap: () => _openProduct(product),
+                );
+              }, childCount: _products.length),
             ),
           );
         },

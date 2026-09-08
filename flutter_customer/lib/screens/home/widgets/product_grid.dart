@@ -347,8 +347,7 @@ class _ProductGridState extends State<ProductGrid> {
   @override
   Widget build(BuildContext context) {
     final bool isMobile =
-        MediaQuery.of(context).size.width <
-            kMobileBreakpoint;
+        MediaQuery.of(context).size.width < kMobileBreakpoint;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -556,8 +555,7 @@ class _ProductGridState extends State<ProductGrid> {
   // ============================================================
 
   Widget _buildGrid() {
-    return FutureBuilder<
-        List<ProductModel>>(
+    return FutureBuilder<List<ProductModel>>(
       future: _future,
       builder: (
         context,
@@ -671,45 +669,59 @@ class _ProductGridState extends State<ProductGrid> {
         // ------------------------------------------------------
         // GRID
         // ------------------------------------------------------
+        //
+        // Uses LayoutBuilder (instead of MediaQuery.of(context).size.width)
+        // to size against the space this widget actually has, and guards
+        // against a transient 0/invalid width — e.g. during a window
+        // resize on web (handleMetricsChanged) or a page-transition frame
+        // — which previously crashed with
+        // "crossAxisExtent > 0.0 is not true".
 
-        final width =
-            MediaQuery.of(context)
-                .size
-                .width;
+        return LayoutBuilder(
+          builder: (context, gridConstraints) {
+            if (!gridConstraints.maxWidth.isFinite ||
+                gridConstraints.maxWidth <= 0) {
+              return const SizedBox.shrink();
+            }
 
-        final maxExtent =
-            width < kMobileBreakpoint
-                ? 200.0
-                : 240.0;
+            final width = gridConstraints.maxWidth;
 
-        return GridView.builder(
-          shrinkWrap: true,
-          physics:
-              const NeverScrollableScrollPhysics(),
+            final maxExtent =
+                width < kMobileBreakpoint ? 200.0 : 240.0;
 
-          gridDelegate:
-              SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent:
-                maxExtent,
-            mainAxisSpacing: 14,
-            crossAxisSpacing: 14,
-            childAspectRatio: 0.62,
-          ),
+            // Never let maxCrossAxisExtent exceed the available width —
+            // that's what forces crossAxisExtent down to <= 0 on very
+            // narrow/transient widths.
+            final safeMaxExtent =
+                maxExtent > width ? width : maxExtent;
 
-          itemCount:
-              products.length,
+            return GridView.builder(
+              shrinkWrap: true,
+              physics:
+                  const NeverScrollableScrollPhysics(),
 
-          itemBuilder:
-              (context, index) {
-            final product = products[index];
+              gridDelegate:
+                  SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: safeMaxExtent,
+                mainAxisSpacing: 14,
+                crossAxisSpacing: 14,
+                childAspectRatio: 0.62,
+              ),
 
-            return ProductCard(
-              product: product,
-              isWishlisted:
-                  _wishlistIds.contains(product.id),
-              onWishlistTap: () =>
-                  _toggleWishlist(product),
-              onTap: () => _openProduct(product),
+              itemCount: products.length,
+
+              itemBuilder: (context, index) {
+                final product = products[index];
+
+                return ProductCard(
+                  product: product,
+                  isWishlisted:
+                      _wishlistIds.contains(product.id),
+                  onWishlistTap: () =>
+                      _toggleWishlist(product),
+                  onTap: () => _openProduct(product),
+                );
+              },
             );
           },
         );

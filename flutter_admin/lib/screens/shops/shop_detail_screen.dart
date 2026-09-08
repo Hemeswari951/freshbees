@@ -607,6 +607,40 @@ class _ShopDetailBodyState extends State<_ShopDetailBody>
   // Right → Owner information + Bank / account details
   // Below → Settings (full width)
   // ─────────────────────────────────────────────────────────────────────────
+  Widget _infoLocationUrlRow(String label, String url) {
+    final hasUrl = url.isNotEmpty && url != '-';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 150,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 12, color: TColors.brownLight),
+            ),
+          ),
+          Expanded(
+            child: hasUrl
+                ? SelectableText(
+                    url,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: TColors.black,
+                    ),
+                  )
+                : const Text(
+                    '-',
+                    style: TextStyle(fontSize: 12, color: TColors.black),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildOverviewTab() {
     final shop = _shop!;
@@ -636,6 +670,12 @@ class _ShopDetailBodyState extends State<_ShopDetailBody>
         _infoRow('Location', (shop['location'] as String?) ?? '-'),
         if (state.isNotEmpty) _infoRow('State', state),
         _infoRow('Pincode', (shop['pincode'] as String?) ?? '-'),
+        _infoLocationUrlRow(
+          'Location URL',
+          (shop['locationUrl'] as String?) ??
+              (shop['location_url'] as String?) ??
+              '-',
+        ),
         _infoRow('Categories', categories.join(", ")),
         _infoRow('Status', isBlocked ? 'Blocked' : 'Active'),
         _infoRow(

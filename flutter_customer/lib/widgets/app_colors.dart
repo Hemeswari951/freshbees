@@ -180,6 +180,14 @@ class AppColors {
   static const double iconMD = 22;
   static const double iconLG = 28;
 
+  static const Color canvas = Color(0xFFF6F6F7);
+  static const Color accent = Color(0xFF8B7355);
+  static const Color accentSoft = Color(0xFFF2ECE4);
+
+  // Single shared card color/style used by BOTH the left content card
+  // and every card in the right-side toggle/nav panel.
+  static const Color cardColor = Colors.white;
+
   // ===========================
   // TEXT STYLES
   // ===========================

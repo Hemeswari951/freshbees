@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../models/shop_model.dart';
-import '../widgets/product_grid.dart';
 import '../../../services/home_service.dart';
+import '../../../services/location_manager.dart';
 import '../widgets/shop_grid.dart';
+import '../widgets/product_grid.dart';
 
 /// Content shown when the "Beauty" toggle is selected on Home.
 class BeautyTab extends StatefulWidget {
@@ -16,23 +17,68 @@ class BeautyTab extends StatefulWidget {
 
 class _BeautyTabState extends State<BeautyTab> {
   List<ShopModel> _shops = [];
+
   bool _isLoading = true;
+
   String? _error;
+
+  final LocationManager _locationManager = LocationManager();
 
   @override
   void initState() {
     super.initState();
+
+    // Listen for location changes.
+    _locationManager.addListener(_onLocationChanged);
+
     _loadShops();
   }
 
+  // ===========================================================================
+  // LOCATION CHANGED
+  // ===========================================================================
+
+  void _onLocationChanged() {
+    if (!mounted) return;
+
+    // LocationManager also notifies while loading.
+    // Do not reload while location itself is loading.
+    if (_locationManager.isLoading) return;
+
+    debugPrint('BeautyTab: Location changed. Reloading shops...');
+
+    _loadShops();
+  }
+
+  // ===========================================================================
+  // LOAD SHOPS
+  // ===========================================================================
+
   Future<void> _loadShops() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
-      final shops = await HomeService.getShops(category: 'Beauty');
+      // Make sure latest location/login state is available.
+      await _locationManager.ensureLoaded();
+
+      if (!mounted) return;
+
+      final latitude = _locationManager.latitude;
+      final longitude = _locationManager.longitude;
+
+      debugPrint('BeautyTab: User latitude = $latitude');
+      debugPrint('BeautyTab: User longitude = $longitude');
+
+      final shops = await HomeService.getShops(
+        category: 'Beauty',
+        latitude: latitude,
+        longitude: longitude,
+      );
 
       if (!mounted) return;
 
@@ -41,6 +87,8 @@ class _BeautyTabState extends State<BeautyTab> {
         _isLoading = false;
       });
     } catch (e) {
+      debugPrint('BeautyTab._loadShops error: $e');
+
       if (!mounted) return;
 
       setState(() {
@@ -50,24 +98,43 @@ class _BeautyTabState extends State<BeautyTab> {
     }
   }
 
+  // ===========================================================================
+  // DISPOSE
+  // ===========================================================================
+
+  @override
+  void dispose() {
+    _locationManager.removeListener(_onLocationChanged);
+
+    super.dispose();
+  }
+
+  // ===========================================================================
+  // OPEN SHOP
+  // ===========================================================================
+
   void _openShop(ShopModel shop) {
     final uri = Uri(
       path: '/products',
       queryParameters: {
         'shopId': shop.id.toString(),
         'shopName': shop.shopName,
+        'category': 'Beauty',
       },
     );
 
     context.push(uri.toString());
   }
 
+  // ===========================================================================
+  // BUILD
+  // ===========================================================================
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── SHOPS SECTION (top) ──────────────────────────────────
         _buildShopsSection(),
 
         const SizedBox(height: 28),
@@ -76,6 +143,10 @@ class _BeautyTabState extends State<BeautyTab> {
       ],
     );
   }
+
+  // ===========================================================================
+  // SHOPS SECTION
+  // ===========================================================================
 
   Widget _buildShopsSection() {
     if (_isLoading) {
@@ -102,19 +173,48 @@ class _BeautyTabState extends State<BeautyTab> {
     }
 
     if (_shops.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 40),
-        child: Center(
-          child: Text(
-            'No shops found.',
-            style: TextStyle(color: Colors.black54),
-          ),
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
-    return ShopGrid(shops: _shops, onShopTap: _openShop, category: 'All');
+    // Show only first 5 shops on Home.
+    final displayedShops = _shops.take(5).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Near By Shops',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            ),
+
+            // Show See All only when more than 5 shops exist.
+            if (_shops.length > 5)
+              TextButton(
+                onPressed: () {
+                  context.push('/shops?category=Beauty');
+                },
+                child: const Text('See All'),
+              ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        ShopGrid(
+          shops: displayedShops,
+          onShopTap: _openShop,
+          category: 'Beauty',
+        ),
+      ],
+    );
   }
+
+  // ===========================================================================
+  // PRODUCTS SECTION
+  // ===========================================================================
 
   Widget _buildProductsSection() {
     return const Column(
@@ -127,6 +227,7 @@ class _BeautyTabState extends State<BeautyTab> {
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
           ),
         ),
+
         ProductGrid(category: 'beauty'),
       ],
     );

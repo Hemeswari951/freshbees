@@ -19,13 +19,13 @@ class _CartScreenState extends State<CartScreen> {
   bool _placingOrder = false;
   List<CartItemModel> _items = [];
   double _subtotal = 0;
-// Track which items are currently checked/selected
+  // Track which items are currently checked/selected
   final Set<int> _selectedCartItemIds = {};
- 
+
   // cartItemId → true while that row's quantity/remove request is in flight,
   // so only that row shows a spinner instead of blocking the whole screen.
   final Set<int> _busyRows = {};
-  
+
   static const double _desktopBreakpoint = 900;
 
   static const double _maxContentWidth = 1000;
@@ -40,21 +40,23 @@ class _CartScreenState extends State<CartScreen> {
     _loadCart();
   }
 
-Future<void> _loadCart() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _loadCart({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final result = await CartService.getCart();
       if (!mounted) return;
       setState(() {
         _items = result.items;
-       
+
         _selectedCartItemIds.retainWhere(
-          (id) => _items.any((item) => item.cartItemId == id)
+          (id) => _items.any((item) => item.cartItemId == id),
         );
-       
+
         _recalculateSubtotal();
         _loading = false;
       });
@@ -66,13 +68,14 @@ Future<void> _loadCart() async {
       });
     }
   }
- 
+
   void _recalculateSubtotal() {
     _subtotal = _items
         .where((i) => _selectedCartItemIds.contains(i.cartItemId))
         .fold(0, (sum, i) => sum + i.lineTotal);
   }
- void _toggleSelectAll() {
+
+  void _toggleSelectAll() {
     setState(() {
       if (_selectedCartItemIds.length == _items.length) {
         _selectedCartItemIds.clear();
@@ -83,7 +86,7 @@ Future<void> _loadCart() async {
       _recalculateSubtotal();
     });
   }
- 
+
   void _toggleItemSelection(int cartItemId) {
     setState(() {
       if (_selectedCartItemIds.contains(cartItemId)) {
@@ -94,7 +97,7 @@ Future<void> _loadCart() async {
       _recalculateSubtotal();
     });
   }
- 
+
   Future<void> _changeQuantity(CartItemModel item, int newQty) async {
     if (newQty < 1) {
       _removeItem(item);
@@ -102,8 +105,11 @@ Future<void> _loadCart() async {
     }
     setState(() => _busyRows.add(item.cartItemId));
     try {
-      await CartService.updateQuantity(cartItemId: item.cartItemId, quantity: newQty);
-      await _loadCart();
+      await CartService.updateQuantity(
+        cartItemId: item.cartItemId,
+        quantity: newQty,
+      );
+       await _loadCart(silent: true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -145,46 +151,63 @@ Future<void> _loadCart() async {
     final selectedCartItemIds = _selectedCartItemIds.toList();
     if (selectedCount == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select at least one item to proceed')),
+        const SnackBar(
+          content: Text('Please select at least one item to proceed'),
+        ),
       );
       return;
     }
- 
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => AddressScreen(
-          subtotal: _subtotal,
-          itemCount: selectedCount,
-          cartItemIds: selectedCartItemIds,
-        ),
-      ),
-    );
- 
+
+    // Smart checkout — skips Address screen if a saved address exists.
+    await AddressScreen.startCheckout(context, cartItemIds: selectedCartItemIds);
+
     if (mounted) _loadCart();
   }
+
   Future<void> _confirmRemoveItem(CartItemModel item) async {
     // Change the return type from bool to String to handle multiple button actions
     final action = await showDialog<String>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: const Text('Move from Bag', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
-          content: const Text('Are you sure you want to move this item from your bag?'),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          title: const Text(
+            'Move from Bag',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+          ),
+          content: const Text(
+            'Are you sure you want to move this item from your bag?',
+          ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop('wishlist'), // Returns 'wishlist'
-              child: const Text('MOVE TO WISHLIST', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
+              onPressed: () =>
+                  Navigator.of(context).pop('wishlist'), // Returns 'wishlist'
+              child: const Text(
+                'MOVE TO WISHLIST',
+                style: TextStyle(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
             TextButton(
-              onPressed: () => Navigator.of(context).pop('remove'), // Returns 'remove'
-              child: const Text('REMOVE', style: TextStyle(color: Color(0xFFFF3E6C), fontWeight: FontWeight.w600)),
+              onPressed: () =>
+                  Navigator.of(context).pop('remove'), // Returns 'remove'
+              child: const Text(
+                'REMOVE',
+                style: TextStyle(
+                  color: Color(0xFFFF3E6C),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ],
         );
       },
     );
- 
+
     // Handle standard removal
     if (action == 'remove') {
       _removeItem(item);
@@ -193,12 +216,12 @@ Future<void> _loadCart() async {
     else if (action == 'wishlist') {
       // 1. Remove it from the cart
       _removeItem(item);
-     
+
       // 2. Add it to the wishlist
       try {
         // NOTE: Make sure `addToWishlist` (or equivalent method name) exists in your WishlistService
         await WishlistService.addToWishlist(item.productId);
-       
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Item moved to wishlist')),
@@ -207,13 +230,14 @@ Future<void> _loadCart() async {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+            SnackBar(
+              content: Text(e.toString().replaceFirst('Exception: ', '')),
+            ),
           );
         }
       }
     }
   }
- 
 
   @override
   Widget build(BuildContext context) {
@@ -226,14 +250,19 @@ Future<void> _loadCart() async {
         elevation: 0,
         title: Text(
           'My Bag${_items.isNotEmpty ? ' (${_items.length})' : ''}',
-          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600),
+          style: const TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         iconTheme: const IconThemeData(color: Colors.black87),
       ),
       body: SafeArea(child: _buildBody(isDesktop)),
       // On desktop the summary + Buy Now live inline with the list, so we
       // only need the slim bottom bar on narrower / mobile screens.
-      bottomNavigationBar: (!isDesktop && _items.isNotEmpty) ? _buildCheckoutBar() : null,
+      bottomNavigationBar: (!isDesktop && _items.isNotEmpty)
+          ? _buildCheckoutBar()
+          : null,
     );
   }
 
@@ -255,7 +284,10 @@ Future<void> _loadCart() async {
               ElevatedButton(
                 onPressed: _loadCart,
                 style: ElevatedButton.styleFrom(backgroundColor: _accent),
-                child: const Text('Retry', style: TextStyle(color: Colors.white)),
+                child: const Text(
+                  'Retry',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
             ],
           ),
@@ -269,7 +301,11 @@ Future<void> _loadCart() async {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.shopping_bag_outlined, size: 64, color: Colors.black26),
+              const Icon(
+                Icons.shopping_bag_outlined,
+                size: 64,
+                color: Colors.black26,
+              ),
               const SizedBox(height: 16),
               const Text(
                 'Your bag is empty',
@@ -289,7 +325,7 @@ Future<void> _loadCart() async {
 
     final list = RefreshIndicator(
       onRefresh: _loadCart,
-       child: ListView.separated(
+      child: ListView.separated(
         padding: const EdgeInsets.all(16),
         itemCount: _items.length + 1, // +1 for the select-all header
         separatorBuilder: (_, __) => const SizedBox(height: 12),
@@ -301,11 +337,10 @@ Future<void> _loadCart() async {
         },
       ),
     );
- 
+
     if (!isDesktop) {
       return list;
     }
- 
 
     // Desktop: centered, max-width, list on the left + a sticky order
     // summary card on the right — the familiar cart-page layout instead of
@@ -327,9 +362,11 @@ Future<void> _loadCart() async {
       ),
     );
   }
+
   Widget _buildSelectionHeader() {
-    final allSelected = _items.isNotEmpty && _selectedCartItemIds.length == _items.length;
- 
+    final allSelected =
+        _items.isNotEmpty && _selectedCartItemIds.length == _items.length;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -352,7 +389,6 @@ Future<void> _loadCart() async {
       ),
     );
   }
- 
 
   Widget _buildSummaryCard() {
     return Container(
@@ -373,7 +409,10 @@ Future<void> _loadCart() async {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Items (${_items.length})', style: const TextStyle(color: Colors.black54)),
+              Text(
+                'Items (${_items.length})',
+                style: const TextStyle(color: Colors.black54),
+              ),
               Text('₹${_subtotal.toStringAsFixed(0)}'),
             ],
           ),
@@ -383,10 +422,16 @@ Future<void> _loadCart() async {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Subtotal', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const Text(
+                'Subtotal',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              ),
               Text(
                 '₹${_subtotal.toStringAsFixed(0)}',
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
               ),
             ],
           ),
@@ -417,7 +462,9 @@ Future<void> _loadCart() async {
               style: ElevatedButton.styleFrom(
                 backgroundColor: _accent,
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ),
@@ -426,24 +473,36 @@ Future<void> _loadCart() async {
     );
   }
 
+  // ── Replace _buildCartTile() with this ──
   Widget _buildCartTile(CartItemModel item) {
     final busy = _busyRows.contains(item.cartItemId);
     final isSelected = _selectedCartItemIds.contains(item.cartItemId);
     final imageUrl = item.thumbnail.isNotEmpty
         ? '${ApiService.serverUrl}${item.thumbnail}'
         : null;
+    final hasDiscount = item.mrp != null && item.mrp! > item.price;
+    final discountPct = hasDiscount
+        ? (((item.mrp! - item.price) / item.mrp!) * 100).round()
+        : 0;
 
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _cardBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-           Padding(
+          Padding(
             padding: const EdgeInsets.only(right: 8),
             child: Checkbox(
               value: isSelected,
@@ -451,60 +510,115 @@ Future<void> _loadCart() async {
               onChanged: (_) => _toggleItemSelection(item.cartItemId),
             ),
           ),
-          // Fixed-size box regardless of image load state, so a slow or
-          // failed image never collapses the row to zero height.
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: SizedBox(
-              width: 80,
-              height: 80,
-              child: Container(
-                color: _imgBg,
-                child: imageUrl != null
-                    ? Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        width: 80,
-                        height: 80,
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return const Center(
-                            child: SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          );
-                        },
-                        errorBuilder: (c, e, s) =>
-                            const Icon(Icons.image, color: Colors.black38),
-                      )
-                    : const Icon(Icons.image, color: Colors.black38),
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(
+                  width: 80,
+                  height: 80,
+                  child: Container(
+                    color: _imgBg,
+                    child: imageUrl != null
+                        ? Image.network(
+                            imageUrl,
+                            fit: BoxFit.cover,
+                            width: 80,
+                            height: 80,
+                            loadingBuilder: (context, child, progress) {
+                              if (progress == null) return child;
+                              return const Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              );
+                            },
+                            errorBuilder: (c, e, s) =>
+                                const Icon(Icons.image, color: Colors.black38),
+                          )
+                        : const Icon(Icons.image, color: Colors.black38),
+                  ),
+                ),
               ),
-            ),
+              if (hasDiscount)
+                Positioned(
+                  top: 4,
+                  left: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [_accent, Color(0xFFB08D63)],
+                      ),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '$discountPct% OFF',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (item.shopName != null && item.shopName!.isNotEmpty) ...[
+                  Text(
+                    item.shopName!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: _accent,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                ],
                 Text(
                   item.productName,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
                 ),
-                if (item.size != null) ...[
+                if (item.size != null || item.color != null) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'Size: ${item.size}',
+                    [
+                      if (item.size != null) 'Size: ${item.size}',
+                      if (item.color != null) 'Color: ${item.color}',
+                    ].join('  |  '),
                     style: const TextStyle(fontSize: 12, color: Colors.black54),
                   ),
                 ],
                 const SizedBox(height: 6),
+                if (item.rating != null && item.rating! > 0) ...[
+                  _ratingBadge(item.rating!, item.reviewCount ?? 0),
+                  const SizedBox(height: 6),
+                ],
                 Text(
                   '₹${item.price.toStringAsFixed(0)}',
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 busy
@@ -517,18 +631,24 @@ Future<void> _loadCart() async {
                         children: [
                           _qtyButton(
                             icon: Icons.remove,
-                            onTap: () => _changeQuantity(item, item.quantity - 1),
+                            onTap: item.quantity <= 1
+                                ? null
+                                : () =>
+                                      _changeQuantity(item, item.quantity - 1),
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             child: Text(
                               '${item.quantity}',
-                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                           _qtyButton(
                             icon: Icons.add,
-                            onTap: () => _changeQuantity(item, item.quantity + 1),
+                            onTap: () =>
+                                _changeQuantity(item, item.quantity + 1),
                           ),
                         ],
                       ),
@@ -538,7 +658,6 @@ Future<void> _loadCart() async {
           Column(
             children: [
               IconButton(
-                // CHANGED: Icons.delete_outline is now Icons.close
                 icon: const Icon(Icons.close, color: Colors.black45, size: 20),
                 onPressed: busy ? null : () => _confirmRemoveItem(item),
               ),
@@ -553,17 +672,76 @@ Future<void> _loadCart() async {
     );
   }
 
-  Widget _qtyButton({required IconData icon, required VoidCallback onTap}) {
+  // ── New helper — add this method anywhere in _CartScreenState ──
+  // ── Replace _ratingBadge() in BOTH files with this ──
+  Widget _ratingBadge(double rating, int reviewCount) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+          decoration: BoxDecoration(
+            color: const Color(0xFF388E3C),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                rating.toStringAsFixed(1),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 2),
+              const Icon(Icons.star, color: Colors.white, size: 11),
+            ],
+          ),
+        ),
+        Text(
+          '($reviewCount)',
+          style: const TextStyle(fontSize: 11.5, color: Colors.black54),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Icon(Icons.verified, size: 13, color: _accent),
+            SizedBox(width: 2),
+            Text(
+              'Thiraa Assured',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: _accent,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _qtyButton({required IconData icon, VoidCallback? onTap}) {
+    final disabled = onTap == null;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: 26,
         height: 26,
         decoration: BoxDecoration(
-          color: _imgBg,
+          color: disabled ? _imgBg.withOpacity(0.5) : _imgBg,
           borderRadius: BorderRadius.circular(6),
         ),
-        child: Icon(icon, size: 14, color: Colors.black87),
+        child: Icon(
+          icon,
+          size: 14,
+          color: disabled ? Colors.black26 : Colors.black87,
+        ),
       ),
     );
   }
@@ -602,7 +780,10 @@ Future<void> _loadCart() async {
                   ),
                   Text(
                     '₹${_subtotal.toStringAsFixed(0)}',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),

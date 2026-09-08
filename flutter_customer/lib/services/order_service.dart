@@ -4,7 +4,59 @@ import 'package:http/http.dart' as http;
 import 'api_service.dart';
 import '../models/order_model.dart';
 
+/// Result of a successful "Buy Now" order (POST /orders/buy-now).
+class BuyNowResult {
+  final int orderId;
+  final String paymentMethod;
+
+  BuyNowResult({required this.orderId, required this.paymentMethod});
+}
+
 class OrderService {
+  /// POST /api/customer/orders/buy-now
+  /// Places a single-item order directly (Address -> Order Summary ->
+  /// Payment), completely bypassing the cart — nothing is added to or
+  /// removed from cart_items.
+  static Future<BuyNowResult> buyNow({
+    required int productId,
+    int? variantId,
+    required int quantity,
+    required int addressId,
+    required String paymentMethod,
+  }) async {
+    final token = ApiService.getToken();
+
+    if (token == null || token.isEmpty) {
+      throw Exception('Please login to continue');
+    }
+
+    final response = await http.post(
+      Uri.parse('${ApiService.serverUrl}/api/customer/orders/buy-now'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'product_id': productId,
+        if (variantId != null) 'variant_id': variantId,
+        'quantity': quantity,
+        'address_id': addressId,
+        'payment_method': paymentMethod,
+      }),
+    );
+
+    final decoded = jsonDecode(response.body);
+
+    if (response.statusCode != 201 || decoded['success'] != true) {
+      throw Exception(decoded['message'] ?? 'Failed to place order');
+    }
+
+    return BuyNowResult(
+      orderId: int.tryParse(decoded['order_id']?.toString() ?? '') ?? 0,
+      paymentMethod: decoded['payment_method']?.toString() ?? paymentMethod,
+    );
+  }
+
   static Future<List<OrderModel>> getMyOrders() async {
     final token = ApiService.getToken();
 

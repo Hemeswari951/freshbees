@@ -79,6 +79,11 @@ CREATE TABLE shops (
     city VARCHAR(100),
     state VARCHAR(100),
     pincode VARCHAR(10),
+
+    location_url TEXT,
+    latitude NUMERIC(10, 7),
+    longitude NUMERIC(10, 7),
+    
     is_blocked BOOLEAN DEFAULT FALSE,
     blocked_reason TEXT,
     blocked_at TIMESTAMP,

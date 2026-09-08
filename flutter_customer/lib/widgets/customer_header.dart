@@ -2,10 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
 import '../services/search_service.dart';
+import '../widgets/location_bar.dart';
 import './app_colors.dart';
+import '../services/cart_count.dart';
+import '../services/cart_service.dart';
 
 class CustomerHeader extends StatefulWidget {
   const CustomerHeader({super.key});
@@ -17,23 +21,32 @@ class CustomerHeader extends StatefulWidget {
 class _CustomerHeaderState extends State<CustomerHeader> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+
   final LayerLink _searchLayerLink = LayerLink();
+
   final OverlayPortalController _searchOverlayController =
       OverlayPortalController();
 
   Timer? _debounce;
+
   List<SearchSuggestion> _suggestions = [];
   bool _isSuggesting = false;
 
-  // These must match the routes defined in app_router.dart
-  // (/home, /home/men, /home/women, /home/kids, /home/beauty).
+  // ===========================================================================
+  // CATEGORY NAVIGATION
+  // ===========================================================================
+
   final List<_NavLink> _navLinks = const [
+    _NavLink('Home', '/home'),
     _NavLink('Men', '/home/men'),
     _NavLink('Women', '/home/women'),
     _NavLink('Kids', '/home/kids'),
     _NavLink('Beauty', '/home/beauty'),
-    _NavLink('Home', '/home'),
   ];
+
+  // ===========================================================================
+  // DISPOSE
+  // ===========================================================================
 
   @override
   void dispose() {
@@ -43,11 +56,10 @@ class _CustomerHeaderState extends State<CustomerHeader> {
     super.dispose();
   }
 
-  // ---------------------------------------------------------------------
-  // SEARCH — same debounced flow as HomeScreen (mobile), same shared
-  // HomeService.getSearchSuggestions() call, same OverlayPortal pattern
-  // (no focus-loss race condition — suggestion taps register reliably).
-  // ---------------------------------------------------------------------
+  // ===========================================================================
+  // SEARCH
+  // ===========================================================================
+
   void _onSearchChanged(String value) {
     _debounce?.cancel();
 
@@ -56,21 +68,31 @@ class _CustomerHeaderState extends State<CustomerHeader> {
         _suggestions = [];
         _isSuggesting = false;
       });
+
       if (_searchOverlayController.isShowing) {
         _searchOverlayController.hide();
       }
+
       return;
     }
 
     _debounce = Timer(const Duration(milliseconds: 350), () async {
-      setState(() => _isSuggesting = true);
+      if (!mounted) return;
+
+      setState(() {
+        _isSuggesting = true;
+      });
+
       try {
         final results = await SearchService.getSearchSuggestions(value);
+
         if (!mounted) return;
+
         setState(() {
           _suggestions = results;
           _isSuggesting = false;
         });
+
         if (_suggestions.isNotEmpty && !_searchOverlayController.isShowing) {
           _searchOverlayController.show();
         } else if (_suggestions.isEmpty && _searchOverlayController.isShowing) {
@@ -78,10 +100,15 @@ class _CustomerHeaderState extends State<CustomerHeader> {
         }
       } catch (_) {
         if (!mounted) return;
+
         setState(() {
           _suggestions = [];
           _isSuggesting = false;
         });
+
+        if (_searchOverlayController.isShowing) {
+          _searchOverlayController.hide();
+        }
       }
     });
   }
@@ -107,12 +134,14 @@ class _CustomerHeaderState extends State<CustomerHeader> {
     _handleSearch(suggestion.text);
   }
 
-  // Checks login state before navigating to a protected route.
-  // If not logged in, redirects to /login and passes the intended
-  // destination so the login flow can send the user back afterwards.
+  // ===========================================================================
+  // PROTECTED ROUTES
+  // ===========================================================================
+
   void _goToProtected(BuildContext context, String route) {
-    final isLoggedIn =
-        ApiService.getToken() != null && ApiService.getToken()!.isNotEmpty;
+    final token = ApiService.getToken();
+
+    final isLoggedIn = token != null && token.isNotEmpty;
 
     if (isLoggedIn) {
       context.push(route);
@@ -123,220 +152,376 @@ class _CustomerHeaderState extends State<CustomerHeader> {
     }
   }
 
+  // ===========================================================================
+  // BUILD
+  // ===========================================================================
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: AppColors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Logo
-          InkWell(
-            onTap: () => context.push('/home'),
-            child: const Text(
-              'Thiraa',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
-                color: AppColors.black,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ),
-          const SizedBox(width: 32),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // =====================================================================
+        // TOP BLACK BAR
+        // =====================================================================
 
-          // Category nav links
-          Row(
-            children: _navLinks
-                .map(
-                  (link) => Padding(
-                    padding: const EdgeInsets.only(right: 22),
-                    child: InkWell(
-                      onTap: () => context.push(link.route),
-                      child: Text(
-                        link.label,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.black,
-                        ),
-                      ),
+        Container(
+          width: double.infinity,
+          height: 48,
+          color: AppColors.black,
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Row(
+            children: [
+              // ---------------------------------------------------------------
+              // LOCATION
+              //
+              // This is your existing LocationBar.
+              // No new location logic is created here.
+              // ---------------------------------------------------------------
+
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const LocationBar(),
+              ),
+
+              const Spacer(),
+
+              // ---------------------------------------------------------------
+              // TRACK ORDER
+              // ---------------------------------------------------------------
+              _TopBarAction(
+                icon: Icons.local_shipping_outlined,
+                label: 'Track Order',
+                onTap: () {
+                  _goToProtected(context, '/profile/details?section=orders');
+                },
+              ),
+
+              const SizedBox(width: 30),
+
+              // ---------------------------------------------------------------
+              // HELP CENTER
+              // ---------------------------------------------------------------
+              _TopBarAction(
+                icon: Icons.help_outline,
+                label: 'Help Center',
+                onTap: () {
+                  _goToProtected(
+                    context,
+                    '/profile/details?section=help-center',
+                  );
+                },
+              ),
+
+              const SizedBox(width: 30),
+
+              // ---------------------------------------------------------------
+              // NOTIFICATION
+              // ---------------------------------------------------------------
+              _TopBarAction(
+                icon: Icons.notifications_none,
+                label: 'Notifications',
+                onTap: () {
+                  _goToProtected(context, '/notifications');
+                },
+              ),
+            ],
+          ),
+        ),
+
+        // =====================================================================
+        // MAIN WHITE HEADER
+        // =====================================================================
+        Container(
+          width: double.infinity,
+          color: AppColors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // ---------------------------------------------------------------
+              // THIRAA LOGO
+              // ---------------------------------------------------------------
+
+              InkWell(
+                onTap: () {
+                  context.push('/home');
+                },
+                borderRadius: BorderRadius.circular(6),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: Text(
+                    'Thiraa',
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.black,
+                      letterSpacing: 0.6,
                     ),
                   ),
-                )
-                .toList(),
-          ),
+                ),
+              ),
 
-          const SizedBox(width: 24),
+              const SizedBox(width: 32),
 
-          // Lengthy search bar — wrapped in CompositedTransformTarget +
-          // OverlayPortal so the suggestions dropdown anchors under it
-          // and taps register reliably.
-          Expanded(
-            child: CompositedTransformTarget(
-              link: _searchLayerLink,
-              child: OverlayPortal(
-                controller: _searchOverlayController,
-                overlayChildBuilder: (context) {
-                  return Positioned.fill(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onTap: () {
-                        _searchOverlayController.hide();
-                      },
-                      child: Stack(
-                        children: [
-                          CompositedTransformFollower(
-                            link: _searchLayerLink,
-                            showWhenUnlinked: false,
-                            offset: const Offset(0, 46),
-                            child: Align(
-                              alignment: Alignment.topLeft,
-                              child: Material(
-                                elevation: 4,
-                                borderRadius: BorderRadius.circular(12),
-                                color: AppColors.white,
-                                child: SizedBox(
-                                  width:
-                                      420, // roughly matches the search bar width
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxHeight: 320,
-                                    ),
-                                    child: ListView.separated(
-                                      shrinkWrap: true,
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 6,
+              // ---------------------------------------------------------------
+              // SEARCH BAR
+              // ---------------------------------------------------------------
+              Expanded(
+                flex: 3,
+                child: CompositedTransformTarget(
+                  link: _searchLayerLink,
+                  child: OverlayPortal(
+                    controller: _searchOverlayController,
+                    overlayChildBuilder: (context) {
+                      return Positioned.fill(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTap: () {
+                            _searchOverlayController.hide();
+                          },
+                          child: Stack(
+                            children: [
+                              CompositedTransformFollower(
+                                link: _searchLayerLink,
+                                showWhenUnlinked: false,
+                                offset: const Offset(0, 52),
+                                child: Align(
+                                  alignment: Alignment.topLeft,
+                                  child: Material(
+                                    elevation: 8,
+                                    borderRadius: BorderRadius.circular(12),
+                                    color: AppColors.white,
+                                    child: SizedBox(
+                                      width: 500,
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxHeight: 320,
+                                        ),
+                                        child: ListView.separated(
+                                          shrinkWrap: true,
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 6,
+                                          ),
+                                          itemCount: _suggestions.length,
+                                          separatorBuilder: (_, __) =>
+                                              const Divider(height: 1),
+                                          itemBuilder: (context, index) {
+                                            final suggestion =
+                                                _suggestions[index];
+
+                                            return ListTile(
+                                              dense: true,
+                                              leading: Icon(
+                                                suggestion.isTag
+                                                    ? Icons.sell_outlined
+                                                    : Icons.search_rounded,
+                                                size: 18,
+                                                color: AppColors.textGrey,
+                                              ),
+                                              title: Text(
+                                                suggestion.text,
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                              trailing: suggestion.isTag
+                                                  ? const Text(
+                                                      'tag',
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: Colors.black38,
+                                                      ),
+                                                    )
+                                                  : null,
+                                              onTap: () {
+                                                _onSuggestionTap(suggestion);
+                                              },
+                                            );
+                                          },
+                                        ),
                                       ),
-                                      itemCount: _suggestions.length,
-                                      separatorBuilder: (_, __) =>
-                                          const Divider(height: 1),
-                                      itemBuilder: (context, index) {
-                                        final s = _suggestions[index];
-                                        return ListTile(
-                                          dense: true,
-                                          leading: Icon(
-                                            s.isTag
-                                                ? Icons.sell_outlined
-                                                : Icons.search_rounded,
-                                            size: 18,
-                                            color: AppColors.textGrey,
-                                          ),
-                                          title: Text(
-                                            s.text,
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                          trailing: s.isTag
-                                              ? const Text(
-                                                  'tag',
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                    color: Colors.black38,
-                                                  ),
-                                                )
-                                              : null,
-                                          onTap: () => _onSuggestionTap(s),
-                                        );
-                                      },
                                     ),
                                   ),
                                 ),
                               ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      height: 44,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: AppColors.cream,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.search,
+                            size: 20,
+                            color: AppColors.textGrey,
+                          ),
+
+                          const SizedBox(width: 10),
+
+                          Expanded(
+                            child: TextField(
+                              controller: _searchController,
+                              focusNode: _searchFocusNode,
+                              onChanged: _onSearchChanged,
+                              onSubmitted: _handleSearch,
+                              textInputAction: TextInputAction.search,
+                              decoration: const InputDecoration(
+                                hintText:
+                                    'Search for products, brands and more',
+                                hintStyle: TextStyle(
+                                  fontSize: 14,
+                                  color: AppColors.textGrey,
+                                ),
+                                border: InputBorder.none,
+                                isDense: true,
+                              ),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: AppColors.black,
+                              ),
                             ),
                           ),
+
+                          if (_isSuggesting)
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
                         ],
                       ),
                     ),
-                  );
-                },
-                child: Container(
-                  height: 42,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: AppColors.cream,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.search,
-                        size: 20,
-                        color: AppColors.textGrey,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: _searchController,
-                          focusNode: _searchFocusNode,
-                          onChanged: _onSearchChanged,
-                          onSubmitted: _handleSearch,
-                          textInputAction: TextInputAction.search,
-                          decoration: const InputDecoration(
-                            hintText: 'Search for products, brands and more',
-                            hintStyle: TextStyle(
-                              fontSize: 14,
-                              color: AppColors.textGrey,
-                            ),
-                            border: InputBorder.none,
-                            isDense: true,
-                          ),
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: AppColors.black,
-                          ),
-                        ),
-                      ),
-                      if (_isSuggesting)
-                        const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                    ],
                   ),
                 ),
               ),
-            ),
-          ),
 
-          const SizedBox(width: 28),
+              const SizedBox(width: 30),
 
-          // Icon + label actions
-          const _ProfileHoverMenu(), // <-- Profile now opens a hover dropdown
-          const SizedBox(width: 22),
-          _HeaderAction(
-            icon: Icons.favorite_border,
-            label: 'Wishlist',
-            onTap: () => _goToProtected(context, '/wishlist'),
+              // ---------------------------------------------------------------
+              // CATEGORY NAVIGATION
+              // ---------------------------------------------------------------
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: _navLinks.map((link) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 20),
+                    child: _MainNavItem(
+                      label: link.label,
+                      onTap: () {
+                        context.push(link.route);
+                      },
+                    ),
+                  );
+                }).toList(),
+              ),
+
+              const SizedBox(width: 6),
+
+              // ---------------------------------------------------------------
+              // PROFILE
+              // ---------------------------------------------------------------
+              const _ProfileHoverMenu(),
+
+              const SizedBox(width: 16),
+
+              // ---------------------------------------------------------------
+              // WISHLIST
+              // ---------------------------------------------------------------
+              _HeaderAction(
+                icon: Icons.favorite_border,
+                label: 'Wishlist',
+                onTap: () {
+                  _goToProtected(context, '/wishlist');
+                },
+              ),
+
+              const SizedBox(width: 16),
+
+              // ---------------------------------------------------------------
+              // CART
+              // ---------------------------------------------------------------
+              ValueListenableBuilder<int>(
+                valueListenable: cartItemCount,
+                builder: (context, count, child) {
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      _HeaderAction(
+                        icon: Icons.shopping_cart_outlined,
+                        label: 'Cart',
+                        onTap: () => _goToProtected(context, '/cart'),
+                      ),
+                      if (count > 0)
+                        Positioned(
+                          right: 0,
+                          top: -2,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 1,
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              count > 99 ? '99+' : '$count',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ],
           ),
-          const SizedBox(width: 22),
-          _HeaderAction(
-            icon: Icons.shopping_cart_outlined,
-            label: 'Cart',
-            onTap: () => _goToProtected(context, '/cart'),
-          ),
-          const SizedBox(width: 22),
-          _HeaderAction(
-            icon: Icons.notifications_none,
-            label: 'Notifications',
-            onTap: () => _goToProtected(context, '/notifications'),
-          ),
-        ],
-      ),
+        ),
+
+        // =====================================================================
+        // BOTTOM BORDER
+        // =====================================================================
+        Container(height: 1, color: AppColors.border),
+      ],
     );
   }
 }
 
+// =============================================================================
+// NAV LINK MODEL
+// =============================================================================
+
 class _NavLink {
   final String label;
   final String route;
+
   const _NavLink(this.label, this.route);
 }
+
+
 
 class _HeaderAction extends StatelessWidget {
   final IconData icon;
@@ -371,32 +556,94 @@ class _HeaderAction extends StatelessWidget {
     );
   }
 }
+// =============================================================================
+// TOP BLACK BAR ACTION
+// =============================================================================
 
-// ---------------------------------------------------------------------------
-// Profile hover dropdown
-// ---------------------------------------------------------------------------
+class _TopBarAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
 
-/// A menu item shown inside the Profile dropdown.
-/// [route] is where it navigates to when the user is logged in.
-/// When logged OUT, tapping any item redirects to /login?redirect=<route>,
-/// same pattern as _goToProtected above.
+  const _TopBarAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 17, color: AppColors.white),
+            const SizedBox(width: 7),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppColors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// MAIN CATEGORY NAV ITEM
+// =============================================================================
+
+class _MainNavItem extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _MainNavItem({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 7),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppColors.black,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// PROFILE MENU ITEM
+// =============================================================================
+
 class _ProfileMenuItem {
   final IconData icon;
   final String label;
   final String route;
+
   const _ProfileMenuItem(this.icon, this.label, this.route);
 }
 
-// TODO: adjust these routes to match whatever you actually register
-// in app_router.dart under /profile/...
 const List<_ProfileMenuItem> _profileMenuItems = [
-  _ProfileMenuItem(Icons.dashboard_outlined, 'Overview', 'overview'),
+  _ProfileMenuItem(Icons.dashboard_outlined, 'My Profile', 'personal-info'),
   _ProfileMenuItem(Icons.receipt_long_outlined, 'Orders', 'orders'),
-  _ProfileMenuItem(
-    Icons.favorite_border,
-    'Wishlist',
-    '/wishlist',
-  ), // separate route, not a tab
+  _ProfileMenuItem(Icons.favorite_border, 'Wishlist', '/wishlist'),
   _ProfileMenuItem(Icons.local_offer_outlined, 'Coupons', 'coupons'),
   _ProfileMenuItem(Icons.help_outline, 'Help Center', 'help-center'),
   _ProfileMenuItem(Icons.credit_card_outlined, 'Saved Cards', 'saved-cards'),
@@ -412,6 +659,10 @@ const List<_ProfileMenuItem> _profileMenuItems = [
   ),
 ];
 
+// =============================================================================
+// PROFILE HOVER MENU
+// =============================================================================
+
 class _ProfileHoverMenu extends StatefulWidget {
   const _ProfileHoverMenu();
 
@@ -421,26 +672,35 @@ class _ProfileHoverMenu extends StatefulWidget {
 
 class _ProfileHoverMenuState extends State<_ProfileHoverMenu> {
   final LayerLink _layerLink = LayerLink();
-  final OverlayPortalController _overlayController = OverlayPortalController();
-  Timer? _closeTimer;
-  Timer? _authPollTimer; // ADD
 
-  bool _isLoggedIn = false; // CHANGED: was a getter, now a real field
+  final OverlayPortalController _overlayController = OverlayPortalController();
+
+  Timer? _closeTimer;
+  Timer? _authPollTimer;
+
+  bool _isLoggedIn = false;
+
   String _userName = 'My Account';
+
+  // ---------------------------------------------------------------------------
+  // INIT
+  // ---------------------------------------------------------------------------
 
   @override
   void initState() {
     super.initState();
+
     _refreshAuthState();
-    // Since the header lives inside a ShellRoute and /login is pushed
-    // OUTSIDE the shell, popping back from login never rebuilds this
-    // widget. Polling every second is a cheap, self-contained way to
-    // pick up the login/logout without wiring a global notifier.
+
     _authPollTimer = Timer.periodic(
       const Duration(seconds: 1),
       (_) => _refreshAuthState(),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // AUTH STATE
+  // ---------------------------------------------------------------------------
 
   Future<void> _refreshAuthState() async {
     final loggedIn =
@@ -454,6 +714,19 @@ class _ProfileHoverMenuState extends State<_ProfileHoverMenu> {
         _isLoggedIn = loggedIn;
         _userName = name ?? 'My Account';
       });
+
+      // Cart count also needs to reflect the new user's cart —
+      // or empty out on logout.
+      if (loggedIn) {
+        try {
+          final cart = await CartService.getCart();
+          cartItemCount.value = cart.items.length;
+        } catch (_) {
+          // Silent — badge stays whatever it was.
+        }
+      } else {
+        cartItemCount.value = 0;
+      }
     } else if (loggedIn && _userName == 'My Account') {
       // Still logged in but name hasn't loaded yet (e.g. first check
       // right after token was set, before prefs write completed).
@@ -463,23 +736,40 @@ class _ProfileHoverMenuState extends State<_ProfileHoverMenu> {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // OPEN DROPDOWN
+  // ---------------------------------------------------------------------------
+
   void _open() {
     _closeTimer?.cancel();
+
     if (!_overlayController.isShowing) {
       _overlayController.show();
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // CLOSE DROPDOWN
+  // ---------------------------------------------------------------------------
+
   void _scheduleClose() {
     _closeTimer?.cancel();
-    _closeTimer = Timer(const Duration(milliseconds: 150), () {
-      if (mounted) _overlayController.hide();
+
+    _closeTimer = Timer(const Duration(milliseconds: 180), () {
+      if (mounted) {
+        _overlayController.hide();
+      }
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // NAVIGATE
+  // ---------------------------------------------------------------------------
+
   void _navigate(String routeOrSlug) {
     _overlayController.hide();
-    final String target = routeOrSlug.startsWith('/')
+
+    final target = routeOrSlug.startsWith('/')
         ? routeOrSlug
         : '/profile/details?section=$routeOrSlug';
 
@@ -492,9 +782,13 @@ class _ProfileHoverMenuState extends State<_ProfileHoverMenu> {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // LOGOUT
+  // ---------------------------------------------------------------------------
   Future<void> _logout() async {
     _overlayController.hide();
     await AuthService.logout();
+    cartItemCount.value = 0; // ← ADD THIS LINE
     if (!mounted) return;
     setState(() {
       _isLoggedIn = false;
@@ -503,17 +797,24 @@ class _ProfileHoverMenuState extends State<_ProfileHoverMenu> {
     context.push('/home');
   }
 
+  // ---------------------------------------------------------------------------
+  // DISPOSE
+  // ---------------------------------------------------------------------------
+
   @override
   void dispose() {
-    _authPollTimer?.cancel(); // ADD
+    _authPollTimer?.cancel();
     _closeTimer?.cancel();
+
     super.dispose();
   }
 
+  // ---------------------------------------------------------------------------
+  // BUILD
+  // ---------------------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
-    // REMOVE the old postFrameCallback check — polling now handles this.
-
     return CompositedTransformTarget(
       link: _layerLink,
       child: OverlayPortal(
@@ -522,7 +823,9 @@ class _ProfileHoverMenuState extends State<_ProfileHoverMenu> {
           return Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
-              onTap: () => _overlayController.hide(),
+              onTap: () {
+                _overlayController.hide();
+              },
               child: Stack(
                 children: [
                   CompositedTransformFollower(
@@ -540,6 +843,7 @@ class _ProfileHoverMenuState extends State<_ProfileHoverMenu> {
                         onItemTap: _navigate,
                         onLoginTap: () {
                           _overlayController.hide();
+
                           context.push('/login');
                         },
                         onLogoutTap: _logout,
@@ -557,8 +861,7 @@ class _ProfileHoverMenuState extends State<_ProfileHoverMenu> {
           child: _ProfileTrigger(
             isLoggedIn: _isLoggedIn,
             userName: _userName,
-            onTap:
-                _open, // also fixed: was `() => _open` (bug, never called it)
+            onTap: _open,
           ),
         ),
       ),
@@ -566,8 +869,14 @@ class _ProfileHoverMenuState extends State<_ProfileHoverMenu> {
   }
 }
 
-/// Header trigger: shows a generic person icon + "Profile" when logged out,
-/// or a person icon + the user's first name when logged in.
+// =============================================================================
+// PROFILE TRIGGER
+//
+// IMPORTANT:
+// Profile name is ALWAYS shown below the icon.
+// No tooltip.
+// =============================================================================
+
 class _ProfileTrigger extends StatelessWidget {
   final bool isLoggedIn;
   final String userName;
@@ -581,29 +890,47 @@ class _ProfileTrigger extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!isLoggedIn) {
-      return _HeaderAction(
-        icon: Icons.person_outline,
-        label: 'Profile',
-        onTap: onTap,
-      );
-    }
+    final displayName = isLoggedIn
+        ? userName.trim().split(RegExp(r'\s+')).first
+        : 'Profile';
 
-    // Show only the first name in the header so it stays compact.
-    final displayName = userName.trim().split(RegExp(r'\s+')).first;
-
-    return _HeaderAction(
-      icon: Icons.person_outline,
-      label: displayName,
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.person_outline, size: 22, color: AppColors.black),
+
+            const SizedBox(height: 3),
+
+            Text(
+              displayName,
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: AppColors.black,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
+// =============================================================================
+// PROFILE DROPDOWN
+// =============================================================================
+
 class _ProfileDropdownPanel extends StatelessWidget {
   final bool isLoggedIn;
   final String userName;
+
   final void Function(String route) onItemTap;
+
   final VoidCallback onLoginTap;
   final VoidCallback onLogoutTap;
 
@@ -618,7 +945,7 @@ class _ProfileDropdownPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      elevation: 8,
+      elevation: 10,
       borderRadius: BorderRadius.circular(12),
       color: AppColors.white,
       child: Container(
@@ -631,7 +958,10 @@ class _ProfileDropdownPanel extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Top section: differs based on login state.
+            // -----------------------------------------------------------------
+            // LOGGED OUT
+            // -----------------------------------------------------------------
+
             if (!isLoggedIn)
               Padding(
                 padding: const EdgeInsets.all(16),
@@ -647,14 +977,9 @@ class _ProfileDropdownPanel extends StatelessWidget {
                       ),
                     ),
                     ElevatedButton(
-                      onPressed: onLoginTap, // navigates to /login
+                      onPressed: onLoginTap,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color.fromARGB(
-                          255,
-                          96,
-                          213,
-                          234,
-                        ), // attractive coral accent
+                        backgroundColor: AppColors.black,
                         foregroundColor: AppColors.white,
                         elevation: 0,
                         padding: const EdgeInsets.symmetric(
@@ -662,9 +987,7 @@ class _ProfileDropdownPanel extends StatelessWidget {
                           vertical: 10,
                         ),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(
-                            4,
-                          ), // square-ish corners
+                          borderRadius: BorderRadius.circular(6),
                         ),
                       ),
                       child: const Text(
@@ -678,6 +1001,9 @@ class _ProfileDropdownPanel extends StatelessWidget {
                   ],
                 ),
               )
+            // -----------------------------------------------------------------
+            // LOGGED IN
+            // -----------------------------------------------------------------
             else
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -688,10 +1014,12 @@ class _ProfileDropdownPanel extends StatelessWidget {
                       backgroundColor: AppColors.cream,
                       child: Icon(Icons.person, color: AppColors.black),
                     ),
+
                     const SizedBox(width: 10),
+
                     Expanded(
                       child: Text(
-                        'WelCome $userName',
+                        'Welcome $userName',
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                         style: const TextStyle(
@@ -704,9 +1032,12 @@ class _ProfileDropdownPanel extends StatelessWidget {
                   ],
                 ),
               ),
+
             const Divider(height: 1),
 
-            // Menu items — same list either way.
+            // -----------------------------------------------------------------
+            // MENU ITEMS
+            // -----------------------------------------------------------------
             Flexible(
               child: ListView.separated(
                 shrinkWrap: true,
@@ -715,8 +1046,11 @@ class _ProfileDropdownPanel extends StatelessWidget {
                 separatorBuilder: (_, __) => const SizedBox(height: 2),
                 itemBuilder: (context, index) {
                   final item = _profileMenuItems[index];
+
                   return InkWell(
-                    onTap: () => onItemTap(item.route),
+                    onTap: () {
+                      onItemTap(item.route);
+                    },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -725,7 +1059,9 @@ class _ProfileDropdownPanel extends StatelessWidget {
                       child: Row(
                         children: [
                           Icon(item.icon, size: 18, color: AppColors.black),
+
                           const SizedBox(width: 12),
+
                           Expanded(
                             child: Text(
                               item.label,
@@ -743,9 +1079,12 @@ class _ProfileDropdownPanel extends StatelessWidget {
               ),
             ),
 
-            // Logout — only shown when logged in.
+            // -----------------------------------------------------------------
+            // LOGOUT
+            // -----------------------------------------------------------------
             if (isLoggedIn) ...[
               const Divider(height: 1),
+
               InkWell(
                 onTap: onLogoutTap,
                 child: const Padding(
@@ -753,7 +1092,9 @@ class _ProfileDropdownPanel extends StatelessWidget {
                   child: Row(
                     children: [
                       Icon(Icons.logout, size: 18, color: Colors.red),
+
                       SizedBox(width: 12),
+
                       Text(
                         'Logout',
                         style: TextStyle(

@@ -148,6 +148,89 @@ exports.checkoutCart = async (req, res) => {
 };
 
 
+// POST /api/customer/orders/buy-now
+// { product_id, variant_id?, quantity, address_id, payment_method }
+//
+// The direct "Buy Now" path from the product page: Address -> Order
+// Summary -> Payment, with NO cart_items row ever created. This is
+// deliberately separate from checkoutCart (cart-based) and the old
+// placeOrder (no address/payment at all) — it reuses the same
+// orderModel.createOrderFromItems used by checkoutCart so a Buy Now order
+// and a Cart-checkout order end up identical in the `orders` table
+// (address_id set, payment_method/payment_status set correctly).
+exports.buyNowCheckout = async (req, res) => {
+
+    try {
+
+        const { product_id, variant_id, quantity, address_id, payment_method } = req.body;
+
+        if (!product_id || !quantity) {
+            return res.status(400).json({
+                success: false,
+                message: "product_id and quantity are required"
+            });
+        }
+
+        if (!address_id) {
+            return res.status(400).json({
+                success: false,
+                message: "Please select a delivery address"
+            });
+        }
+
+        const address = await addressModel.getAddressById(req.customer.customerId, address_id);
+        if (!address) {
+            return res.status(400).json({
+                success: false,
+                message: "Selected address was not found"
+            });
+        }
+
+        const productInfo = await orderModel.getProductForOrder(product_id, variant_id);
+
+        if (!productInfo) {
+            return res.status(404).json({
+                success: false,
+                message: "Product not found"
+            });
+        }
+
+        const items = [{
+            productId: product_id,
+            variantId: variant_id || null,
+            quantity,
+            shopId: productInfo.shopId,
+            price: productInfo.price
+        }];
+
+        const { orderId, orderItemIds } = await orderModel.createOrderFromItems(
+            req.customer.customerId,
+            items,
+            address_id,
+            payment_method
+        );
+
+        return res.status(201).json({
+            success: true,
+            message: "Order placed successfully",
+            order_id: orderId,
+            order_item_ids: orderItemIds,
+            payment_method: payment_method || "COD"
+        });
+
+    } catch (err) {
+
+        console.log("Buy Now Checkout Error:", err);
+
+        return res.status(err.statusCode || 500).json({
+            success: false,
+            message: err.message || "Server Error"
+        });
+
+    }
+
+};
+
 exports.getMyOrders = async (req, res) => {
     try {
         const orders = await orderModel.getCustomerOrders(

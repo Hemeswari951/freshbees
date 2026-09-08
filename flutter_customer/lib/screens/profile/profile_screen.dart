@@ -494,7 +494,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _menuGrid([
           _MenuEntry(Icons.favorite_border, 'Wishlist', _goToLogin),
           _MenuEntry(Icons.help_outline, 'Help Center', () {}),
-          _MenuEntry(Icons.notifications_none, 'Notifications', () {}),
+          _MenuEntry(Icons.notifications_none, 'Notifications Settings', () {}),
         ]),
         const SizedBox(height: 28),
         _sectionLabel('MORE'),
@@ -533,8 +533,8 @@ Future<void> _goToSection(ProfileSection section) async {
         _menuGrid([
           _MenuEntry(
             Icons.dashboard_outlined,
-            'Overview',
-            () => _goToSection(ProfileSection.overview),
+            'My Profile',
+            () => _goToSection(ProfileSection.personalInfo),
           ),
           _MenuEntry(
             Icons.receipt_long_outlined,
@@ -563,7 +563,7 @@ Future<void> _goToSection(ProfileSection section) async {
           ),
           _MenuEntry(
             Icons.notifications_none,
-            'Notifications',
+            'Notifications Settings',
             () => _goToSection(ProfileSection.notificationSettings),
           ),
           _MenuEntry(

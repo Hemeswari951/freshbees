@@ -12,6 +12,14 @@ class OrdersScreen extends StatefulWidget {
 }
 
 class _OrdersScreenState extends State<OrdersScreen> {
+  // Only text/line/icon colors remain — no fixed background or card-fill
+  // colors, so this screen always shows the parent's (profile screen's)
+  // default background/card color.
+  static const Color _ink = Color(0xFF1A1A1D);
+  static const Color _muted = Color(0xFF8A8A8E);
+  static const Color _line = Color(0xFFE7E7E9);
+  static const Color _accent = Color(0xFF8B7355);
+
   bool _loading = true;
   String? _error;
 
@@ -23,11 +31,17 @@ class _OrdersScreenState extends State<OrdersScreen> {
     _loadOrders();
   }
 
+  // ============================================================
+  // LOAD ORDERS
+  // ============================================================
+
   Future<void> _loadOrders() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
 
     try {
       final orders = await OrderService.getMyOrders();
@@ -42,99 +56,158 @@ class _OrdersScreenState extends State<OrdersScreen> {
       if (!mounted) return;
 
       setState(() {
-        _error = e.toString().replaceFirst('Exception: ', '');
+        _orders = [];
         _loading = false;
+        _error = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // No Container color here — background stays whatever the
+    // profile screen already set.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [_buildHeader(), const SizedBox(height: 20), _buildBody()],
+    );
+  }
+
+  // ============================================================
+  // HEADER
+  // ============================================================
+
+  Widget _buildHeader() {
+    // Just the order count + refresh button — the section title
+    // ("Orders") is already shown by the shared header in
+    // ProfileDetailsScreen (mobile top bar / desktop card heading).
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            _orders.isEmpty
+                ? 'View and track your orders'
+                : '${_orders.length} order${_orders.length == 1 ? '' : 's'}',
+            style: const TextStyle(fontSize: 13, color: _muted),
+          ),
+        ),
+
+        IconButton(
+          tooltip: 'Refresh',
+          onPressed: _loading ? null : _loadOrders,
+          icon: const Icon(Icons.refresh, color: _accent),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // BODY
+  // ============================================================
+
+  Widget _buildBody() {
     if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(),
+      return const SizedBox(
+        height: 220,
+        child: Center(child: CircularProgressIndicator(color: _accent)),
       );
     }
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                size: 42,
-                color: Colors.grey,
-              ),
-              const SizedBox(height: 12),
-
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-              ),
-
-              const SizedBox(height: 16),
-
-              ElevatedButton(
-                onPressed: _loadOrders,
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      );
+      return _buildError();
     }
 
     if (_orders.isEmpty) {
       return _buildEmptyState();
     }
 
-    return RefreshIndicator(
-      onRefresh: _loadOrders,
-      child: ListView.separated(
-        padding: const EdgeInsets.only(bottom: 24),
-        itemCount: _orders.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 14),
-        itemBuilder: (context, index) {
-          return _OrderCard(
-            order: _orders[index],
-          );
-        },
-      ),
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _orders.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 14),
+      itemBuilder: (context, index) {
+        return _OrderCard(order: _orders[index]);
+      },
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
+  // ============================================================
+  // ERROR — border only, no fill
+  // ============================================================
+
+  Widget _buildError() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _line),
+      ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.shopping_bag_outlined,
-            size: 64,
-            color: Colors.grey.shade400,
+          const Icon(Icons.error_outline, size: 42, color: Colors.black26),
+
+          const SizedBox(height: 12),
+
+          Text(
+            _error!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _muted, fontSize: 13),
           ),
 
           const SizedBox(height: 16),
 
+          OutlinedButton(onPressed: _loadOrders, child: const Text('RETRY')),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // EMPTY — border only, no fill
+  // ============================================================
+
+  Widget _buildEmptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 45, horizontal: 24),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _line),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 76,
+            height: 76,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: _line),
+            ),
+            child: const Icon(
+              Icons.shopping_bag_outlined,
+              size: 38,
+              color: _accent,
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
           const Text(
             'No orders yet',
             style: TextStyle(
-              fontSize: 19,
+              fontSize: 18,
               fontWeight: FontWeight.w700,
+              color: _ink,
             ),
           ),
 
           const SizedBox(height: 6),
 
-          Text(
+          const Text(
             'Your orders will appear here',
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 13,
-            ),
+            style: TextStyle(fontSize: 13, color: _muted),
           ),
         ],
       ),
@@ -142,31 +215,31 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 }
 
+// ============================================================================
+// ORDER CARD — border only, no fill
+// ============================================================================
+
 class _OrderCard extends StatelessWidget {
   final OrderModel order;
 
-  const _OrderCard({
-    required this.order,
-  });
+  const _OrderCard({required this.order});
+
+  static const Color _ink = Color(0xFF1A1A1D);
+  static const Color _muted = Color(0xFF8A8A8E);
+  static const Color _line = Color(0xFFE7E7E9);
+  static const Color _accent = Color(0xFF8B7355);
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: const Color(0xFFE7E7E9),
-        ),
+        border: Border.all(color: _line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --------------------------------------------------
-          // ORDER HEADER
-          // --------------------------------------------------
-
           Row(
             children: [
               Expanded(
@@ -175,13 +248,12 @@ class _OrderCard extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
+                    color: _ink,
                   ),
                 ),
               ),
 
-              _StatusBadge(
-                status: order.orderStatus ?? 'Pending',
-              ),
+              _StatusBadge(status: order.orderStatus ?? 'Pending'),
             ],
           ),
 
@@ -189,44 +261,25 @@ class _OrderCard extends StatelessWidget {
 
           Text(
             _formatDate(order.createdAt),
-            style: const TextStyle(
-              color: Color(0xFF8A8A8E),
-              fontSize: 12,
-            ),
+            style: const TextStyle(color: _muted, fontSize: 12),
           ),
 
           const SizedBox(height: 16),
 
-          // --------------------------------------------------
-          // PRODUCTS
-          // --------------------------------------------------
+          ...order.items.map((item) => _OrderItemRow(item: item)),
 
-          ...order.items.map(
-            (item) => _OrderItemRow(item: item),
-          ),
+          const SizedBox(height: 6),
+
+          const Divider(height: 1, color: _line),
 
           const SizedBox(height: 14),
-
-          const Divider(
-            height: 1,
-            color: Color(0xFFE7E7E9),
-          ),
-
-          const SizedBox(height: 14),
-
-          // --------------------------------------------------
-          // TOTAL
-          // --------------------------------------------------
 
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
                 'Total',
-                style: TextStyle(
-                  color: Color(0xFF8A8A8E),
-                  fontSize: 13,
-                ),
+                style: TextStyle(color: _muted, fontSize: 13),
               ),
 
               Text(
@@ -234,6 +287,7 @@ class _OrderCard extends StatelessWidget {
                 style: const TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 16,
+                  color: _ink,
                 ),
               ),
             ],
@@ -245,10 +299,16 @@ class _OrderCard extends StatelessWidget {
             width: double.infinity,
             child: OutlinedButton(
               onPressed: () {
-                context.push(
-      '/profile/details/orders/${order.orderId}',
-    );
+                context.push('/profile/details/orders/${order.orderId}');
               },
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _accent,
+                side: const BorderSide(color: _accent),
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
               child: const Text(
                 'VIEW ORDER',
                 style: TextStyle(
@@ -272,12 +332,14 @@ class _OrderCard extends StatelessWidget {
   }
 }
 
+// ============================================================================
+// ORDER ITEM
+// ============================================================================
+
 class _OrderItemRow extends StatelessWidget {
   final OrderItemModel item;
 
-  const _OrderItemRow({
-    required this.item,
-  });
+  const _OrderItemRow({required this.item});
 
   @override
   Widget build(BuildContext context) {
@@ -286,17 +348,15 @@ class _OrderItemRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Product image
           Container(
             width: 68,
             height: 78,
             decoration: BoxDecoration(
-              color: const Color(0xFFF6F6F7),
               borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE7E7E9)),
             ),
             clipBehavior: Clip.antiAlias,
-            child: item.productImage != null &&
-                    item.productImage!.isNotEmpty
+            child: item.productImage != null && item.productImage!.isNotEmpty
                 ? Image.network(
                     item.productImage!,
                     fit: BoxFit.cover,
@@ -307,15 +367,11 @@ class _OrderItemRow extends StatelessWidget {
                       );
                     },
                   )
-                : const Icon(
-                    Icons.image_outlined,
-                    color: Colors.grey,
-                  ),
+                : const Icon(Icons.image_outlined, color: Colors.grey),
           ),
 
           const SizedBox(width: 12),
 
-          // Product details
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -330,9 +386,8 @@ class _OrderItemRow extends StatelessWidget {
                   ),
                 ),
 
-                const SizedBox(height: 5),
-
-                if (item.shopName != null)
+                if (item.shopName != null) ...[
+                  const SizedBox(height: 5),
                   Text(
                     item.shopName!,
                     style: const TextStyle(
@@ -340,6 +395,7 @@ class _OrderItemRow extends StatelessWidget {
                       fontSize: 12,
                     ),
                   ),
+                ],
 
                 const SizedBox(height: 5),
 
@@ -354,8 +410,7 @@ class _OrderItemRow extends StatelessWidget {
                         ),
                       ),
 
-                    if (item.size != null &&
-                        item.colorName != null)
+                    if (item.size != null && item.colorName != null)
                       const SizedBox(width: 10),
 
                     if (item.colorName != null)
@@ -386,10 +441,7 @@ class _OrderItemRow extends StatelessWidget {
 
           Text(
             '₹${item.price.toStringAsFixed(0)}',
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
           ),
         ],
       ),
@@ -397,12 +449,14 @@ class _OrderItemRow extends StatelessWidget {
   }
 }
 
+// ============================================================================
+// STATUS BADGE
+// ============================================================================
+
 class _StatusBadge extends StatelessWidget {
   final String status;
 
-  const _StatusBadge({
-    required this.status,
-  });
+  const _StatusBadge({required this.status});
 
   @override
   Widget build(BuildContext context) {
@@ -425,16 +479,18 @@ class _StatusBadge extends StatelessWidget {
         foreground = const Color(0xFFC0392B);
         break;
 
+      case 'confirmed':
+        background = const Color(0xFFEAF2FF);
+        foreground = const Color(0xFF3567B8);
+        break;
+
       default:
         background = const Color(0xFFFFF4E5);
         foreground = const Color(0xFF9A6418);
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 9,
-        vertical: 5,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(20),

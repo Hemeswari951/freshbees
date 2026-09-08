@@ -27,6 +27,8 @@ function mapListItem(row) {
     stockStatus: productService.stockStatus(row.total_stock),
     rating: row.rating != null ? Number(row.rating) : 0,
     reviewCount: Number(row.review_count) || 0,
+    sizes: row.sizes || [],
+    colors: row.colors || [],
   };
 }
 

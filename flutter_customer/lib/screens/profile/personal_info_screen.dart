@@ -4,27 +4,21 @@ import 'package:go_router/go_router.dart';
 import '../../services/api_service.dart';
 import '../../services/tryon_profile_service.dart';
 
-class OverviewScreen extends StatefulWidget {
-  const OverviewScreen({super.key});
+class PersonalInfoScreen extends StatefulWidget {
+  const PersonalInfoScreen({super.key});
 
   @override
-  State<OverviewScreen> createState() => _OverviewScreenState();
+  State<PersonalInfoScreen> createState() => _PersonalInfoScreenState();
 }
 
-class _OverviewScreenState extends State<OverviewScreen> {
-  // ============================================================
-  // COLORS
-  // ============================================================
-
-  static const Color _bg = Color(0xFFFAF7F2);
+class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
+  static const Color _bg = Color(0xFFF6F6F7);
   static const Color _accent = Color(0xFF8B7355);
   static const Color _cardBg = Colors.white;
   static const Color _border = Color(0xFFE8E0D6);
   static const Color _softBg = Color(0xFFF2ECE4);
-
-  // ============================================================
-  // STATE
-  // ============================================================
+  static const Color _text = Color(0xFF1A1A1D);
+  // static const Color _muted = Color(0xFF8A8A8E);
 
   List<TryOnProfile> _profiles = [];
 
@@ -38,7 +32,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   }
 
   // ============================================================
-  // LOAD TRY-ON PROFILES
+  // LOAD PROFILES
   // ============================================================
 
   Future<void> _loadProfiles() async {
@@ -84,7 +78,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
   Future<void> _addProfile() async {
     await context.push('/virtual-tryon/add-profile');
 
-    // Reload after returning from Add Profile
+    if (!mounted) return;
+
     await _loadProfiles();
   }
 
@@ -96,33 +91,32 @@ class _OverviewScreenState extends State<OverviewScreen> {
     context.push('/virtual-tryon/select-profile');
   }
 
-  // ============================================================
-  // BUILD
-  // ============================================================
-
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildWelcomeSection(),
+    return Container(
+      color: _bg,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildWelcomeSection(),
 
-          const SizedBox(height: 24),
+            const SizedBox(height: 24),
 
-          _buildQuickActions(),
+            _buildQuickActions(),
 
-          const SizedBox(height: 28),
+            const SizedBox(height: 28),
 
-          _buildTryOnProfilesSection(),
+            _buildTryOnProfilesSection(),
 
-          const SizedBox(height: 28),
+            const SizedBox(height: 28),
 
-          _buildAccountSection(),
+            _buildAccountSection(),
 
-          const SizedBox(height: 30),
-        ],
+            const SizedBox(height: 30),
+          ],
+        ),
       ),
     );
   }
@@ -145,7 +139,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
           Container(
             width: 52,
             height: 52,
-            decoration: BoxDecoration(color: _softBg, shape: BoxShape.circle),
+            decoration: const BoxDecoration(
+              color: _softBg,
+              shape: BoxShape.circle,
+            ),
             child: const Icon(Icons.person_outline, color: _accent, size: 28),
           ),
 
@@ -156,7 +153,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
               future: ApiService.getUserName(),
               builder: (context, snapshot) {
                 final name = snapshot.data?.trim().isNotEmpty == true
-                    ? snapshot.data!
+                    ? snapshot.data!.trim()
                     : 'Welcome';
 
                 return Column(
@@ -179,7 +176,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
-                        color: Colors.black87,
+                        color: _text,
                       ),
                     ),
 
@@ -207,15 +204,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'QUICK ACTIONS',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.8,
-            color: Colors.black45,
-          ),
-        ),
+        _sectionTitle('QUICK ACTIONS'),
 
         const SizedBox(height: 12),
 
@@ -308,7 +297,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   }
 
   // ============================================================
-  // TRY-ON PROFILES
+  // TRY ON
   // ============================================================
 
   Widget _buildTryOnProfilesSection() {
@@ -317,17 +306,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
       children: [
         Row(
           children: [
-            const Expanded(
-              child: Text(
-                'YOUR TRY-ON PROFILES',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                  color: Colors.black45,
-                ),
-              ),
-            ),
+            Expanded(child: _sectionTitle('YOUR TRY-ON PROFILES')),
 
             if (_profiles.isNotEmpty)
               InkWell(
@@ -355,13 +334,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  // ============================================================
-  // PROFILE CONTENT
-  // ============================================================
-
   Widget _buildProfilesContent() {
     if (_loadingProfiles) {
-      return SizedBox(
+      return const SizedBox(
         height: 120,
         child: Center(
           child: CircularProgressIndicator(color: _accent, strokeWidth: 2),
@@ -373,12 +348,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
       return _buildProfileError();
     }
 
-    // No profiles
     if (_profiles.isEmpty) {
       return _buildNoProfiles();
     }
 
-    // Show maximum 3 profiles + Add Profile
     final visibleProfiles = _profiles.take(3).toList();
 
     return SizedBox(
@@ -397,10 +370,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
       ),
     );
   }
-
-  // ============================================================
-  // PROFILE CARD
-  // ============================================================
 
   Widget _buildProfileCard(TryOnProfile profile) {
     return InkWell(
@@ -450,7 +419,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   }
 
   // ============================================================
-  // PROFILE AVATAR
+  // AVATAR
   // ============================================================
 
   Widget _buildProfileAvatar(TryOnProfile profile) {
@@ -491,7 +460,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   }
 
   // ============================================================
-  // ADD PROFILE CARD
+  // ADD PROFILE
   // ============================================================
 
   Widget _buildAddProfileCard() {
@@ -517,7 +486,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: Colors.black87,
+                color: _text,
               ),
             ),
           ],
@@ -617,22 +586,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
   }
 
   // ============================================================
-  // ACCOUNT SECTION
+  // ACCOUNT
   // ============================================================
 
   Widget _buildAccountSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'ACCOUNT',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.8,
-            color: Colors.black45,
-          ),
-        ),
+        _sectionTitle('ACCOUNT'),
 
         const SizedBox(height: 12),
 
@@ -672,56 +633,77 @@ class _OverviewScreenState extends State<OverviewScreen> {
     required String subtitle,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: _cardBg,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _border),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: _softBg,
-                borderRadius: BorderRadius.circular(10),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _cardBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: _softBg,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: _accent, size: 21),
               ),
-              child: Icon(icon, color: _accent, size: 21),
-            ),
 
-            const SizedBox(width: 12),
+              const SizedBox(width: 12),
 
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
 
-                  const SizedBox(height: 3),
+                    const SizedBox(height: 3),
 
-                  Text(
-                    subtitle,
-                    style: const TextStyle(fontSize: 10, color: Colors.black45),
-                  ),
-                ],
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.black45,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
 
-            const Icon(Icons.chevron_right, size: 20, color: Colors.black26),
-          ],
+              const Icon(Icons.chevron_right, size: 20, color: Colors.black26),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // SECTION TITLE
+  // ============================================================
+
+  Widget _sectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.8,
+        color: Colors.black45,
       ),
     );
   }

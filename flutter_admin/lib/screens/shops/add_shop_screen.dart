@@ -1,12 +1,16 @@
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../widgets/t_colors.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../../services/shop_service.dart';
+import '../../widgets/t_colors.dart';
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
+
 class AddShopScreen extends StatelessWidget {
   const AddShopScreen({super.key});
 
@@ -15,8 +19,10 @@ class AddShopScreen extends StatelessWidget {
 }
 
 // ─── Stateful wrapper ─────────────────────────────────────────────────────────
+
 class _AddShopBody extends StatefulWidget {
   const _AddShopBody();
+
   @override
   State<_AddShopBody> createState() => _AddShopBodyState();
 }
@@ -25,46 +31,52 @@ class _AddShopBodyState extends State<_AddShopBody> {
   int _step = 0;
   bool _isSubmitting = false;
 
-  // ── Step 1 ──
+  // ── Step 1 ────────────────────────────────────────────────────────────────
+
   final _shopNameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   final _cityCtrl = TextEditingController();
   final _stateCtrl = TextEditingController();
   final _pincodeCtrl = TextEditingController();
-  // String? _selectedCategoryId;
-  // String? _selectedCategoryName;
-  // Selected Categories
-final List<int> _selectedCategoryIds = [];
+  final _locationUrlCtrl = TextEditingController();
 
-// Select All checkbox
-bool _selectAllCategories = false;
+  double? _latitude;
+  double? _longitude;
+
+  final List<int> _selectedCategoryIds = [];
+  bool _selectAllCategories = false;
+
   XFile? _logoFile;
   XFile? _bannerFile;
+
   final _picker = ImagePicker();
 
-  // ── Step 2 ──
+  // ── Step 2 ────────────────────────────────────────────────────────────────
+
   final _ownerNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
 
-  // ── Step 3 ──
+  // ── Step 3 ────────────────────────────────────────────────────────────────
+
   final _accountCtrl = TextEditingController();
   final _bankNameCtrl = TextEditingController();
   final _ifscCtrl = TextEditingController();
   final _gstCtrl = TextEditingController();
 
-  // ── Step 4 ──
+  // ── Step 4 ────────────────────────────────────────────────────────────────
+
   final _commissionCtrl = TextEditingController(text: '10');
+
   bool _activateImmediately = true;
   bool _sendWelcomeEmail = true;
   bool _allowProductUploads = true;
   bool _enablePayoutRequests = false;
 
-  // Categories — id must match your categories table
-  // Replace category_id values with actual seeded IDs from your DB
+  // ── Categories ────────────────────────────────────────────────────────────
+
   static const List<Map<String, String>> _categories = [
-    
     {'id': '1', 'name': 'Men'},
     {'id': '2', 'name': 'Women'},
     {'id': '3', 'name': 'Kids'},
@@ -73,56 +85,211 @@ bool _selectAllCategories = false;
 
   final List<String> _stepLabels = ['Basic', 'Owner', 'Bank', 'Settings'];
 
-  // ── Validation ────────────────────────────────────────────────────────────
-  String? _validateStep() {
-    switch (_step) {
-      case 0:
-        if (_shopNameCtrl.text.trim().isEmpty) return 'Shop name is required';
-        if (_descCtrl.text.trim().isEmpty) return 'Description is required';
-        if (_selectedCategoryIds.isEmpty) {
-  return 'Please select at least one category';
-}
-        if (_addressCtrl.text.trim().isEmpty) return 'Address is required';
-        if (_cityCtrl.text.trim().isEmpty) return 'City is required';
-        if (_pincodeCtrl.text.trim().isEmpty) return 'Pincode is required';
-        return null;
-      case 1:
-        if (_ownerNameCtrl.text.trim().isEmpty) return 'Owner name is required';
-        if (_emailCtrl.text.trim().isEmpty) return 'Email is required';
-        if (!_emailCtrl.text.contains('@')) return 'Enter a valid email';
-        if (_phoneCtrl.text.trim().isEmpty) return 'Phone is required';
-        if (_phoneCtrl.text.length < 10) return 'Enter a valid phone number';
-        return null;
-      case 2:
-        if (_accountCtrl.text.trim().isEmpty) {
-          return 'Account number is required';
-        }
-        if (_bankNameCtrl.text.trim().isEmpty) return 'Bank name is required';
-        if (_ifscCtrl.text.trim().isEmpty) return 'IFSC code is required';
-        return null;
-      case 3:
-        if (_commissionCtrl.text.trim().isEmpty) {
-          return 'Commission rate is required';
-        }
-        return null;
-    }
-    return null;
-  }
+  // ─────────────────────────────────────────────────────────────────────────
+  // LOCATION URL → COORDINATES
+  // ─────────────────────────────────────────────────────────────────────────
 
-  void _next() {
-    final error = _validateStep();
-    if (error != null) {
-      _showError(error);
+  void _extractCoordinatesFromUrl(String url) {
+    if (url.trim().isEmpty) {
+      if (_latitude != null || _longitude != null) {
+        setState(() {
+          _latitude = null;
+          _longitude = null;
+        });
+      }
       return;
     }
-    setState(() => _step++);
+
+    try {
+      // Example:
+      // https://www.google.com/maps/@13.0826800,80.2707200,15z
+
+      final RegExp regExpAt = RegExp(r'@(-?\d+\.\d+),(-?\d+\.\d+)');
+
+      final matchAt = regExpAt.firstMatch(url);
+
+      if (matchAt != null && matchAt.groupCount >= 2) {
+        final lat = double.tryParse(matchAt.group(1)!);
+        final lng = double.tryParse(matchAt.group(2)!);
+
+        setState(() {
+          _latitude = lat;
+          _longitude = lng;
+        });
+
+        return;
+      }
+
+      // Google Maps URL data format:
+      // !3d13.0826800!4d80.2707200
+
+      final RegExp regExpData = RegExp(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)');
+
+      final matchData = regExpData.firstMatch(url);
+
+      if (matchData != null && matchData.groupCount >= 2) {
+        final lat = double.tryParse(matchData.group(1)!);
+        final lng = double.tryParse(matchData.group(2)!);
+
+        setState(() {
+          _latitude = lat;
+          _longitude = lng;
+        });
+
+        return;
+      }
+
+      // No coordinates found.
+      if (_latitude != null || _longitude != null) {
+        setState(() {
+          _latitude = null;
+          _longitude = null;
+        });
+      }
+    } catch (_) {
+      if (_latitude != null || _longitude != null) {
+        setState(() {
+          _latitude = null;
+          _longitude = null;
+        });
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // VALIDATION
+  // ─────────────────────────────────────────────────────────────────────────
+
+  bool _validateBasicDetails() {
+    if (_shopNameCtrl.text.trim().isEmpty) {
+      _showError('Shop name is required');
+      return false;
+    }
+
+    if (_descCtrl.text.trim().isEmpty) {
+      _showError('Description is required');
+      return false;
+    }
+
+    if (_selectedCategoryIds.isEmpty) {
+      _showError('Please select at least one category');
+      return false;
+    }
+
+    if (_addressCtrl.text.trim().isEmpty) {
+      _showError('Address is required');
+      return false;
+    }
+
+    if (_cityCtrl.text.trim().isEmpty) {
+      _showError('City is required');
+      return false;
+    }
+
+    if (_stateCtrl.text.trim().isEmpty) {
+      _showError('State is required');
+      return false;
+    }
+
+    final pincode = _pincodeCtrl.text.trim();
+
+    if (pincode.isEmpty) {
+      _showError('Pincode is required');
+      return false;
+    }
+
+    if (pincode.length != 6) {
+      _showError('Pincode must contain exactly 6 digits');
+      return false;
+    }
+
+    final locationUrl = _locationUrlCtrl.text.trim();
+
+    if (locationUrl.isEmpty) {
+      _showError('Google Maps location is required');
+      return false;
+    }
+
+    if (_latitude == null || _longitude == null) {
+      _showError(
+        'Please enter a valid Google Maps URL containing location coordinates',
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  bool _validateOwnerDetails() {
+    if (_ownerNameCtrl.text.trim().isEmpty) {
+      _showError('Owner name is required');
+      return false;
+    }
+
+    final email = _emailCtrl.text.trim();
+
+    if (email.isEmpty) {
+      _showError('Owner email is required');
+      return false;
+    }
+
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+    if (!emailRegex.hasMatch(email)) {
+      _showError('Please enter a valid email address');
+      return false;
+    }
+
+    final phone = _phoneCtrl.text.trim();
+
+    if (phone.isEmpty) {
+      _showError('Owner phone number is required');
+      return false;
+    }
+
+    if (phone.length != 10) {
+      _showError('Phone number must contain exactly 10 digits');
+      return false;
+    }
+
+    return true;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // NEXT / BACK
+  // ─────────────────────────────────────────────────────────────────────────
+
+  void _next() {
+    if (_isSubmitting) return;
+
+    if (_step == 0) {
+      if (!_validateBasicDetails()) return;
+    }
+
+    if (_step == 1) {
+      if (!_validateOwnerDetails()) return;
+    }
+
+    if (_step < 3) {
+      setState(() => _step++);
+    }
   }
 
   void _back() {
-    if (_step > 0) setState(() => _step--);
+    if (_isSubmitting) return;
+
+    if (_step > 0) {
+      setState(() => _step--);
+    }
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // SNACKBARS
+  // ─────────────────────────────────────────────────────────────────────────
+
   void _showError(String msg) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg, style: const TextStyle(fontSize: 13)),
@@ -135,6 +302,8 @@ bool _selectAllCategories = false;
   }
 
   void _showSuccess(String msg) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg, style: const TextStyle(fontSize: 13)),
@@ -146,11 +315,21 @@ bool _selectAllCategories = false;
     );
   }
 
-  // ── Submit ────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // SUBMIT
+  // ─────────────────────────────────────────────────────────────────────────
+
   Future<void> _submit() async {
-    final error = _validateStep();
-    if (error != null) {
-      _showError(error);
+    if (_isSubmitting) return;
+
+    // Final validation before API call.
+    if (!_validateBasicDetails()) {
+      setState(() => _step = 0);
+      return;
+    }
+
+    if (!_validateOwnerDetails()) {
+      setState(() => _step = 1);
       return;
     }
 
@@ -166,19 +345,31 @@ bool _selectAllCategories = false;
         city: _cityCtrl.text.trim(),
         state: _stateCtrl.text.trim(),
         pincode: _pincodeCtrl.text.trim(),
+
+        locationUrl: _locationUrlCtrl.text.trim(),
+        latitude: _latitude,
+        longitude: _longitude,
+
         logoFile: _logoFile,
         bannerFile: _bannerFile,
+
         // Step 2
         ownerName: _ownerNameCtrl.text.trim(),
         ownerEmail: _emailCtrl.text.trim(),
         ownerPhone: _phoneCtrl.text.trim(),
+
         // Step 3
         accountNumber: _accountCtrl.text.trim(),
         bankName: _bankNameCtrl.text.trim(),
         ifscCode: _ifscCtrl.text.trim().toUpperCase(),
-        gstNumber: _gstCtrl.text.trim().isEmpty ? null : _gstCtrl.text.trim(),
+        gstNumber: _gstCtrl.text.trim().isEmpty
+            ? null
+            : _gstCtrl.text.trim().toUpperCase(),
+
         // Step 4
-        commissionRate: _commissionCtrl.text.trim(),
+        commissionRate: _commissionCtrl.text.trim().isEmpty
+            ? '10'
+            : _commissionCtrl.text.trim(),
         activateImmediately: _activateImmediately,
         sendWelcomeEmail: _sendWelcomeEmail,
         allowProductUploads: _allowProductUploads,
@@ -186,19 +377,28 @@ bool _selectAllCategories = false;
       );
 
       if (!mounted) return;
+
       _showSuccess('Shop created successfully!');
+
       await Future.delayed(const Duration(milliseconds: 800));
+
       if (!mounted) return;
-      Navigator.of(context).pop(true); // true = refresh ShopsScreen
+
+      Navigator.of(context).pop(true);
     } catch (e) {
+      if (!mounted) return;
+
       _showError(e.toString().replaceFirst('Exception: ', ''));
     } finally {
-      if (mounted) setState(() => _isSubmitting = false);
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
-
-
+  // ─────────────────────────────────────────────────────────────────────────
+  // DISPOSE
+  // ─────────────────────────────────────────────────────────────────────────
 
   @override
   void dispose() {
@@ -209,6 +409,7 @@ bool _selectAllCategories = false;
       _cityCtrl,
       _stateCtrl,
       _pincodeCtrl,
+      _locationUrlCtrl,
       _ownerNameCtrl,
       _emailCtrl,
       _phoneCtrl,
@@ -220,10 +421,14 @@ bool _selectAllCategories = false;
     ]) {
       c.dispose();
     }
+
     super.dispose();
   }
 
-  // ─── Root build ───────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // BUILD
+  // ─────────────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -243,7 +448,10 @@ bool _selectAllCategories = false;
     );
   }
 
-  // ─── Stepper header ───────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // STEPPER HEADER
+  // ─────────────────────────────────────────────────────────────────────────
+
   Widget _buildStepperHeader(BuildContext context) {
     return Container(
       color: TColors.cream,
@@ -256,9 +464,8 @@ bool _selectAllCategories = false;
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Back button
           GestureDetector(
-            onTap: () => Navigator.of(context).pop(),
+            onTap: _isSubmitting ? null : () => Navigator.of(context).pop(),
             child: Container(
               width: 36,
               height: 36,
@@ -275,8 +482,6 @@ bool _selectAllCategories = false;
             ),
           ),
           const SizedBox(width: 12),
-
-          // Title
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -295,13 +500,12 @@ bool _selectAllCategories = false;
             ],
           ),
           const SizedBox(width: 16),
-
-          // Stepper
           Expanded(
             child: Row(
               children: List.generate(_stepLabels.length, (i) {
                 final done = i < _step;
                 final active = i == _step;
+
                 return Expanded(
                   child: Row(
                     children: [
@@ -382,7 +586,10 @@ bool _selectAllCategories = false;
     );
   }
 
-  // ─── Step router ──────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // STEP CONTENT
+  // ─────────────────────────────────────────────────────────────────────────
+
   Widget _buildStepContent() {
     switch (_step) {
       case 0:
@@ -398,7 +605,10 @@ bool _selectAllCategories = false;
     }
   }
 
-  // ─── Step 1: Basic ────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // STEP 1 — BASIC
+  // ─────────────────────────────────────────────────────────────────────────
+
   Widget _buildStep1() {
     return Column(
       children: [
@@ -406,38 +616,40 @@ bool _selectAllCategories = false;
           icon: Icons.storefront_outlined,
           title: 'Shop details',
           children: [
-            _label('Shop name', required: true),
+            _requiredLabel('Shop name'),
             _inputField(_shopNameCtrl, hint: "Ravi's Fashion Store"),
             const SizedBox(height: 14),
-            _label('Description', required: true),
-            _textArea(
-              _descCtrl,
-              hint: 'Traditional & ethnic wear for the whole family...',
-            ),
+
+            _requiredLabel('Description'),
+            _textArea(_descCtrl, hint: 'Traditional & ethnic wear...'),
             const SizedBox(height: 14),
-            _label('Category', required: true),
+
+            _requiredLabel('Category'),
             _categoryDropdown(),
           ],
         ),
+
         const SizedBox(height: 12),
+
         _card(
           icon: Icons.location_on_outlined,
           title: 'Location',
           children: [
-            _label('Address', required: true),
+            _requiredLabel('Address'),
             _inputField(
               _addressCtrl,
               hint: 'Shop / street address',
               maxLines: 2,
             ),
             const SizedBox(height: 14),
+
             Row(
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _label('City', required: true),
+                      _requiredLabel('City'),
                       _inputField(_cityCtrl, hint: 'Chennai'),
                     ],
                   ),
@@ -447,7 +659,7 @@ bool _selectAllCategories = false;
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _label('State'),
+                      _requiredLabel('State'),
                       _inputField(_stateCtrl, hint: 'Tamil Nadu'),
                     ],
                   ),
@@ -457,13 +669,14 @@ bool _selectAllCategories = false;
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _label('Pincode', required: true),
+                      _requiredLabel('Pincode'),
                       _inputField(
                         _pincodeCtrl,
                         hint: '600001',
                         keyboardType: TextInputType.number,
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(6),
                         ],
                       ),
                     ],
@@ -471,9 +684,118 @@ bool _selectAllCategories = false;
                 ),
               ],
             ),
+
+            const SizedBox(height: 14),
+
+            _requiredLabel('Google Maps URL / Location'),
+
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _locationUrlCtrl,
+                    onChanged: _extractCoordinatesFromUrl,
+                    keyboardType: TextInputType.url,
+                    style: const TextStyle(fontSize: 13, color: TColors.black),
+                    decoration: InputDecoration(
+                      hintText: 'Paste maps URL here...',
+                      hintStyle: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade400,
+                      ),
+                      filled: true,
+                      fillColor: TColors.white,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: TColors.border),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: TColors.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(
+                          color: TColors.black,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () async {
+                    final urlString = _locationUrlCtrl.text.trim();
+
+                    final uri = Uri.parse(
+                      urlString.isNotEmpty
+                          ? urlString
+                          : 'https://maps.google.com',
+                    );
+
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      );
+                    } else {
+                      _showError('Could not launch Map');
+                    }
+                  },
+                  child: Container(
+                    height: 46,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: TColors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: TColors.border),
+                    ),
+                    child: const Center(
+                      child: Icon(
+                        Icons.map_outlined,
+                        size: 18,
+                        color: TColors.black,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            if (_latitude != null && _longitude != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle,
+                    size: 14,
+                    color: Color(0xFF1D9E75),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      'Location detected: '
+                      '${_latitude!.toStringAsFixed(7)}, '
+                      '${_longitude!.toStringAsFixed(7)}',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFF1D9E75),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
+
         const SizedBox(height: 12),
+
         _card(
           icon: Icons.image_outlined,
           title: 'Upload media',
@@ -488,9 +810,14 @@ bool _selectAllCategories = false;
                       source: ImageSource.gallery,
                       imageQuality: 85,
                     );
-                    if (f != null) setState(() => _logoFile = f);
+
+                    if (f != null) {
+                      setState(() => _logoFile = f);
+                    }
                   },
-                  onRemove: () => setState(() => _logoFile = null),
+                  onRemove: () {
+                    setState(() => _logoFile = null);
+                  },
                 ),
                 const SizedBox(width: 12),
                 _uploadBox(
@@ -501,9 +828,14 @@ bool _selectAllCategories = false;
                       source: ImageSource.gallery,
                       imageQuality: 85,
                     );
-                    if (f != null) setState(() => _bannerFile = f);
+
+                    if (f != null) {
+                      setState(() => _bannerFile = f);
+                    }
                   },
-                  onRemove: () => setState(() => _bannerFile = null),
+                  onRemove: () {
+                    setState(() => _bannerFile = null);
+                  },
                 ),
               ],
             ),
@@ -513,71 +845,76 @@ bool _selectAllCategories = false;
     );
   }
 
-  // ─── Step 2: Owner ────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // STEP 2 — OWNER
+  // ─────────────────────────────────────────────────────────────────────────
+
   Widget _buildStep2() {
     return _card(
       icon: Icons.person_outline,
       title: 'Owner details',
       children: [
-        _label('Owner name', required: true),
+        _requiredLabel('Owner name'),
         _inputField(_ownerNameCtrl, hint: 'Ravi Kumar'),
+
         const SizedBox(height: 14),
-        _label('Email', required: true),
+
+        _requiredLabel('Email'),
         _inputField(
           _emailCtrl,
           hint: 'owner@email.com',
           keyboardType: TextInputType.emailAddress,
         ),
-        const SizedBox(height: 4),
-        // Info note about welcome email
-        Row(
-          children: [
-            const Icon(Icons.info_outline, size: 12, color: TColors.brownLight),
-            const SizedBox(width: 4),
-            const Expanded(
-              child: Text(
-                'A temporary password will be sent to this email',
-                style: TextStyle(fontSize: 11, color: TColors.brownLight),
-              ),
-            ),
-          ],
-        ),
+
         const SizedBox(height: 14),
-        _label('Phone', required: true),
+
+        _requiredLabel('Phone'),
         _inputField(
           _phoneCtrl,
           hint: '9876543210',
           keyboardType: TextInputType.phone,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(10),
+          ],
         ),
       ],
     );
   }
 
-  // ─── Step 3: Bank ─────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // STEP 3 — BANK
+  // ─────────────────────────────────────────────────────────────────────────
+
   Widget _buildStep3() {
     return _card(
       icon: Icons.account_balance_outlined,
       title: 'Bank details',
       children: [
-        _label('Account number', required: true),
+        _label('Account number'),
         _inputField(
           _accountCtrl,
           hint: '0123456789',
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         ),
+
         const SizedBox(height: 14),
-        _label('Bank name', required: true),
+
+        _label('Bank name'),
         _inputField(_bankNameCtrl, hint: 'State Bank of India'),
+
         const SizedBox(height: 14),
-        _label('IFSC code', required: true),
+
+        _label('IFSC code'),
         _inputField(
           _ifscCtrl,
           hint: 'SBIN0001234',
           textCapitalization: TextCapitalization.characters,
         ),
+
         const SizedBox(height: 14),
+
         _label('GST number'),
         _inputField(
           _gstCtrl,
@@ -588,39 +925,50 @@ bool _selectAllCategories = false;
     );
   }
 
-  // ─── Step 4: Settings ─────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // STEP 4 — SETTINGS
+  // ─────────────────────────────────────────────────────────────────────────
+
   Widget _buildStep4() {
     return _card(
       icon: Icons.settings_outlined,
       title: 'Settings',
       children: [
-        _label('Commission rate (%)', required: true),
+        _label('Commission rate (%)'),
         _commissionField(),
+
         const SizedBox(height: 8),
+
         _toggleRow(
           'Activate shop immediately',
-          'Shop will be visible to customers right away',
+          'Visible to customers right away',
           _activateImmediately,
           (v) => setState(() => _activateImmediately = v),
         ),
+
         _divider(),
+
         _toggleRow(
           'Send welcome email to owner',
-          'Sends login credentials to the owner\'s email',
+          'Sends login credentials',
           _sendWelcomeEmail,
           (v) => setState(() => _sendWelcomeEmail = v),
         ),
+
         _divider(),
+
         _toggleRow(
           'Allow product uploads',
-          'Owner can add and manage their own products',
+          'Owner can manage products',
           _allowProductUploads,
           (v) => setState(() => _allowProductUploads = v),
         ),
+
         _divider(),
+
         _toggleRow(
           'Enable payout requests',
-          'Owner can request withdrawal of earnings',
+          'Owner can request withdrawal',
           _enablePayoutRequests,
           (v) => setState(() => _enablePayoutRequests = v),
         ),
@@ -628,7 +976,10 @@ bool _selectAllCategories = false;
     );
   }
 
-  // ─── Bottom nav ───────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // BOTTOM NAV
+  // ─────────────────────────────────────────────────────────────────────────
+
   Widget _buildBottomNav(BuildContext context) {
     return Container(
       padding: EdgeInsets.only(
@@ -637,7 +988,7 @@ bool _selectAllCategories = false;
         top: 12,
         bottom: MediaQuery.of(context).padding.bottom + 12,
       ),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: TColors.white,
         border: Border(top: BorderSide(color: TColors.border)),
       ),
@@ -674,6 +1025,7 @@ bool _selectAllCategories = false;
             ),
             const SizedBox(width: 10),
           ],
+
           Expanded(
             flex: _step > 0 ? 2 : 1,
             child: GestureDetector(
@@ -725,109 +1077,81 @@ bool _selectAllCategories = false;
     );
   }
 
-  // ─── Category dropdown ────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // CATEGORY
+  // ─────────────────────────────────────────────────────────────────────────
+
   Widget _categoryDropdown() {
-  return Container(
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: TColors.white,
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: TColors.border),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-
-        //---------------------------------------
-        // Select All
-        //---------------------------------------
-
-        CheckboxListTile(
-          value: _selectAllCategories,
-          dense: true,
-          controlAffinity: ListTileControlAffinity.leading,
-          contentPadding: EdgeInsets.zero,
-          title: const Text("Select All"),
-          onChanged: (value) {
-
-            setState(() {
-
-              _selectAllCategories = value!;
-
-              _selectedCategoryIds.clear();
-
-              if (_selectAllCategories) {
-
-                for (final category in _categories) {
-
-                  _selectedCategoryIds.add(
-                    int.parse(category["id"]!),
-                  );
-
-                }
-
-              }
-
-            });
-
-          },
-        ),
-
-        const Divider(),
-
-        //---------------------------------------
-        // Category List
-        //---------------------------------------
-
-        ..._categories.map((category) {
-
-          final id = int.parse(category["id"]!);
-
-          return CheckboxListTile(
-
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: TColors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: TColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CheckboxListTile(
+            value: _selectAllCategories,
             dense: true,
-
-            controlAffinity:
-                ListTileControlAffinity.leading,
-
+            controlAffinity: ListTileControlAffinity.leading,
             contentPadding: EdgeInsets.zero,
-
-            value: _selectedCategoryIds.contains(id),
-
-            title: Text(category["name"]!),
-
+            title: const Text('Select All', style: TextStyle(fontSize: 13)),
             onChanged: (value) {
-
               setState(() {
+                _selectAllCategories = value ?? false;
 
-                if (value == true) {
+                _selectedCategoryIds.clear();
 
-                  _selectedCategoryIds.add(id);
-
-                } else {
-
-                  _selectedCategoryIds.remove(id);
-
+                if (_selectAllCategories) {
+                  for (final category in _categories) {
+                    _selectedCategoryIds.add(int.parse(category['id']!));
+                  }
                 }
-
-                _selectAllCategories =
-                    _selectedCategoryIds.length ==
-                    _categories.length;
-
               });
-
             },
+          ),
 
-          );
+          const Divider(),
 
-        }),
+          ..._categories.map((category) {
+            final id = int.parse(category['id']!);
 
-      ],
-    ),
-  );
-}
+            return CheckboxListTile(
+              dense: true,
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              value: _selectedCategoryIds.contains(id),
+              title: Text(
+                category['name']!,
+                style: const TextStyle(fontSize: 13),
+              ),
+              onChanged: (value) {
+                setState(() {
+                  if (value == true) {
+                    if (!_selectedCategoryIds.contains(id)) {
+                      _selectedCategoryIds.add(id);
+                    }
+                  } else {
+                    _selectedCategoryIds.remove(id);
+                  }
 
-  // ─── Shared widgets ───────────────────────────────────────────────────────
+                  _selectAllCategories =
+                      _selectedCategoryIds.length == _categories.length;
+                });
+              },
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // CARD
+  // ─────────────────────────────────────────────────────────────────────────
+
   Widget _card({
     required IconData icon,
     required String title,
@@ -865,28 +1189,54 @@ bool _selectAllCategories = false;
     );
   }
 
-  Widget _label(String text, {bool required = false}) {
+  // ─────────────────────────────────────────────────────────────────────────
+  // REQUIRED LABEL
+  // ─────────────────────────────────────────────────────────────────────────
+  Widget _requiredLabel(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: [
-          Text(
-            text,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: TColors.black,
+      child: RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: text,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: TColors.black,
+              ),
             ),
-          ),
-          if (required)
-            const Text(
-              ' *',
-              style: TextStyle(fontSize: 12, color: Color(0xFFCC2222)),
+            const TextSpan(
+              text: ' *',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFA32D2D),
+              ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
+
+  Widget _label(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: TColors.black,
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // INPUT
+  // ─────────────────────────────────────────────────────────────────────────
 
   Widget _inputField(
     TextEditingController ctrl, {
@@ -927,6 +1277,10 @@ bool _selectAllCategories = false;
       ),
     );
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TEXT AREA
+  // ─────────────────────────────────────────────────────────────────────────
 
   Widget _textArea(TextEditingController ctrl, {String hint = ''}) {
     return Column(
@@ -973,6 +1327,10 @@ bool _selectAllCategories = false;
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // UPLOAD BOX
+  // ─────────────────────────────────────────────────────────────────────────
+
   Widget _uploadBox({
     required String label,
     required XFile? file,
@@ -996,7 +1354,7 @@ bool _selectAllCategories = false;
               ? Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.upload_outlined,
                       size: 20,
                       color: TColors.brownLight,
@@ -1045,39 +1403,16 @@ bool _selectAllCategories = false;
                         ),
                       ),
                     ),
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      child: GestureDetector(
-                        onTap: onTap,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          decoration: BoxDecoration(
-                            color: TColors.black.withValues(alpha: 0.55),
-                            borderRadius: const BorderRadius.only(
-                              bottomLeft: Radius.circular(7),
-                              bottomRight: Radius.circular(7),
-                            ),
-                          ),
-                          child: const Text(
-                            'Change',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: TColors.white,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
         ),
       ),
     );
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // COMMISSION
+  // ─────────────────────────────────────────────────────────────────────────
 
   Widget _commissionField() {
     return TextField(
@@ -1086,7 +1421,7 @@ bool _selectAllCategories = false;
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       style: const TextStyle(fontSize: 13, color: TColors.black),
       decoration: InputDecoration(
-        suffixText: '% of each order goes to THIRAA',
+        suffixText: '% of each order',
         suffixStyle: const TextStyle(fontSize: 11, color: TColors.brownLight),
         filled: true,
         fillColor: TColors.white,
@@ -1109,6 +1444,10 @@ bool _selectAllCategories = false;
       ),
     );
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TOGGLE
+  // ─────────────────────────────────────────────────────────────────────────
 
   Widget _toggleRow(
     String title,
@@ -1146,7 +1485,6 @@ bool _selectAllCategories = false;
           Switch(
             value: value,
             onChanged: onChanged,
-            //activeThumbColor: TColors.white,
             activeTrackColor: const Color(0xFF22AA6F),
             inactiveThumbColor: TColors.white,
             inactiveTrackColor: TColors.border,
@@ -1156,5 +1494,7 @@ bool _selectAllCategories = false;
     );
   }
 
-  Widget _divider() => const Divider(color: TColors.border, height: 1);
+  Widget _divider() {
+    return const Divider(color: TColors.border, height: 1);
+  }
 }

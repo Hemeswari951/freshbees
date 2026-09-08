@@ -25,8 +25,10 @@ import '../models/product_model.dart';
 
 import '../screens/product/product_list_screen.dart';
 import '../screens/product/product_view_screen.dart';
-import '../screens/product/shop_overview_screen.dart';
 import '../screens/product/product_filters.dart';
+
+import '../screens/home/shop_list_screen.dart';
+import '../screens/product/shop_overview_screen.dart';
 
 // ─────────────────────────────────────────────────────────────
 // Layout visibility
@@ -383,6 +385,19 @@ final GoRouter appRouter = GoRouter(
             );
           },
         ),
+
+        // ─────────────────────────────────────────────────────────
+        // SHOP LIST
+        // ─────────────────────────────────────────────────────────
+        GoRoute(
+          path: '/shops',
+          builder: (context, state) {
+            final category = state.uri.queryParameters['category'] ?? 'All';
+
+            return ShopListScreen(categoryTitle: category);
+          },
+        ),
+
         // ─────────────────────────────────────────
         // SHOP OVERVIEW
         // ─────────────────────────────────────────

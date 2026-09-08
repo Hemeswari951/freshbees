@@ -1,29 +1,41 @@
 import 'api_service.dart';
+import 'cart_count.dart';
 
+/// One row in the customer's bag
 /// One row in the customer's bag
 class CartItemModel {
   final int cartItemId;
   final int productId;
   final int? variantId;
   final String productName;
+  final String? shopName;
   final String thumbnail;
   final double price;
+  final double? mrp;
   final int quantity;
   final String? size;
+  final String? color;
   final int? stockQuantity;
   final double lineTotal;
+  final double? rating;       // NEW — avg rating from reviews table, null if no reviews
+  final int? reviewCount;     // NEW — total review count
 
   CartItemModel({
     required this.cartItemId,
     required this.productId,
     this.variantId,
     required this.productName,
+    this.shopName,
     required this.thumbnail,
     required this.price,
+    this.mrp,
     required this.quantity,
     this.size,
+    this.color,
     this.stockQuantity,
     required this.lineTotal,
+    this.rating,
+    this.reviewCount,
   });
 
   factory CartItemModel.fromJson(Map<String, dynamic> json) {
@@ -44,7 +56,15 @@ class CartItemModel {
 
       productName: json['productName']?.toString() ?? '',
 
+      shopName: json['shopName']?.toString(),
+
       thumbnail: json['thumbnail']?.toString() ?? '',
+
+      mrp: json['mrp'] == null
+          ? null
+          : (json['mrp'] is num
+              ? (json['mrp'] as num).toDouble()
+              : double.tryParse(json['mrp'].toString())),
 
       price: json['price'] is num
           ? (json['price'] as num).toDouble()
@@ -59,6 +79,7 @@ class CartItemModel {
           1,
 
       size: json['size']?.toString(),
+      color: json['color']?.toString(),
 
       stockQuantity: json['stockQuantity'] != null
           ? int.tryParse(
@@ -72,6 +93,17 @@ class CartItemModel {
                 json['lineTotal']?.toString() ?? '',
               ) ??
               0.0,
+
+      // NEW — backend sends `rating: null` when no reviews, so no fallback needed
+      rating: json['rating'] == null
+          ? null
+          : (json['rating'] is num
+              ? (json['rating'] as num).toDouble()
+              : double.tryParse(json['rating'].toString())),
+
+      reviewCount: json['reviewCount'] != null
+          ? int.tryParse(json['reviewCount'].toString())
+          : null,
     );
   }
 }
@@ -103,54 +135,79 @@ class CartService {
   // GET CART
   // ============================================================
 
-  static Future<CartResult> getCart() async {
-    final response = await ApiService.get('/cart');
+ static Future<CartResult> getCart() async {
+  final response = await ApiService.get('/cart');
 
-    final List rows = response['data']?['items'] ?? [];
+  final List rows = response['data']?['items'] ?? [];
 
-    return CartResult(
-      items: rows
-          .map(
-            (r) => CartItemModel.fromJson(
-              Map<String, dynamic>.from(r),
-            ),
-          )
-          .toList(),
+  final items = rows
+      .map(
+        (r) => CartItemModel.fromJson(
+          Map<String, dynamic>.from(r),
+        ),
+      )
+      .toList();
 
-      subtotal: response['data']?['subtotal'] is num
-          ? (response['data']['subtotal'] as num).toDouble()
-          : double.tryParse(
-                response['data']?['subtotal']?.toString() ?? '',
-              ) ??
-              0.0,
-    );
-  }
+  cartItemCount.value = items.length;   // ← ADD THIS — keeps badge in sync
+
+  return CartResult(
+    items: items,
+    subtotal: response['data']?['subtotal'] is num
+        ? (response['data']['subtotal'] as num).toDouble()
+        : double.tryParse(
+              response['data']?['subtotal']?.toString() ?? '',
+            ) ??
+            0.0,
+  );
+}
 
   // ============================================================
   // ADD TO CART
   // ============================================================
 
-  static Future<void> addToCart({
-    required int productId,
-    int? variantId,
-    int quantity = 1,
-  }) async {
-    final response = await ApiService.post(
-      '/cart',
-      {
-        'product_id': productId,
-        'variant_id': variantId,
-        'quantity': quantity,
-      },
-    );
+ // ============================================================
+// ADD TO CART
+// ============================================================
 
-    if (response['success'] != true) {
-      throw Exception(
-        response['message'] ?? 'Failed to add to bag',
-      );
-    }
+/// Returns the cartItemId of the row that was created/updated, if the
+/// backend sends it back. Callers that don't need it (e.g. the plain
+/// "Add to Cart" button) can just ignore the return value.
+static Future<int?> addToCart({
+  required int productId,
+  int? variantId,
+  int quantity = 1,
+  String? size,
+  String? color,
+}) async {
+  final response = await ApiService.post(
+    '/cart',
+    {
+      'product_id': productId,
+      'variant_id': variantId,
+      'quantity': quantity,
+      if (size != null) 'size': size,
+      if (color != null) 'color': color,
+    },
+  );
+
+  if (response['success'] != true) {
+    throw Exception(
+      response['message'] ?? 'Failed to add to bag',
+    );
   }
 
+  cartItemCount.value = cartItemCount.value + 1;   // ← ADD THIS LINE
+
+  final data = response['data'];
+  final rawId = data is Map
+      ? (data['cartItemId'] ?? data['cart_item_id'] ?? data['id'])
+      : (response['cartItemId'] ?? response['cart_item_id']);
+
+  if (rawId != null) {
+    return int.tryParse(rawId.toString());
+  }
+  return null;
+}
   // ============================================================
   // UPDATE QUANTITY
   // ============================================================
@@ -177,20 +234,23 @@ class CartService {
   // REMOVE ITEM
   // ============================================================
 
-  static Future<void> removeItem(
-    int cartItemId,
-  ) async {
-    final response = await ApiService.delete(
-      '/cart/$cartItemId',
-    );
+ static Future<void> removeItem(
+  int cartItemId,
+) async {
+  final response = await ApiService.delete(
+    '/cart/$cartItemId',
+  );
 
-    if (response['success'] != true) {
-      throw Exception(
-        response['message'] ?? 'Failed to remove item',
-      );
-    }
+  if (response['success'] != true) {
+    throw Exception(
+      response['message'] ?? 'Failed to remove item',
+    );
   }
 
+  if (cartItemCount.value > 0) {
+    cartItemCount.value = cartItemCount.value - 1;   // ← ADD THIS
+  }
+}
   // ============================================================
   // CHECKOUT
   // ============================================================

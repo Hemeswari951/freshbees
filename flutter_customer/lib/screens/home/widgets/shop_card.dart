@@ -18,6 +18,11 @@ class ShopCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Safely retrieve category label from shop model to fix missing getter errors
+    final String displayCategory = shop.categories.isNotEmpty
+        ? shop.categories.first
+        : (category.isNotEmpty ? category : 'Shop');
+
     return SizedBox(
       width: width,
       child: GestureDetector(
@@ -41,21 +46,13 @@ class ShopCard extends StatelessWidget {
               // =====================================================
               // BANNER + LOGO
               // =====================================================
-
               Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  AspectRatio(
-                    aspectRatio: 2.2,
-                    child: _buildBanner(),
-                  ),
+                  AspectRatio(aspectRatio: 2.2, child: _buildBanner()),
 
                   // Logo overlaps the bottom-left of banner
-                  Positioned(
-                    left: 12,
-                    bottom: -25,
-                    child: _buildLogo(),
-                  ),
+                  Positioned(left: 12, bottom: -25, child: _buildLogo()),
                 ],
               ),
 
@@ -65,21 +62,14 @@ class ShopCard extends StatelessWidget {
               // =====================================================
               // SHOP DETAILS
               // =====================================================
-
               Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  12,
-                  0,
-                  12,
-                  10,
-                ),
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // -------------------------------------------------
                     // SHOP NAME + RATING
                     // -------------------------------------------------
-
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
@@ -137,18 +127,29 @@ class ShopCard extends StatelessWidget {
                     const SizedBox(height: 4),
 
                     // -------------------------------------------------
-                    // SELECTED CATEGORY
+                    // SELECTED CATEGORY (With Admin Icon Style)
                     // -------------------------------------------------
-
-                    Text(
-                      category,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black54,
-                      ),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.sell_outlined,
+                          size: 12,
+                          color: Colors.black45,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            displayCategory,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -196,6 +197,14 @@ class ShopCard extends StatelessWidget {
   // SHOP LOGO
   // ================================================================
 
+  Widget _logoPlaceholder() {
+    return const Icon(
+      Icons.storefront_outlined,
+      size: 27,
+      color: Colors.black38,
+    );
+  }
+
   Widget _buildLogo() {
     return Container(
       width: 56,
@@ -203,10 +212,7 @@ class ShopCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         shape: BoxShape.circle,
-        border: Border.all(
-          color: Colors.white,
-          width: 3,
-        ),
+        border: Border.all(color: Colors.white, width: 3),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.14),
@@ -221,18 +227,10 @@ class ShopCard extends StatelessWidget {
               shop.logoUrl!,
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) {
-                return const Icon(
-                  Icons.storefront_outlined,
-                  size: 27,
-                  color: Colors.black38,
-                );
+                return _logoPlaceholder();
               },
             )
-          : const Icon(
-              Icons.storefront_outlined,
-              size: 27,
-              color: Colors.black38,
-            ),
+          : _logoPlaceholder(),
     );
   }
 }

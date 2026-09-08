@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../models/shop_model.dart';
-import '../widgets/product_grid.dart';
 import '../../../services/home_service.dart';
+import '../../../services/location_manager.dart';
 import '../widgets/shop_grid.dart';
+import '../widgets/product_grid.dart';
 
 /// Content shown when the "Women" toggle is selected on Home.
 class WomenTab extends StatefulWidget {
@@ -16,23 +17,68 @@ class WomenTab extends StatefulWidget {
 
 class _WomenTabState extends State<WomenTab> {
   List<ShopModel> _shops = [];
+
   bool _isLoading = true;
+
   String? _error;
+
+  final LocationManager _locationManager = LocationManager();
 
   @override
   void initState() {
     super.initState();
+
+    // Listen for location changes.
+    _locationManager.addListener(_onLocationChanged);
+
     _loadShops();
   }
 
+  // ===========================================================================
+  // LOCATION CHANGED
+  // ===========================================================================
+
+  void _onLocationChanged() {
+    if (!mounted) return;
+
+    // LocationManager also notifies while loading.
+    // Do not reload while location itself is loading.
+    if (_locationManager.isLoading) return;
+
+    debugPrint('WomenTab: Location changed. Reloading shops...');
+
+    _loadShops();
+  }
+
+  // ===========================================================================
+  // LOAD SHOPS
+  // ===========================================================================
+
   Future<void> _loadShops() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
-      final shops = await HomeService.getShops(category: 'Women');
+      // Make sure latest location/login state is available.
+      await _locationManager.ensureLoaded();
+
+      if (!mounted) return;
+
+      final latitude = _locationManager.latitude;
+      final longitude = _locationManager.longitude;
+
+      debugPrint('WomenTab: User latitude = $latitude');
+      debugPrint('WomenTab: User longitude = $longitude');
+
+      final shops = await HomeService.getShops(
+        category: 'Women',
+        latitude: latitude,
+        longitude: longitude,
+      );
 
       if (!mounted) return;
 
@@ -41,14 +87,32 @@ class _WomenTabState extends State<WomenTab> {
         _isLoading = false;
       });
     } catch (e) {
+      debugPrint('WomenTab._loadShops error: $e');
+
       if (!mounted) return;
 
       setState(() {
+        _shops = [];
         _isLoading = false;
         _error = 'Could not load shops. Please try again.';
       });
     }
   }
+
+  // ===========================================================================
+  // DISPOSE
+  // ===========================================================================
+
+  @override
+  void dispose() {
+    _locationManager.removeListener(_onLocationChanged);
+
+    super.dispose();
+  }
+
+  // ===========================================================================
+  // OPEN SHOP
+  // ===========================================================================
 
   void _openShop(ShopModel shop) {
     final uri = Uri(
@@ -56,18 +120,22 @@ class _WomenTabState extends State<WomenTab> {
       queryParameters: {
         'shopId': shop.id.toString(),
         'shopName': shop.shopName,
+        'category': 'Women',
       },
     );
 
     context.push(uri.toString());
   }
 
+  // ===========================================================================
+  // BUILD
+  // ===========================================================================
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── SHOPS SECTION (top) ──────────────────────────────────
         _buildShopsSection(),
 
         const SizedBox(height: 28),
@@ -76,6 +144,10 @@ class _WomenTabState extends State<WomenTab> {
       ],
     );
   }
+
+  // ===========================================================================
+  // SHOPS SECTION
+  // ===========================================================================
 
   Widget _buildShopsSection() {
     if (_isLoading) {
@@ -92,8 +164,14 @@ class _WomenTabState extends State<WomenTab> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(_error!, style: const TextStyle(color: Colors.black54)),
+              Text(
+                _error!,
+                style: const TextStyle(color: Colors.black54),
+                textAlign: TextAlign.center,
+              ),
+
               const SizedBox(height: 12),
+
               TextButton(onPressed: _loadShops, child: const Text('Retry')),
             ],
           ),
@@ -102,19 +180,47 @@ class _WomenTabState extends State<WomenTab> {
     }
 
     if (_shops.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 40),
-        child: Center(
-          child: Text(
-            'No shops found.',
-            style: TextStyle(color: Colors.black54),
-          ),
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
-    return ShopGrid(shops: _shops, onShopTap: _openShop, category: 'All');
+    // Show only first 5 nearby shops.
+    final displayedShops = _shops.take(5).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Near By Shops',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            ),
+
+            if (_shops.length > 5)
+              TextButton(
+                onPressed: () {
+                  context.push('/shops?category=Women');
+                },
+                child: const Text('See All'),
+              ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        ShopGrid(
+          shops: displayedShops,
+          onShopTap: _openShop,
+          category: 'Women',
+        ),
+      ],
+    );
   }
+
+  // ===========================================================================
+  // PRODUCTS SECTION
+  // ===========================================================================
 
   Widget _buildProductsSection() {
     return const Column(
@@ -127,6 +233,7 @@ class _WomenTabState extends State<WomenTab> {
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
           ),
         ),
+
         ProductGrid(category: 'women'),
       ],
     );

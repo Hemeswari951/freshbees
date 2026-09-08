@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'dart:async';
+
+import '../../services/cart_service.dart';
+import '../../services/cart_count.dart';
 
 import '../product/product_list_screen.dart';
 import '../../services/api_service.dart';
 import '../../services/search_service.dart';
+import '../../widgets/location_bar.dart';
 
 import 'tabs/all_tab.dart';
 import 'tabs/men_tab.dart';
@@ -12,15 +17,17 @@ import 'tabs/women_tab.dart';
 import 'tabs/kids_tab.dart';
 import 'tabs/beauty_tab.dart';
 
-/// Below this width, the app is treated as "mobile" and the custom
-/// location/search/toggle header is shown. At or above this width
-/// (web/desktop), your existing shell header is used instead, so
-/// this header hides itself.
+/// Below this width, the app is treated as mobile.
 const double kMobileBreakpoint = 600;
 
 class HomeScreen extends StatefulWidget {
-  /// Which toggle should be active when this screen opens — set by the
-  /// route ('/home' = All, '/home/men' = Men, etc). Defaults to 'All'.
+  /// Which category should be selected when this screen opens.
+  ///
+  /// /home       → All
+  /// /home/men   → Men
+  /// /home/women → Women
+  /// /home/kids  → Kids
+  /// /home/beauty → Beauty
   final String initialCategory;
 
   const HomeScreen({super.key, this.initialCategory = 'All'});
@@ -30,23 +37,30 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Location shown in the header. Wire this up to a real location
-  // service / picker later if needed.
-  final String _location = 'Chennai, Tamil Nadu';
+  // =========================================================================
+  // SEARCH
+  // =========================================================================
 
   final TextEditingController _searchController = TextEditingController();
+
   final FocusNode _searchFocusNode = FocusNode();
+
   final LayerLink _searchLayerLink = LayerLink();
+
   final OverlayPortalController _searchOverlayController =
       OverlayPortalController();
 
-  // Toggle state for the header category selector — starts from
-  // whichever category the route opened with.
-  late String _selectedCategory = widget.initialCategory;
-
   Timer? _debounce;
+
   List<SearchSuggestion> _suggestions = [];
+
   bool _isSuggesting = false;
+
+  // =========================================================================
+  // CATEGORY
+  // =========================================================================
+
+  late String _selectedCategory = widget.initialCategory;
 
   final List<Map<String, dynamic>> _categories = const [
     {'label': 'All', 'icon': Icons.apps_rounded},
@@ -57,19 +71,60 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _syncCartCount();
+  }
+
+  Future<void> _syncCartCount() async {
+    final token = ApiService.getToken();
+    if (token == null || token.isEmpty) {
+      cartItemCount.value = 0;
+      return;
+    }
+    try {
+      final cart = await CartService.getCart();
+      cartItemCount.value = cart.items.length;
+    } catch (_) {
+      // Silent — badge just stays at whatever it was.
+    }
+  }
+  // =========================================================================
+  // LIFECYCLE
+  // =========================================================================
+
+  @override
   void dispose() {
     _debounce?.cancel();
+
     _searchFocusNode.dispose();
     _searchController.dispose();
+
     super.dispose();
   }
 
-  // ---------------------------------------------------------------------
-  // SEARCH — debounced, calls the shared HomeService method. Overlay is
-  // driven by OverlayPortalController (same pattern as _ProfileHoverMenu
-  // in customer_header.dart) so suggestion taps register reliably —
-  // no focus-loss race condition tearing the overlay down early.
-  // ---------------------------------------------------------------------
+  // =========================================================================
+  // PROTECTED ROUTES
+  // =========================================================================
+
+  void _goToProtected(BuildContext context, String route) {
+    final token = ApiService.getToken();
+
+    final isLoggedIn = token != null && token.isNotEmpty;
+
+    if (isLoggedIn) {
+      context.push(route);
+    } else {
+      context.push(
+        Uri(path: '/login', queryParameters: {'redirect': route}).toString(),
+      );
+    }
+  }
+
+  // =========================================================================
+  // SEARCH
+  // =========================================================================
+
   void _onSearchChanged(String value) {
     _debounce?.cancel();
 
@@ -78,21 +133,29 @@ class _HomeScreenState extends State<HomeScreen> {
         _suggestions = [];
         _isSuggesting = false;
       });
+
       if (_searchOverlayController.isShowing) {
         _searchOverlayController.hide();
       }
+
       return;
     }
 
     _debounce = Timer(const Duration(milliseconds: 350), () async {
-      setState(() => _isSuggesting = true);
+      setState(() {
+        _isSuggesting = true;
+      });
+
       try {
         final results = await SearchService.getSearchSuggestions(value);
+
         if (!mounted) return;
+
         setState(() {
           _suggestions = results;
           _isSuggesting = false;
         });
+
         if (_suggestions.isNotEmpty && !_searchOverlayController.isShowing) {
           _searchOverlayController.show();
         } else if (_suggestions.isEmpty && _searchOverlayController.isShowing) {
@@ -100,6 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       } catch (_) {
         if (!mounted) return;
+
         setState(() {
           _suggestions = [];
           _isSuggesting = false;
@@ -108,24 +172,15 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _selectCategory(String label) {
-    setState(() {
-      _selectedCategory = label;
-    });
-
-    // Reflect the selected toggle in the URL — each toggle is its own
-    // route, so /home/men, /home/women, /home/kids, /home/beauty.
-    // 'All' maps back to plain /home.
-    final route = label == 'All' ? '/home' : '/home/${label.toLowerCase()}';
-    context.go(route);
-  }
-
   void _goToSearch(String query) {
     if (query.trim().isEmpty) return;
+
     if (_searchOverlayController.isShowing) {
       _searchOverlayController.hide();
     }
+
     _searchFocusNode.unfocus();
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -138,27 +193,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onSuggestionTap(SearchSuggestion suggestion) {
     _searchController.text = suggestion.text;
-    // Both tag and product suggestions route through the same search —
-    // backend matches product_name OR tag_name, so the text alone
-    // filters correctly on ProductListScreen.
+
     _goToSearch(suggestion.text);
   }
 
-  // Checks login state before navigating to a protected route.
-  // If not logged in, redirects to /login and passes the intended
-  // destination so the login flow can send the user back afterwards.
-  void _goToProtected(BuildContext context, String route) {
-    final isLoggedIn =
-        ApiService.getToken() != null && ApiService.getToken()!.isNotEmpty;
+  // =========================================================================
+  // CATEGORY
+  // =========================================================================
 
-    if (isLoggedIn) {
-      context.push(route);
-    } else {
-      context.push(
-        Uri(path: '/login', queryParameters: {'redirect': route}).toString(),
-      );
-    }
+  void _selectCategory(String label) {
+    setState(() {
+      _selectedCategory = label;
+    });
+
+    final route = label == 'All' ? '/home' : '/home/${label.toLowerCase()}';
+
+    context.go(route);
   }
+
+  // =========================================================================
+  // BUILD
+  // =========================================================================
 
   @override
   Widget build(BuildContext context) {
@@ -166,23 +221,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFAF7F2),
+
       body: SafeArea(
         child: Column(
           children: [
             if (isMobile) _buildHeader(),
+
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
                   vertical: 10,
                 ),
+
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
 
                   children: [
-                    // ==========================================
+                    // =======================================================
                     // AI VIRTUAL TRY-ON BANNER
-                    // ==========================================
+                    // =======================================================
 
                     Container(
                       width: double.infinity,
@@ -194,9 +252,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       child: Row(
                         children: [
-                          // ======================================
+                          // -------------------------------------------------
                           // LEFT CONTENT
-                          // ======================================
+                          // -------------------------------------------------
 
                           Expanded(
                             flex: 3,
@@ -242,9 +300,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
                                   const SizedBox(height: 16),
 
-                                  // =================================
-                                  // TRY NOW BUTTON
-                                  // =================================
                                   ElevatedButton.icon(
                                     onPressed: () {
                                       context.go('/trial');
@@ -281,9 +336,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
 
-                          // ======================================
+                          // -------------------------------------------------
                           // RIGHT IMAGE / PLACEHOLDER
-                          // ======================================
+                          // -------------------------------------------------
                           Expanded(
                             flex: 2,
 
@@ -309,11 +364,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
 
-                    // ==========================================
-                    // SPACE AFTER AI BANNER
-                    // ==========================================
                     const SizedBox(height: 24),
 
+                    // =======================================================
+                    // CATEGORY CONTENT
+                    // =======================================================
                     _buildSelectedCategoryContent(),
                   ],
                 ),
@@ -322,41 +377,46 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      // No bottomNavigationBar here — handled by the shared layout/shell.
+
+      // Bottom navigation is handled by the shared shell.
     );
   }
 
-  // ---------------------------------------------------------------------
-  // BODY: each toggle has its own file, and each tab calls its own
-  // dedicated HomeService method — tap "Men" and MenTab() runs, which
-  // calls HomeService.getMenShops() itself, and so on. Home doesn't
-  // fetch or filter anything.
-  // ---------------------------------------------------------------------
+  // =========================================================================
+  // CATEGORY CONTENT
+  // =========================================================================
+
   Widget _buildSelectedCategoryContent() {
     switch (_selectedCategory) {
       case 'Men':
         return const MenTab();
+
       case 'Women':
         return const WomenTab();
+
       case 'Kids':
         return const KidsTab();
+
       case 'Beauty':
         return const BeautyTab();
+
       case 'All':
       default:
         return const AllTab();
     }
   }
 
-  // ---------------------------------------------------------------------
-  // HEADER — sits above the scrollable content, with a bottom shadow so
-  // it visually separates from whatever's below it.
-  // ---------------------------------------------------------------------
+  // =========================================================================
+  // HEADER
+  // =========================================================================
+
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+
       decoration: BoxDecoration(
         color: const Color(0xFFFAF7F2),
+
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.06),
@@ -365,123 +425,116 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+
         children: [
-          _buildLocationRow(),
+          // Shared across every screen — reads/writes LocationManager().
+          const LocationBar(),
+
           const SizedBox(height: 14),
+
           _buildSearchRow(),
+
           const SizedBox(height: 14),
+
           _buildCategoryToggle(),
         ],
       ),
     );
   }
 
-  Widget _buildLocationRow() {
-    return GestureDetector(
-      onTap: () {
-        // TODO: open a location picker / detect current location.
-      },
-      child: Row(
-        children: [
-          const Icon(
-            Icons.location_on_outlined,
-            size: 18,
-            color: Color(0xFF8B7355),
-          ),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              _location,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 2),
-          const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            size: 18,
-            color: Colors.black54,
-          ),
-        ],
-      ),
-    );
-  }
+  // =========================================================================
+  // SEARCH ROW
+  // =========================================================================
 
-  // ---------------------------------------------------------------------
-  // SEARCH ROW — wrapped in CompositedTransformTarget + OverlayPortal so
-  // the suggestions dropdown anchors exactly under this bar and taps on
-  // suggestions register reliably (no manual OverlayEntry race).
-  // ---------------------------------------------------------------------
   Widget _buildSearchRow() {
     return Row(
       children: [
         Expanded(
           child: CompositedTransformTarget(
             link: _searchLayerLink,
+
             child: OverlayPortal(
               controller: _searchOverlayController,
+
               overlayChildBuilder: (context) {
                 return Positioned.fill(
                   child: GestureDetector(
                     behavior: HitTestBehavior.translucent,
+
                     onTap: () {
-                      // Tap outside the suggestion panel — just close it.
                       _searchOverlayController.hide();
                     },
+
                     child: Stack(
                       children: [
                         CompositedTransformFollower(
                           link: _searchLayerLink,
+
                           showWhenUnlinked: false,
+
                           offset: const Offset(0, 52),
+
                           child: Align(
                             alignment: Alignment.topLeft,
+
                             child: Material(
                               elevation: 4,
+
                               borderRadius: BorderRadius.circular(14),
+
                               color: Colors.white,
+
                               child: SizedBox(
                                 width: MediaQuery.of(context).size.width - 40,
+
                                 child: ConstrainedBox(
                                   constraints: const BoxConstraints(
                                     maxHeight: 320,
                                   ),
+
                                   child: ListView.separated(
                                     shrinkWrap: true,
+
                                     padding: const EdgeInsets.symmetric(
                                       vertical: 6,
                                     ),
+
                                     itemCount: _suggestions.length,
+
                                     separatorBuilder: (_, __) => Divider(
                                       height: 1,
                                       color: Colors.black.withOpacity(0.05),
                                     ),
+
                                     itemBuilder: (context, index) {
-                                      final s = _suggestions[index];
+                                      final suggestion = _suggestions[index];
+
                                       return ListTile(
                                         dense: true,
+
                                         leading: Icon(
-                                          s.isTag
+                                          suggestion.isTag
                                               ? Icons.sell_outlined
                                               : Icons.search_rounded,
+
                                           size: 18,
+
                                           color: const Color(0xFF8B7355),
                                         ),
+
                                         title: Text(
-                                          s.text,
+                                          suggestion.text,
+
                                           style: const TextStyle(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w500,
                                           ),
                                         ),
-                                        trailing: s.isTag
+
+                                        trailing: suggestion.isTag
                                             ? const Text(
                                                 'tag',
                                                 style: TextStyle(
@@ -490,7 +543,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                                 ),
                                               )
                                             : null,
-                                        onTap: () => _onSuggestionTap(s),
+
+                                        onTap: () =>
+                                            _onSuggestionTap(suggestion),
                                       );
                                     },
                                   ),
@@ -504,38 +559,54 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 );
               },
+
               child: Container(
                 height: 46,
+
                 padding: const EdgeInsets.symmetric(horizontal: 14),
+
                 decoration: BoxDecoration(
                   color: const Color(0xFFF2ECE4),
+
                   borderRadius: BorderRadius.circular(14),
                 ),
+
                 child: Row(
                   children: [
                     const Icon(Icons.search, size: 20, color: Colors.black54),
+
                     const SizedBox(width: 8),
+
                     Expanded(
                       child: TextField(
                         controller: _searchController,
+
                         focusNode: _searchFocusNode,
+
                         decoration: const InputDecoration(
                           hintText: 'Search',
+
                           hintStyle: TextStyle(
                             fontSize: 13,
                             color: Colors.black45,
                           ),
+
                           border: InputBorder.none,
+
                           isDense: true,
                         ),
+
                         style: const TextStyle(
                           fontSize: 13,
                           color: Colors.black87,
                         ),
+
                         onChanged: _onSearchChanged,
+
                         onSubmitted: _goToSearch,
                       ),
                     ),
+
                     if (_isSuggesting)
                       const SizedBox(
                         width: 14,
@@ -545,19 +616,23 @@ class _HomeScreenState extends State<HomeScreen> {
                     else ...[
                       GestureDetector(
                         onTap: () {
-                          // TODO: hook up voice search.
+                          // TODO: voice search
                         },
+
                         child: const Icon(
                           Icons.mic_none_rounded,
                           size: 20,
                           color: Colors.black54,
                         ),
                       ),
+
                       const SizedBox(width: 8),
+
                       GestureDetector(
                         onTap: () {
-                          // TODO: hook up visual/camera search.
+                          // TODO: visual search
                         },
+
                         child: const Icon(
                           Icons.camera_alt_outlined,
                           size: 20,
@@ -571,51 +646,78 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+
         const SizedBox(width: 8),
+
         _buildHeaderIconButton(
           icon: Icons.notifications_none_outlined,
           onTap: () => _goToProtected(context, '/notifications'),
         ),
 
         const SizedBox(width: 8),
-        _buildHeaderIconButton(
-          icon: Icons.shopping_cart_outlined,
-          showBadge: true,
-          onTap: () => _goToProtected(context, '/cart'),
+
+        ValueListenableBuilder<int>(
+          valueListenable: cartItemCount,
+          builder: (context, count, child) {
+            return _buildHeaderIconButton(
+              icon: Icons.shopping_cart_outlined,
+              badgeCount: count,
+              onTap: () => _goToProtected(context, '/cart'),
+            );
+          },
         ),
       ],
     );
   }
 
+  // =========================================================================
+  // HEADER ICON BUTTON
+  // =========================================================================
+
   Widget _buildHeaderIconButton({
     required IconData icon,
     required VoidCallback onTap,
-    bool showBadge = false,
+    int badgeCount = 0,
   }) {
     return GestureDetector(
       onTap: onTap,
+
       child: Stack(
         clipBehavior: Clip.none,
+
         children: [
           Container(
             width: 42,
             height: 42,
+
             decoration: BoxDecoration(
               color: const Color(0xFFF2ECE4),
+
               borderRadius: BorderRadius.circular(12),
             ),
+
             child: Icon(icon, size: 19, color: Colors.black87),
           ),
-          if (showBadge)
+
+          if (badgeCount > 0)
             Positioned(
-              top: 6,
-              right: 6,
+              top: -2,
+              right: -2,
               child: Container(
-                width: 8,
-                height: 8,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                 decoration: const BoxDecoration(
-                  color: Colors.black,
+                  color: Colors.red,
                   shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  badgeCount > 99 ? '99+' : '$badgeCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),
@@ -624,61 +726,81 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------
-  // Category toggle — plain, no boxed pills. Selected item gets a very
-  // light background fill and a bottom border under just that item.
-  // ---------------------------------------------------------------------
+  // =========================================================================
+  // CATEGORY TOGGLE
+  // =========================================================================
+
   Widget _buildCategoryToggle() {
     return SizedBox(
       height: 58,
+
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
+
         itemCount: _categories.length,
+
         itemBuilder: (context, index) {
-          final cat = _categories[index];
-          final label = cat['label'] as String;
-          final icon = cat['icon'] as IconData;
+          final category = _categories[index];
+
+          final label = category['label'] as String;
+
+          final icon = category['icon'] as IconData;
+
           final isSelected = _selectedCategory == label;
 
           return GestureDetector(
             onTap: () => _selectCategory(label),
+
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
+
               margin: const EdgeInsets.only(right: 4),
+
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+
               decoration: BoxDecoration(
-                // Very light fill only when selected — plain otherwise.
                 color: isSelected
                     ? const Color(0xFFB8956A).withOpacity(0.08)
                     : Colors.transparent,
+
                 borderRadius: BorderRadius.circular(8),
+
                 border: Border(
                   bottom: BorderSide(
                     color: isSelected
                         ? const Color(0xFFB8956A)
                         : Colors.transparent,
+
                     width: 2,
                   ),
                 ),
               ),
+
               child: Row(
                 mainAxisSize: MainAxisSize.min,
+
                 children: [
                   Icon(
                     icon,
                     size: 17,
+
                     color: isSelected
                         ? const Color(0xFF8B7355)
                         : Colors.black54,
                   ),
+
                   const SizedBox(width: 6),
+
                   Text(
                     label,
+
                     style: TextStyle(
                       fontSize: 13,
+
                       fontWeight: isSelected
                           ? FontWeight.w700
                           : FontWeight.w500,
+
                       color: isSelected
                           ? const Color(0xFF3A2E22)
                           : Colors.black54,

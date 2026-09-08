@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 enum ProfileSection {
-  overview,
+  personalInfo,
   orders,
   coupons,
   savedCards,
@@ -16,8 +16,8 @@ enum ProfileSection {
 extension ProfileSectionX on ProfileSection {
   String get label {
     switch (this) {
-      case ProfileSection.overview:
-        return 'Overview';
+      case ProfileSection.personalInfo:
+        return 'My Profile';
       case ProfileSection.orders:
         return 'Orders';
       case ProfileSection.coupons:
@@ -41,7 +41,7 @@ extension ProfileSectionX on ProfileSection {
 
   IconData get icon {
     switch (this) {
-      case ProfileSection.overview:
+      case ProfileSection.personalInfo:
         return Icons.dashboard_outlined;
       case ProfileSection.orders:
         return Icons.receipt_long_outlined;
@@ -67,8 +67,8 @@ extension ProfileSectionX on ProfileSection {
   /// Used in the query param: /profile/details?section=<this>
   String get slug {
     switch (this) {
-      case ProfileSection.overview:
-        return 'overview';
+      case ProfileSection.personalInfo:
+        return 'personal-info';
       case ProfileSection.orders:
         return 'orders';
       case ProfileSection.coupons:
@@ -90,11 +90,11 @@ extension ProfileSectionX on ProfileSection {
     }
   }
 
-  /// Reverse lookup: slug -> enum. Falls back to overview if unknown.
+  /// Reverse lookup: slug -> enum. Falls back to personalInfo if unknown.
   static ProfileSection fromSlug(String? slug) {
     return ProfileSection.values.firstWhere(
       (s) => s.slug == slug,
-      orElse: () => ProfileSection.overview,
+      orElse: () => ProfileSection.personalInfo,
     );
   }
 }

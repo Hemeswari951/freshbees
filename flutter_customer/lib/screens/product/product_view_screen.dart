@@ -11,6 +11,8 @@ import '../../services/wishlist_service.dart';
 import '../cart/cart_screen.dart';
 import '../../widgets/reviews_section.dart';
 import '../../models/review_model.dart';
+import '../../services/cart_count.dart';
+import '../address/address_screen.dart';
 
 class ProductViewScreen extends StatefulWidget {
   final int productId;
@@ -410,32 +412,51 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     }
   }
 
-  /// "Buy Now" — adds the selected item to the cart (same as Add to Cart)
-  /// then jumps straight to checkout instead of staying on this page.
-  /// TODO: swap CartScreen for your actual checkout screen/route once
-  /// that exists — this currently opens the cart as the next step.
+  /// "Buy Now" — skips the cart entirely. Goes straight to
+  /// Address -> Order Summary -> Payment for THIS product only; nothing
+  /// is written to cart_items, so the customer's actual bag is untouched.
   Future<void> _handleBuyNow() async {
     if (!_passesPreChecks()) return;
 
+    final variant = _selectedVariant;
     setState(() => _buyingNow = true);
 
     try {
-      await CartService.addToCart(
+      // 1. Add this product to the cart first — Flipkart-style Buy Now.
+      int? cartItemId = await CartService.addToCart(
         productId: widget.productId,
-        variantId: _selectedVariant?.variantId,
+        variantId: variant?.variantId,
         quantity: 1,
       );
 
+      // 2. Backend didn't echo the id back — reload cart and find the
+      //    row that matches this product/variant instead.
+      if (cartItemId == null) {
+        final cart = await CartService.getCart();
+        final matches = cart.items
+            .where(
+              (i) =>
+                  i.productId == widget.productId &&
+                  i.variantId == variant?.variantId,
+            )
+            .toList();
+        if (matches.isEmpty) {
+          throw Exception('Could not find item in cart after adding');
+        }
+        cartItemId = matches.last.cartItemId;
+      }
+
       if (!mounted) return;
 
-      Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (context) => const CartScreen()));
+      await AddressScreen.startCheckout(context, cartItemIds: [cartItemId!]);
     } catch (e) {
       if (!mounted) return;
-
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     } finally {
       if (mounted) {
@@ -763,9 +784,50 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
             ),
           ),
         ),
-        IconButton(
-          icon: const Icon(Icons.shopping_cart_outlined, color: AppColors.ink),
-          onPressed: _openCart,
+        ValueListenableBuilder<int>(
+          valueListenable: cartItemCount,
+          builder: (context, count, child) {
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.shopping_cart_outlined,
+                    color: AppColors.ink,
+                  ),
+                  onPressed: _openCart,
+                ),
+                if (count > 0)
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        count > 99 ? '99+' : '$count',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
       ],
     );

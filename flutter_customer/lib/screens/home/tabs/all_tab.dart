@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../models/shop_model.dart';
 import '../../../services/home_service.dart';
+import '../../../services/location_manager.dart';
 import '../widgets/shop_grid.dart';
 import '../widgets/product_grid.dart';
 
@@ -17,22 +18,75 @@ class _AllTabState extends State<AllTab> {
   List<ShopModel> _shops = [];
 
   bool _isLoading = true;
+
   String? _error;
+
+  final LocationManager _locationManager = LocationManager();
+
+  int _lastLocationVersion = 0;
 
   @override
   void initState() {
     super.initState();
+
+    // Listen for location changes.
+    _locationManager.addListener(_onLocationChanged);
+
+    _lastLocationVersion = _locationManager.locationVersion;
+
     _loadShops();
   }
 
+  // ===========================================================================
+  // LOCATION CHANGED
+  // ===========================================================================
+
+  void _onLocationChanged() {
+    if (!mounted) return;
+
+    final currentVersion = _locationManager.locationVersion;
+
+    if (currentVersion == _lastLocationVersion) {
+      return;
+    }
+
+    _lastLocationVersion = currentVersion;
+
+    debugPrint('AllTab: Location changed. Reloading shops...');
+
+    _loadShops();
+  }
+
+  // ===========================================================================
+  // LOAD SHOPS
+  // ===========================================================================
+
   Future<void> _loadShops() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
-      final shops = await HomeService.getShops(category: null);
+      // Make sure latest location/login state is available.
+      await _locationManager.ensureLoaded();
+
+      if (!mounted) return;
+
+      final latitude = _locationManager.latitude;
+      final longitude = _locationManager.longitude;
+
+      debugPrint('AllTab: User latitude = $latitude');
+
+      debugPrint('AllTab: User longitude = $longitude');
+
+      final shops = await HomeService.getShops(
+        category: null,
+        latitude: latitude,
+        longitude: longitude,
+      );
 
       if (!mounted) return;
 
@@ -41,6 +95,8 @@ class _AllTabState extends State<AllTab> {
         _isLoading = false;
       });
     } catch (e) {
+      debugPrint('AllTab._loadShops error: $e');
+
       if (!mounted) return;
 
       setState(() {
@@ -49,6 +105,20 @@ class _AllTabState extends State<AllTab> {
       });
     }
   }
+
+  // ===========================================================================
+  // DISPOSE
+  // ===========================================================================
+  @override
+  void dispose() {
+    _locationManager.removeListener(_onLocationChanged);
+
+    super.dispose();
+  }
+
+  // ===========================================================================
+  // OPEN SHOP
+  // ===========================================================================
 
   void _openShop(ShopModel shop) {
     final uri = Uri(
@@ -62,12 +132,15 @@ class _AllTabState extends State<AllTab> {
     context.push(uri.toString());
   }
 
+  // ===========================================================================
+  // BUILD
+  // ===========================================================================
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── SHOPS SECTION (top) ──────────────────────────────────
         _buildShopsSection(),
 
         const SizedBox(height: 28),
@@ -76,6 +149,10 @@ class _AllTabState extends State<AllTab> {
       ],
     );
   }
+
+  // ===========================================================================
+  // SHOPS SECTION
+  // ===========================================================================
 
   Widget _buildShopsSection() {
     if (_isLoading) {
@@ -102,19 +179,42 @@ class _AllTabState extends State<AllTab> {
     }
 
     if (_shops.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 40),
-        child: Center(
-          child: Text(
-            'No shops found.',
-            style: TextStyle(color: Colors.black54),
-          ),
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
-    return ShopGrid(shops: _shops, onShopTap: _openShop, category: 'All');
+    final displayedShops = _shops.take(5).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Near By Shops',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            ),
+
+            if (_shops.length > 5)
+              TextButton(
+                onPressed: () {
+                  context.push('/shops?category=All');
+                },
+                child: const Text('See All'),
+              ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        ShopGrid(shops: displayedShops, onShopTap: _openShop, category: 'All'),
+      ],
+    );
   }
+
+  // ===========================================================================
+  // PRODUCTS SECTION
+  // ===========================================================================
 
   Widget _buildProductsSection() {
     return const Column(
@@ -127,6 +227,7 @@ class _AllTabState extends State<AllTab> {
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
           ),
         ),
+
         ProductGrid(category: 'all'),
       ],
     );

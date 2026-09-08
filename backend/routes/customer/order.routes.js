@@ -1,4 +1,3 @@
-
 /*const express = require("express");
 const router = express.Router();
 
@@ -23,7 +22,10 @@ router.post("/", customerAuth, orderController.placeOrder);
 // POST /api/customer/orders/checkout  { cart_item_ids? }  → "Buy Now" from the Cart screen
 router.post("/checkout", customerAuth, orderController.checkoutCart);
 
+// POST /api/customer/orders/buy-now  { product_id, variant_id?, quantity, address_id, payment_method }
+// → "Buy Now" from the Product page, skips the cart entirely
+router.post("/buy-now", customerAuth, orderController.buyNowCheckout);
+
 router.get("/", customerAuth, orderController.getMyOrders);
 
 module.exports = router;
-

@@ -1,39 +1,26 @@
 import 'package:flutter/material.dart';
-
 import 'package:go_router/go_router.dart';
+
+import '../../widgets/app_colors.dart';
+
 import '../../models/profile_section.dart';
 import '../../services/api_service.dart';
-import 'orders_screen.dart';
-import 'saved_addresses_screen.dart';
-import 'saved_cards_screen.dart';
-import 'overview_screen.dart';
+import '../../services/auth_service.dart';
 
-import 'notifications_screen.dart';
+import 'personal_info_screen.dart';
+import 'orders_screen.dart';
 import 'coupons_screen.dart';
+import 'saved_cards_screen.dart';
+import 'saved_addresses_screen.dart';
+import 'notifications_settings_screen.dart';
 import 'help_centre_screen.dart';
 import 'faq_screen.dart';
 import 'about_us_screen.dart';
 import 'terms_policies_screen.dart';
 
-// Same palette style as your mobile ProfileScreen — kept local to this file.
-class _Palette {
-  static const Color ink = Color(0xFF1A1A1D);
-  static const Color surface = Colors.white;
-  static const Color canvas = Color(0xFFF6F6F7);
-  static const Color muted = Color(0xFF8A8A8E);
-  static const Color line = Color(0xFFE7E7E9);
-  static const Color accent = Color(0xFF17B978);
-  static const Color accentSoft = Color(0xFFE4F7EE);
-}
-
-/// Breakpoint shared with the header's desktop nav. Below this, we render
-/// content-only (no right toggle) since the mobile ProfileScreen already
-/// gives users a way to pick a section before landing here.
 const double kDesktopBreakpoint = 900;
 
 class ProfileDetailsScreen extends StatefulWidget {
-  /// Which section to open on. Comes from the `section` query param —
-  /// see app_router.dart wiring below.
   final ProfileSection initialSection;
 
   const ProfileDetailsScreen({super.key, required this.initialSection});
@@ -44,219 +31,398 @@ class ProfileDetailsScreen extends StatefulWidget {
 
 class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
   late ProfileSection _selectedSection;
+
   String _userName = 'User';
-  String? _userEmail;
 
   @override
   void initState() {
     super.initState();
+
     _selectedSection = widget.initialSection;
-    _loadUserName();
+
+    _loadUserDetails();
   }
 
-  // If someone deep-links to a different section while this screen is
-  // already open (e.g. header click while ProfileDetailsScreen is active),
-  // go_router rebuilds this widget with a new `initialSection` — didUpdateWidget
-  // catches that and updates the selection instead of ignoring it.
   @override
   void didUpdateWidget(covariant ProfileDetailsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+
     if (oldWidget.initialSection != widget.initialSection) {
-      setState(() => _selectedSection = widget.initialSection);
+      setState(() {
+        _selectedSection = widget.initialSection;
+      });
     }
   }
 
-  Future<void> _loadUserName() async {
-    final name = await ApiService.getUserName();
-    if (mounted) {
-      setState(() => _userName = name ?? 'User');
+  Future<void> _loadUserDetails() async {
+    try {
+      final name = await ApiService.getUserName();
+
+      if (!mounted) return;
+
+      setState(() {
+        _userName = name?.trim().isNotEmpty == true ? name!.trim() : 'User';
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _userName = 'User';
+      });
     }
+  }
+
+  Future<void> _logout() async {
+    await AuthService.logout();
+
+    if (!mounted) return;
+
+    context.go('/home');
   }
 
   void _selectSection(ProfileSection section) {
-    setState(() => _selectedSection = section);
-    // Keep the URL in sync so refresh / back-button / share-link still
-    // lands on the right tab, without pushing a new route each click.
+    if (_selectedSection == section) return;
+
+    setState(() {
+      _selectedSection = section;
+    });
+
     context.go('/profile/details?section=${section.slug}');
   }
 
+  // Shared decoration so every card (content card + header card +
+  // each nav-link card) looks identical — used on DESKTOP (rounded corners).
+  BoxDecoration get _cardDecoration => BoxDecoration(
+    color: AppColors.cardColor,
+    borderRadius: BorderRadius.circular(6),
+    border: Border.all(color: AppColors.line),
+  );
+
+  // Same card look but with NO border radius — used on MOBILE only
+  // (header card + content card).
+  BoxDecoration get _mobileCardDecoration => BoxDecoration(
+    color: AppColors.cardColor,
+    border: Border.all(color: AppColors.line),
+  );
+
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width >= kDesktopBreakpoint;
+    final width = MediaQuery.of(context).size.width;
+    final isDesktop = width >= kDesktopBreakpoint;
 
     return Scaffold(
-      backgroundColor: _Palette.canvas,
+      backgroundColor: AppColors.canvas,
       body: SafeArea(
-        child: isDesktop
-            ? SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 20,
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Left: profile header + toggle list.
-                    _buildRightToggleList(),
-
-                    const SizedBox(width: 24),
-
-                    // Right: content for the selected section.
-                    Expanded(flex: 3, child: _buildContent(_selectedSection)),
-                  ],
-                ),
-              )
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: _buildContent(_selectedSection),
-              ),
+        child: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
       ),
     );
   }
 
-  // -------------------------------------------------------------------
-  // RIGHT SIDE: profile header + TOGGLE (desktop only)
-  // -------------------------------------------------------------------
-  Widget _buildRightToggleList() {
-    return Container(
-      width: 260,
-      color: _Palette.canvas,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+  // ============================================================
+  // DESKTOP
+  // ============================================================
+
+  Widget _buildDesktopLayout() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Profile image + username, above the section toggle.
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 26,
-                  backgroundColor: _Palette.accentSoft,
-                  child: Text(
-                    _userName.isNotEmpty ? _userName[0].toUpperCase() : 'U',
-                    style: const TextStyle(
-                      color: _Palette.accent,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 18,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _userName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: _Palette.ink,
-                        ),
-                      ),
-                      if (_userEmail != null)
-                        Text(
-                          _userEmail!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: _Palette.muted,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
+          Expanded(child: _buildContentCard(_selectedSection)),
+          const SizedBox(width: 16),
+
+          SizedBox(width: 300, child: _buildNavigationPanel()),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // MOBILE
+  // ============================================================
+
+  Widget _buildMobileLayout() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Fixed mobile header
+        _buildMobileHeader(),
+
+        const SizedBox(height: 5),
+
+        // Only content scrolls
+        Expanded(
+          child: SingleChildScrollView(
+            child: Container(
+              width: double.infinity,
+              decoration: _mobileCardDecoration,
+              padding: const EdgeInsets.all(20),
+              child: _buildContent(_selectedSection),
             ),
           ),
-          const SizedBox(height: 8),
-          const Divider(height: 1, color: _Palette.line),
-          const SizedBox(height: 8),
-          // Section toggle — Column instead of ListView so the whole
-          // page (left content + right toggle) shares one scroll.
-          Column(
-            children: List.generate(ProfileSection.values.length, (index) {
-              final section = ProfileSection.values[index];
-              final isSelected = section == _selectedSection;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: InkWell(
-                  onTap: () => _selectSection(section),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? _Palette.accentSoft
-                          : Colors.transparent,
-                      border: Border(
-                        left: BorderSide(
-                          color: isSelected
-                              ? _Palette.accent
-                              : Colors.transparent,
-                          width: 3,
-                        ),
-                      ),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 13,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          section.icon,
-                          size: 18,
-                          color: isSelected ? _Palette.accent : _Palette.ink,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            section.label,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: isSelected
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              color: isSelected
-                                  ? _Palette.ink
-                                  : _Palette.ink.withOpacity(0.8),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // MOBILE HEADER — back button + selected section name, same
+  // card background as the content below it, no border radius
+  // ============================================================
+
+  Widget _buildMobileHeader() {
+    return Container(
+      width: double.infinity,
+      decoration: _mobileCardDecoration,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/profile');
+              }
+            },
+            icon: const Icon(Icons.arrow_back, color: AppColors.ink),
+          ),
+
+          Text(
+            _selectedSection.label,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.ink,
+            ),
           ),
         ],
       ),
     );
   }
 
-  // -------------------------------------------------------------------
-  // CONTENT SWITCH — replace each placeholder with your real widgets
-  // (e.g. wire OrdersScreen's body in here, not the whole Scaffold).
-  // -------------------------------------------------------------------
+  // ============================================================
+  // LEFT SIDE — CONTENT AS ONE SINGLE CARD
+  // ============================================================
+
+  Widget _buildContentCard(ProfileSection section) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildDesktopHeader(section),
+
+        const SizedBox(height: 10), // same gap style as the nav panel
+
+        Container(
+          width: double.infinity,
+          decoration: _cardDecoration,
+          padding: const EdgeInsets.all(20),
+          child: _buildContent(section),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // DESKTOP HEADER — its own card, title only, no back button
+  // ============================================================
+
+  Widget _buildDesktopHeader(ProfileSection section) {
+    return Container(
+      width: double.infinity,
+      decoration: _cardDecoration,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Text(
+        section.label,
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          color: AppColors.ink,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // RIGHT SIDE — NAVIGATION PANEL (header card + gap + link cards)
+  // ============================================================
+
+  Widget _buildNavigationPanel() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildProfileHeaderCard(),
+
+        const SizedBox(height: 10), // gap between header and link list
+
+        Column(
+          children: List.generate(ProfileSection.values.length, (index) {
+            final section = ProfileSection.values[index];
+            final isLast = index == ProfileSection.values.length - 1;
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
+              child: _buildNavigationItemCard(section),
+            );
+          }),
+        ),
+
+        const SizedBox(height: 10),
+        // ============================================================
+        // LOGOUT — BELOW ALL NAVIGATION LINKS
+        // ============================================================
+        _buildLogoutCard(),
+      ],
+    );
+  }
+
+  Widget _buildLogoutCard() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: _logout,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+          decoration: BoxDecoration(
+            color: AppColors.cardColor,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppColors.line),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.logout, size: 18, color: Colors.red),
+
+              SizedBox(width: 12),
+
+              Expanded(
+                child: Text(
+                  'Logout',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.red,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  // ============================================================
+  // PROFILE HEADER — its own card: icon + "Hello, <name>"
+  // ============================================================
+
+  Widget _buildProfileHeaderCard() {
+    return Container(
+      decoration: _cardDecoration,
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 27,
+            backgroundColor: AppColors.accentSoft,
+            child: const Icon(Icons.person, color: AppColors.accent, size: 26),
+          ),
+
+          const SizedBox(width: 12),
+
+          Expanded(
+            child: Text(
+              'Hello, $_userName',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.ink,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // NAVIGATION ITEM — each one is its own separate card
+  // ============================================================
+
+  Widget _buildNavigationItemCard(ProfileSection section) {
+    final selected = section == _selectedSection;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: () => _selectSection(section),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+          decoration: BoxDecoration(
+            color: AppColors.cardColor,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: selected ? AppColors.accent : AppColors.line,
+              width: selected ? 1.4 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                section.icon,
+                size: 18,
+                color: selected ? AppColors.accent : AppColors.ink,
+              ),
+
+              const SizedBox(width: 12),
+
+              Expanded(
+                child: Text(
+                  section.label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: AppColors.ink,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // CONTENT
+  // ============================================================
+
   Widget _buildContent(ProfileSection section) {
     switch (section) {
-      case ProfileSection.overview:
-        return const OverviewScreen();
+      case ProfileSection.personalInfo:
+        return const PersonalInfoScreen();
+
       case ProfileSection.orders:
         return const OrdersScreen();
+
       case ProfileSection.coupons:
         return const CouponsScreen();
+
       case ProfileSection.savedCards:
         return const SavedCardsScreen();
+
       case ProfileSection.savedAddress:
         return const SavedAddressesScreen();
+
       case ProfileSection.helpCenter:
         return const HelpCentreScreen();
+
       case ProfileSection.notificationSettings:
-        return const NotificationsScreen();
+        return const NotificationsSettingsScreen();
+
       case ProfileSection.faqs:
         return const FaqScreen();
 

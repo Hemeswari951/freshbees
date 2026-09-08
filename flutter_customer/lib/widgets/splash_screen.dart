@@ -1,33 +1,34 @@
 import 'dart:async';
- 
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
- 
+
 import '../services/location_permission_service.dart';
- 
+import '../services/location_manager.dart';
+
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
- 
+
   @override
   State<SplashScreen> createState() => _SplashScreenState();
 }
- 
+
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
   late Animation<double> _fadeAnimation;
- 
+
   @override
   void initState() {
     super.initState();
- 
+
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
     );
- 
+
     _scaleAnimation = TweenSequence<double>([
       TweenSequenceItem(
         tween: Tween(
@@ -48,79 +49,91 @@ class _SplashScreenState extends State<SplashScreen>
         weight: 30,
       ),
     ]).animate(_controller);
- 
+
     _fadeAnimation = CurvedAnimation(
       parent: _controller,
       curve: Curves.easeIn,
     );
- 
+
     _controller.forward();
- 
+
     _navigate();
   }
- 
+
   Future<void> _navigate() async {
-  await Future.delayed(const Duration(seconds: 3));
- 
-  if (!mounted) return;
- 
-  final status =
-      await LocationPermissionService.requestLocation();
- 
-  if (status.isGranted) {
-    context.go('/home');
-    return;
-  }
- 
-  final enableLocation = await _showPermissionDialog();
- 
-  if (!mounted) return;
- 
-  if (enableLocation) {
-    final retryStatus =
+    await Future.delayed(const Duration(seconds: 3));
+
+    if (!mounted) return;
+
+    final status =
         await LocationPermissionService.requestLocation();
- 
-    if (retryStatus.isPermanentlyDenied) {
-      await _showSettingsDialog();
+
+    if (status.isGranted) {
+      // Permission already good — load location before Home ever mounts.
+      await LocationManager().loadHomeLocation();
+
+      if (!mounted) return;
+
+      context.go('/home');
+      return;
     }
+
+    final enableLocation = await _showPermissionDialog();
+
+    if (!mounted) return;
+
+    if (enableLocation) {
+      final retryStatus =
+          await LocationPermissionService.requestLocation();
+
+      if (retryStatus.isPermanentlyDenied) {
+        await _showSettingsDialog();
+      }
+    }
+
+    if (!mounted) return;
+
+    // Whatever the final permission state is (granted, denied, or the
+    // user came back from Settings), resolve it into a location once
+    // here so Home/LocationBar don't have to re-ask.
+    await LocationManager().loadHomeLocation();
+
+    if (!mounted) return;
+
+    // User can continue even without location
+    context.go('/home');
   }
- 
-  if (!mounted) return;
- 
-  // User can continue even without location
-  context.go('/home');
-}
- 
+
   Future<bool> _showPermissionDialog() async {
-  return await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) {
-          return AlertDialog(
-            title: const Text('Location Access'),
-            content: const Text(
-              'Enable location to discover fashion stores near you.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context, false);
-                },
-                child: const Text('Allow Later'),
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) {
+            return AlertDialog(
+              title: const Text('Location Access'),
+              content: const Text(
+                'Enable location to discover fashion stores near you.',
               ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context, true);
-                },
-                child: const Text('Enable Location'),
-              ),
-            ],
-          );
-        },
-      ) ??
-      false;
-}
- 
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context, false);
+                  },
+                  child: const Text('Allow Later'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context, true);
+                  },
+                  child: const Text('Enable Location'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+  }
+
   Future<void> _showSettingsDialog() async {
     await showDialog(
       context: context,
@@ -143,17 +156,17 @@ class _SplashScreenState extends State<SplashScreen>
         );
       },
     );
- 
+
     // Give user time to return from settings
     await Future.delayed(const Duration(seconds: 1));
   }
- 
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
- 
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -187,4 +200,3 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 }
- 

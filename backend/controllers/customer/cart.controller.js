@@ -1,9 +1,8 @@
 
-
 // cart.controller.js
 
 const cartModel = require("../../models/customer/cart.model");
-
+const pool = require("../../config/db");
 // Row → JSON matching what the Flutter Cart screen expects.
 function mapCartItem(row) {
     return {
@@ -11,15 +10,25 @@ function mapCartItem(row) {
         productId: Number(row.product_id),
         variantId: row.variant_id ? Number(row.variant_id) : null,
         productName: row.product_name,
+        shopName: row.shop_name || null,   // NEW
         thumbnail: row.thumbnail || '',
         price: Number(row.price),
-        quantity: Number(row.quantity), 
+        mrp: row.mrp != null ? Number(row.mrp) : null,
+        quantity: Number(row.quantity),
         size: row.size || null,
-        stockQuantity: row.stock_quantity != null ? Number(row.stock_quantity) : null,
+        color: row.color || null,
+        stockQuantity: row.stock_quantity != null
+            ? Number(row.stock_quantity)
+            : null,
         lineTotal: Number(row.price) * Number(row.quantity),
+        rating: row.avg_rating != null && Number(row.total_reviews) > 0
+            ? Number(row.avg_rating)
+            : null,                                   // NEW
+        reviewCount: row.total_reviews != null
+            ? Number(row.total_reviews)
+            : 0,                                       // NEW
     };
 }
-
 // GET /api/customer/cart
 exports.getCart = async (req, res) => {
     try {
@@ -34,24 +43,56 @@ exports.getCart = async (req, res) => {
 };
 
 // POST /api/customer/cart  { product_id, variant_id?, quantity? }
+// POST /api/customer/cart  
 exports.addToCart = async (req, res) => {
     try {
-        const { product_id, variant_id, quantity } = req.body;
-
+        const { product_id, variant_id, quantity, size, color } = req.body;
+ 
         if (!product_id) {
             return res.status(400).json({ success: false, message: "product_id is required" });
         }
-
+ 
+        let finalVariantId = variant_id;
+ 
+        // NEW: If size or color are passed from the frontend, look up the matching variant_id in the DB
+        if (!finalVariantId && (size || color)) {
+            let query = `
+                SELECT pv.variant_id
+                FROM product_variants pv
+                LEFT JOIN product_colors pc ON pc.product_color_id = pv.product_color_id
+                WHERE pv.product_id = $1
+            `;
+            const params = [product_id];
+            let paramIndex = 2;
+ 
+            if (size) {
+                query += ` AND pv.size = $${paramIndex}`;
+                params.push(size);
+                paramIndex++;
+            }
+            if (color) {
+                query += ` AND pc.color_name = $${paramIndex}`;
+                params.push(color);
+                paramIndex++;
+            }
+ 
+            const variantRes = await pool.query(query, params);
+            if (variantRes.rows.length > 0) {
+                finalVariantId = variantRes.rows[0].variant_id;
+            }
+        }
+ 
         const qty = quantity && quantity > 0 ? quantity : 1;
-        const cartItemId = await cartModel.addToCart(req.customer.customerId, product_id, variant_id, qty);
-
+       
+        // Save using the newly found finalVariantId
+        const cartItemId = await cartModel.addToCart(req.customer.customerId, product_id, finalVariantId, qty);
+ 
         res.status(201).json({ success: true, message: "Added to bag", cart_item_id: cartItemId });
     } catch (err) {
         console.log("Add To Cart Error:", err);
         res.status(500).json({ success: false, message: "Failed to add to bag" });
     }
 };
-
 // PUT /api/customer/cart/:id  { quantity }
 exports.updateQuantity = async (req, res) => {
     try {

@@ -9,10 +9,20 @@ const homeService = require('../../services/customer/home.service');
  * zero backend code changes, as long as it exists in the `categories`
  * table and shops are linked to it via `shop_categories`.
  */
+
 async function getShops(req, res) {
   try {
-    const { category } = req.query;
-    const shops = await homeService.getShops({ category });
+    const { category, latitude, longitude } = req.query;
+
+    const lat = latitude !== undefined ? parseFloat(latitude) : undefined;
+    const lng = longitude !== undefined ? parseFloat(longitude) : undefined;
+
+    const shops = await homeService.getShops({
+      category,
+      latitude: Number.isFinite(lat) ? lat : undefined,
+      longitude: Number.isFinite(lng) ? lng : undefined,
+    });
+
     return res.status(200).json({ success: true, data: shops });
   } catch (err) {
     console.error('getShops error:', err);
