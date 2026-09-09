@@ -474,10 +474,30 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
     });
   }
 
-  void _closeInlineSearch() {
+  // ---------------------------------------------------------------------
+  // BACK — while inline search is expanded.
+  //
+  // NOTE:
+  // The back arrow inside the search row used to call
+  // `_closeInlineSearch()`, which only collapses the search UI back to
+  // the title row — it never actually navigated anywhere. That meant a
+  // single tap looked like nothing happened, and the user had to tap
+  // back a SECOND time (now from the title row) to actually leave the
+  // screen.
+  //
+  // Fix: back while search is expanded should behave exactly like a
+  // normal back tap — one tap, straight to the previous screen. Clean
+  // up the search UI/focus first so nothing is left open underneath,
+  // then navigate.
+  // ---------------------------------------------------------------------
+  void _onBackFromSearch() {
     _searchOverlayController.hide();
-    setState(() => _searchExpanded = false);
     _searchFocusNode.unfocus();
+    setState(() {
+      _searchExpanded = false;
+      _suggestions = [];
+    });
+    _goBack(context);
   }
 
   void _onSearchChanged(String value) {
@@ -534,9 +554,45 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
   }
 
   void _onSuggestionTap(SearchSuggestion suggestion) {
+    final query = suggestion.text.trim();
+
+    if (query.isEmpty) {
+      return;
+    }
+
+    // Put selected suggestion text inside search box.
     _searchController.text = suggestion.text;
-    _searchOverlayController.hide();
-    _onSearchSubmitted(suggestion.text);
+
+    // Hide suggestion overlay.
+    if (_searchOverlayController.isShowing) {
+      _searchOverlayController.hide();
+    }
+
+    // Remove keyboard focus.
+    _searchFocusNode.unfocus();
+
+    // -------------------------------------------------------------------------
+    // SHOP SUGGESTION
+    // -------------------------------------------------------------------------
+
+    if (suggestion.isShop) {
+      context.push(
+        Uri(
+          path: '/shops',
+          queryParameters: {'category': 'All', 'search': query},
+        ).toString(),
+      );
+
+      return;
+    }
+
+    // -------------------------------------------------------------------------
+    // PRODUCT / TAG SUGGESTION
+    // -------------------------------------------------------------------------
+
+    context.push(
+      Uri(path: '/products', queryParameters: {'search': query}).toString(),
+    );
   }
 
   @override
@@ -840,7 +896,11 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
       children: [
         IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.ink),
-          onPressed: _closeInlineSearch,
+          // Single tap now goes straight to the previous screen, even
+          // while the inline search is expanded. See
+          // `_onBackFromSearch` for why this changed from
+          // `_closeInlineSearch`.
+          onPressed: _onBackFromSearch,
         ),
         Expanded(
           child: CompositedTransformTarget(
@@ -885,7 +945,9 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                                       return ListTile(
                                         dense: true,
                                         leading: Icon(
-                                          s.isTag
+                                          s.isShop
+                                              ? Icons.storefront_outlined
+                                              : s.isTag
                                               ? Icons.sell_outlined
                                               : Icons.search_rounded,
                                           size: 18,
@@ -898,7 +960,15 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
                                             fontWeight: FontWeight.w500,
                                           ),
                                         ),
-                                        trailing: s.isTag
+                                        trailing: s.isShop
+                                            ? const Text(
+                                                'shop',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.black38,
+                                                ),
+                                              )
+                                            : s.isTag
                                             ? const Text(
                                                 'tag',
                                                 style: TextStyle(

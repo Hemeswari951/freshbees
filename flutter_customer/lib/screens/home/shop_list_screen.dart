@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/shop_model.dart';
+import '../../services/api_service.dart';
 import '../../services/home_service.dart';
 import '../../services/location_manager.dart';
+import '../../widgets/product_mobile_header.dart';
 import 'widgets/shop_card.dart';
 
 class ShopListScreen extends StatefulWidget {
@@ -67,8 +69,8 @@ class _ShopListScreenState extends State<ShopListScreen> {
 
       final String? categoryParam =
           widget.categoryTitle.trim().toLowerCase() == 'all'
-              ? null
-              : widget.categoryTitle.trim();
+          ? null
+          : widget.categoryTitle.trim();
 
       // ----------------------------------------------------------
       // Get shops from API
@@ -97,8 +99,7 @@ class _ShopListScreenState extends State<ShopListScreen> {
       // searchQuery null / empty -> ALL shops
       // ----------------------------------------------------------
 
-      final String query =
-          widget.searchQuery?.trim().toLowerCase() ?? '';
+      final String query = widget.searchQuery?.trim().toLowerCase() ?? '';
 
       if (query.isNotEmpty) {
         shops = shops.where((shop) {
@@ -119,9 +120,7 @@ class _ShopListScreenState extends State<ShopListScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint(
-        'ShopListScreen._loadAllShops error: $e',
-      );
+      debugPrint('ShopListScreen._loadAllShops error: $e');
 
       if (!mounted) return;
 
@@ -150,19 +149,41 @@ class _ShopListScreenState extends State<ShopListScreen> {
   }
 
   // ============================================================
+  // BACK / PROTECTED NAV
+  // ============================================================
+
+  void _goBack() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/home');
+    }
+  }
+
+  void _goToProtected(String route) {
+    final token = ApiService.getToken();
+
+    final isLoggedIn = token != null && token.isNotEmpty;
+
+    if (isLoggedIn) {
+      context.push(route);
+    } else {
+      context.push(
+        Uri(path: '/login', queryParameters: {'redirect': route}).toString(),
+      );
+    }
+  }
+
+  // ============================================================
   // BREADCRUMB
   // ============================================================
 
   Widget _buildBreadcrumb() {
-    TextStyle crumbStyle({
-      bool active = false,
-    }) {
+    TextStyle crumbStyle({bool active = false}) {
       return TextStyle(
         fontSize: 15,
-        fontWeight:
-            active ? FontWeight.w700 : FontWeight.w500,
-        color:
-            active ? _ink : _ink.withOpacity(0.5),
+        fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+        color: active ? _ink : _ink.withOpacity(0.5),
       );
     }
 
@@ -172,16 +193,10 @@ class _ShopListScreenState extends State<ShopListScreen> {
           onTap: () {
             context.go('/home');
           },
-          child: Text(
-            'Home',
-            style: crumbStyle(),
-          ),
+          child: Text('Home', style: crumbStyle()),
         ),
 
-        Text(
-          '  /  ',
-          style: crumbStyle(),
-        ),
+        Text('  /  ', style: crumbStyle()),
 
         Expanded(
           child: Text(
@@ -199,11 +214,10 @@ class _ShopListScreenState extends State<ShopListScreen> {
   // ============================================================
 
   String get _pageTitle {
-    final query =
-        widget.searchQuery?.trim() ?? '';
+    final query = widget.searchQuery?.trim() ?? '';
 
     if (query.isNotEmpty) {
-      return 'Search results for "$query"';
+      return 'Results for "$query"';
     }
 
     return '${widget.categoryTitle} Stores';
@@ -214,8 +228,7 @@ class _ShopListScreenState extends State<ShopListScreen> {
   // ============================================================
 
   String get _outletTitle {
-    final query =
-        widget.searchQuery?.trim() ?? '';
+    final query = widget.searchQuery?.trim() ?? '';
 
     if (query.isNotEmpty) {
       return 'Shops matching "$query"';
@@ -225,64 +238,19 @@ class _ShopListScreenState extends State<ShopListScreen> {
   }
 
   // ============================================================
-  // MOBILE APP BAR
+  // HEADER (page-content header — title + result count, NOT the
+  // top navigation bar)
   // ============================================================
 
-  PreferredSizeWidget _buildMobileAppBar() {
-    return AppBar(
-      backgroundColor: Colors.white,
-      elevation: 0.5,
-
-      leading: IconButton(
-        icon: const Icon(
-          Icons.arrow_back_ios_new_rounded,
-          size: 18,
-          color: _ink,
-        ),
-        onPressed: () {
-          if (context.canPop()) {
-            context.pop();
-          } else {
-            context.go('/home');
-          }
-        },
-      ),
-
-      title: Text(
-        _pageTitle,
-        style: const TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w700,
-          color: _ink,
-        ),
-        overflow: TextOverflow.ellipsis,
-      ),
-
-      centerTitle: false,
-    );
-  }
-
-  // ============================================================
-  // HEADER
-  // ============================================================
-
-  Widget _buildHeader({
-    required bool isDesktop,
-  }) {
+  Widget _buildHeader({required bool isDesktop}) {
     return Column(
-      crossAxisAlignment:
-          CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (isDesktop) ...[
-          _buildBreadcrumb(),
-          const SizedBox(height: 20),
-        ],
+        if (isDesktop) ...[_buildBreadcrumb(), const SizedBox(height: 20)],
 
         Row(
-          mainAxisAlignment:
-              MainAxisAlignment.spaceBetween,
-          crossAxisAlignment:
-              CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
               child: Text(
@@ -299,16 +267,10 @@ class _ShopListScreenState extends State<ShopListScreen> {
             const SizedBox(width: 12),
 
             Container(
-              padding:
-                  const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 4,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color:
-                    const Color(0xFFE8DFD1),
-                borderRadius:
-                    BorderRadius.circular(12),
+                color: const Color(0xFFE8DFD1),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 '${_shops.length} Found',
@@ -329,10 +291,7 @@ class _ShopListScreenState extends State<ShopListScreen> {
 
           Text(
             'Showing shops based on your search',
-            style: TextStyle(
-              fontSize: 12,
-              color: _ink.withOpacity(0.55),
-            ),
+            style: TextStyle(fontSize: 12, color: _ink.withOpacity(0.55)),
           ),
         ],
 
@@ -346,15 +305,11 @@ class _ShopListScreenState extends State<ShopListScreen> {
   // ============================================================
 
   Widget _buildEmptyState() {
-    final query =
-        widget.searchQuery?.trim() ?? '';
+    final query = widget.searchQuery?.trim() ?? '';
 
     return Center(
       child: Padding(
-        padding:
-            const EdgeInsets.symmetric(
-          horizontal: 24,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -369,9 +324,7 @@ class _ShopListScreenState extends State<ShopListScreen> {
             const SizedBox(height: 16),
 
             Text(
-              query.isNotEmpty
-                  ? 'No shops found'
-                  : 'No shops available',
+              query.isNotEmpty ? 'No shops found' : 'No shops available',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 16,
@@ -387,10 +340,7 @@ class _ShopListScreenState extends State<ShopListScreen> {
                   ? 'No shops match "$query".'
                   : 'No shops available in this category.',
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: Colors.black54,
-              ),
+              style: const TextStyle(fontSize: 13, color: Colors.black54),
             ),
 
             const SizedBox(height: 16),
@@ -412,10 +362,7 @@ class _ShopListScreenState extends State<ShopListScreen> {
   Widget _buildErrorState() {
     return Center(
       child: Padding(
-        padding:
-            const EdgeInsets.symmetric(
-          horizontal: 24,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -430,10 +377,7 @@ class _ShopListScreenState extends State<ShopListScreen> {
             Text(
               _error ?? 'Something went wrong.',
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.black54,
-                fontSize: 14,
-              ),
+              style: const TextStyle(color: Colors.black54, fontSize: 14),
             ),
 
             const SizedBox(height: 16),
@@ -452,23 +396,15 @@ class _ShopListScreenState extends State<ShopListScreen> {
   // SHOP GRID
   // ============================================================
 
-  Widget _buildShopGrid({
-    required bool isDesktop,
-  }) {
-    final int crossAxisCount =
-        isDesktop ? 4 : 2;
+  Widget _buildShopGrid({required bool isDesktop}) {
+    final int crossAxisCount = isDesktop ? 4 : 2;
 
     return SliverPadding(
-      padding: EdgeInsets.symmetric(
-        horizontal:
-            isDesktop ? 40.0 : 16.0,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: isDesktop ? 40.0 : 16.0),
 
       sliver: SliverGrid(
-        gridDelegate:
-            SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount:
-              crossAxisCount,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
 
           crossAxisSpacing: 16,
 
@@ -477,30 +413,69 @@ class _ShopListScreenState extends State<ShopListScreen> {
           childAspectRatio: 0.82,
         ),
 
-        delegate:
-            SliverChildBuilderDelegate(
-          (context, index) {
-            final ShopModel shop =
-                _shops[index];
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final ShopModel shop = _shops[index];
 
-            final String categoryLabel =
-                shop.categories.isNotEmpty
-                    ? shop.categories.first
-                    : widget.categoryTitle;
+          final String categoryLabel = shop.categories.isNotEmpty
+              ? shop.categories.first
+              : widget.categoryTitle;
 
-            return ShopCard(
-              shop: shop,
-              width: double.infinity,
-              category: categoryLabel,
-              onTap: () {
-                _openShop(shop);
-              },
-            );
-          },
-
-          childCount: _shops.length,
-        ),
+          return ShopCard(
+            shop: shop,
+            width: double.infinity,
+            category: categoryLabel,
+            onTap: () {
+              _openShop(shop);
+            },
+          );
+        }, childCount: _shops.length),
       ),
+    );
+  }
+
+  // ============================================================
+  // CONTENT (loading / error / empty / grid) — shared by both
+  // mobile and desktop layouts.
+  // ============================================================
+
+  Widget _buildContent({required bool isDesktop}) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_error != null) {
+      return _buildErrorState();
+    }
+
+    if (_shops.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    return CustomScrollView(
+      slivers: [
+        // ------------------------------------------------
+        // HEADER
+        // ------------------------------------------------
+
+        SliverPadding(
+          padding: EdgeInsets.symmetric(
+            horizontal: isDesktop ? 40.0 : 16.0,
+            vertical: 20.0,
+          ),
+
+          sliver: SliverToBoxAdapter(child: _buildHeader(isDesktop: isDesktop)),
+        ),
+
+        // ------------------------------------------------
+        // SHOP GRID
+        // ------------------------------------------------
+        _buildShopGrid(isDesktop: isDesktop),
+
+        // ------------------------------------------------
+        // BOTTOM SPACE
+        // ------------------------------------------------
+        const SliverPadding(padding: EdgeInsets.only(bottom: 40.0)),
+      ],
     );
   }
 
@@ -510,82 +485,34 @@ class _ShopListScreenState extends State<ShopListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isDesktop =
-        MediaQuery.of(context).size.width >= 768;
+    final bool isDesktop = MediaQuery.of(context).size.width >= 768;
 
     return Scaffold(
       backgroundColor: _bg,
 
       // --------------------------------------------------------
-      // MOBILE APP BAR
-      // --------------------------------------------------------
-
-      appBar: isDesktop
-          ? null
-          : _buildMobileAppBar(),
-
-      // --------------------------------------------------------
       // BODY
+      //
+      // Mobile: the old plain AppBar (back arrow + title only)
+      // is replaced with the shared ProductMobileHeader — same
+      // back / search / cart header used on the product list and
+      // product view screens. Desktop is untouched (breadcrumb
+      // still lives inside _buildHeader as before, no top bar).
       // --------------------------------------------------------
-
       body: SafeArea(
-        child: _isLoading
-            ? const Center(
-                child:
-                    CircularProgressIndicator(),
-              )
+        child: isDesktop
+            ? _buildContent(isDesktop: true)
+            : Column(
+                children: [
+                  ProductMobileHeader(
+                    title: _pageTitle,
+                    onBack: _goBack,
+                    onCart: () => _goToProtected('/cart'),
+                  ),
 
-            : _error != null
-                ? _buildErrorState()
-
-                : _shops.isEmpty
-                    ? _buildEmptyState()
-
-                    : CustomScrollView(
-                        slivers: [
-                          // ------------------------------------------------
-                          // HEADER
-                          // ------------------------------------------------
-
-                          SliverPadding(
-                            padding:
-                                EdgeInsets.symmetric(
-                              horizontal:
-                                  isDesktop
-                                      ? 40.0
-                                      : 16.0,
-                              vertical: 20.0,
-                            ),
-
-                            sliver: SliverToBoxAdapter(
-                              child: _buildHeader(
-                                isDesktop:
-                                    isDesktop,
-                              ),
-                            ),
-                          ),
-
-                          // ------------------------------------------------
-                          // SHOP GRID
-                          // ------------------------------------------------
-
-                          _buildShopGrid(
-                            isDesktop:
-                                isDesktop,
-                          ),
-
-                          // ------------------------------------------------
-                          // BOTTOM SPACE
-                          // ------------------------------------------------
-
-                          const SliverPadding(
-                            padding:
-                                EdgeInsets.only(
-                              bottom: 40.0,
-                            ),
-                          ),
-                        ],
-                      ),
+                  Expanded(child: _buildContent(isDesktop: false)),
+                ],
+              ),
       ),
     );
   }

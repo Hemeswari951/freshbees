@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -7,10 +5,9 @@ import '../../models/product_model.dart';
 import '../../services/api_service.dart';
 import '../../services/wishlist_service.dart';
 import '../../services/product_service.dart';
-import '../../services/search_service.dart';
 import '../../widgets/product_card.dart';
+import '../../widgets/product_mobile_header.dart';
 import 'product_filters.dart';
-import '../../services/cart_count.dart';
 
 // ===========================================================================
 // ARGS — what to fetch (shop or search) + the title to show
@@ -71,6 +68,11 @@ class ProductListArgs {
 /// DESKTOP vs MOBILE FILTER UX:
 /// - Desktop: filters apply immediately.
 /// - Mobile: filters are pushed to `/filter` and applied when committed.
+///
+/// MOBILE HEADER:
+/// - Mobile header is extracted into ProductListMobileHeader.
+/// - Search logic is handled by the reusable mobile header.
+/// - Cart count is handled by the reusable mobile header.
 class ProductListScreen extends StatefulWidget {
   final ProductListArgs args;
   final bool autoFocusSearch;
@@ -86,27 +88,37 @@ class ProductListScreen extends StatefulWidget {
 }
 
 class _ProductListScreenState extends State<ProductListScreen> {
+  // =========================================================================
+  // CONSTANTS
+  // =========================================================================
+
   static const double _desktopBreakpoint = 900;
 
   static const Color _bg = Color(0xFFFAF7F2);
   static const Color _ink = Color(0xFF1F1B16);
 
+  // =========================================================================
+  // PRODUCTS
+  // =========================================================================
+
   List<ProductModel> _allProducts = [];
 
   bool _isLoading = true;
+
   String? _error;
 
   ProductFilters _filters = const ProductFilters();
 
   List<String> _availableSizes = [];
+
   List<String> _availableColors = [];
 
   List<ProductModel> get _products =>
       _allProducts.where(_filters.matches).toList();
 
-  // -------------------------------------------------------------------------
+  // =========================================================================
   // WISHLIST
-  // -------------------------------------------------------------------------
+  // =========================================================================
 
   final Set<int> _wishlistIds = {};
 
@@ -116,27 +128,6 @@ class _ProductListScreenState extends State<ProductListScreen> {
   /// requests for the same product.
   final Set<int> _wishlistUpdatingIds = {};
 
-  // -------------------------------------------------------------------------
-  // SEARCH
-  // -------------------------------------------------------------------------
-
-  final TextEditingController _searchController = TextEditingController();
-
-  final FocusNode _searchFocusNode = FocusNode();
-
-  bool _searchExpanded = false;
-
-  final LayerLink _searchLayerLink = LayerLink();
-
-  final OverlayPortalController _searchOverlayController =
-      OverlayPortalController();
-
-  Timer? _debounce;
-
-  List<SearchSuggestion> _suggestions = [];
-
-  bool _isSuggesting = false;
-
   // =========================================================================
   // LIFECYCLE
   // =========================================================================
@@ -145,38 +136,9 @@ class _ProductListScreenState extends State<ProductListScreen> {
   void initState() {
     super.initState();
 
-    if (widget.args.isSearch) {
-      _searchController.text = widget.args.value as String;
-    }
-
     _loadProducts();
     _loadWishlistIds();
     _loadFilterOptions();
-
-    // Came here via ProductViewScreen's search icon.
-    if (widget.autoFocusSearch) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-
-        if (!_isDesktop(context)) {
-          _openInlineSearch();
-        }
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _debounce?.cancel();
-
-    if (_searchOverlayController.isShowing) {
-      _searchOverlayController.hide();
-    }
-
-    _searchController.dispose();
-    _searchFocusNode.dispose();
-
-    super.dispose();
   }
 
   // =========================================================================
@@ -233,14 +195,18 @@ class _ProductListScreenState extends State<ProductListScreen> {
   }
 
   Future<void> _loadFilterOptions() async {
-    final options = await ProductService.getFilterOptions();
+    try {
+      final options = await ProductService.getFilterOptions();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      _availableSizes = options.sizes;
-      _availableColors = options.colors;
-    });
+      setState(() {
+        _availableSizes = options.sizes;
+        _availableColors = options.colors;
+      });
+    } catch (_) {
+      // Keep filter options empty if loading fails.
+    }
   }
 
   Future<void> _loadWishlistIds() async {
@@ -257,7 +223,8 @@ class _ProductListScreenState extends State<ProductListScreen> {
           ..addAll(items.map((product) => product.id));
       });
     } catch (_) {
-      // Silent — hearts simply remain unfilled if loading fails.
+      // Silent — hearts simply remain unfilled
+      // if loading fails.
     }
   }
 
@@ -268,6 +235,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
   Future<void> _toggleWishlist(ProductModel product) async {
     if (!_isLoggedIn) {
       _goToProtected(context, GoRouterState.of(context).uri.toString());
+
       return;
     }
 
@@ -280,7 +248,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
 
     final wasWishlisted = _wishlistIds.contains(productId);
 
-    // Optimistic UI update.
+    // -----------------------------------------------------------------------
+    // Optimistic UI update
+    // -----------------------------------------------------------------------
+
     setState(() {
       _wishlistUpdatingIds.add(productId);
 
@@ -306,7 +277,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
     setState(() {
       _wishlistUpdatingIds.remove(productId);
 
+      // ---------------------------------------------------------------------
       // Roll back optimistic update if API failed.
+      // ---------------------------------------------------------------------
+
       if (!ok) {
         if (wasWishlisted) {
           _wishlistIds.add(productId);
@@ -324,6 +298,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
   void _openProduct(ProductModel product) {
     final search = widget.args.searchQuery?.trim();
 
+    // -----------------------------------------------------------------------
+    // SHOP PRODUCT
+    // -----------------------------------------------------------------------
+
     if (widget.args.isShop) {
       context.push(
         Uri(
@@ -337,6 +315,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
 
       return;
     }
+
+    // -----------------------------------------------------------------------
+    // SEARCH PRODUCT
+    // -----------------------------------------------------------------------
 
     context.push(
       Uri(
@@ -357,47 +339,8 @@ class _ProductListScreenState extends State<ProductListScreen> {
   }
 
   // =========================================================================
-  // SEARCH
+  // FILTERS
   // =========================================================================
-
-  void _onSearchSubmitted(String query) {
-    final trimmed = query.trim();
-
-    if (trimmed.isEmpty) return;
-
-    _searchFocusNode.unfocus();
-    _searchOverlayController.hide();
-
-    setState(() {
-      _searchExpanded = false;
-    });
-
-    final uri = Uri(path: '/products', queryParameters: {'search': trimmed});
-
-    context.go(uri.toString());
-  }
-
-  void _openInlineSearch() {
-    setState(() {
-      _searchExpanded = true;
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-
-      _searchFocusNode.requestFocus();
-    });
-  }
-
-  void _closeInlineSearch() {
-    _searchOverlayController.hide();
-
-    setState(() {
-      _searchExpanded = false;
-    });
-
-    _searchFocusNode.unfocus();
-  }
 
   Future<void> _openFilterPage() async {
     final result = await context.push<ProductFilters>(
@@ -453,6 +396,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
     }
   }
 
+  // =========================================================================
+  // BACK
+  // =========================================================================
+
   void _goBack(BuildContext context) {
     if (context.canPop()) {
       context.pop();
@@ -471,71 +418,11 @@ class _ProductListScreenState extends State<ProductListScreen> {
     }
 
     if (widget.args.isSearch) {
-      return 'No products found for "${widget.args.value}".';
+      return 'No products found for '
+          '"${widget.args.value}".';
     }
 
     return 'No products in this shop yet.';
-  }
-
-  // =========================================================================
-  // SEARCH SUGGESTIONS
-  // =========================================================================
-
-  void _onSearchChanged(String value) {
-    _debounce?.cancel();
-
-    if (value.trim().isEmpty) {
-      setState(() {
-        _suggestions = [];
-        _isSuggesting = false;
-      });
-
-      if (_searchOverlayController.isShowing) {
-        _searchOverlayController.hide();
-      }
-
-      return;
-    }
-
-    _debounce = Timer(const Duration(milliseconds: 350), () async {
-      if (!mounted) return;
-
-      setState(() {
-        _isSuggesting = true;
-      });
-
-      try {
-        final results = await SearchService.getSearchSuggestions(value);
-
-        if (!mounted) return;
-
-        setState(() {
-          _suggestions = results;
-          _isSuggesting = false;
-        });
-
-        if (_suggestions.isNotEmpty && !_searchOverlayController.isShowing) {
-          _searchOverlayController.show();
-        } else if (_suggestions.isEmpty && _searchOverlayController.isShowing) {
-          _searchOverlayController.hide();
-        }
-      } catch (_) {
-        if (!mounted) return;
-
-        setState(() {
-          _suggestions = [];
-          _isSuggesting = false;
-        });
-      }
-    });
-  }
-
-  void _onSuggestionTap(SearchSuggestion suggestion) {
-    _searchController.text = suggestion.text;
-
-    _searchOverlayController.hide();
-
-    _onSearchSubmitted(suggestion.text);
   }
 
   // =========================================================================
@@ -573,11 +460,15 @@ class _ProductListScreenState extends State<ProductListScreen> {
                 child: CustomScrollView(
                   slivers: [
                     ..._buildProductSlivers(isDesktopLayout: true),
+
                     const SliverToBoxAdapter(child: SizedBox(height: 24)),
                   ],
                 ),
               ),
 
+              // ----------------------------------------------------------------
+              // DESKTOP FILTER PANEL
+              // ----------------------------------------------------------------
               Container(
                 width: 340,
                 margin: const EdgeInsets.fromLTRB(0, 16, 24, 16),
@@ -602,6 +493,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
       ],
     );
   }
+
+  // =========================================================================
+  // DESKTOP TOP BAR
+  // =========================================================================
 
   Widget _buildDesktopTopBar() {
     return Container(
@@ -630,6 +525,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
     );
   }
 
+  // =========================================================================
+  // DESKTOP BREADCRUMB
+  // =========================================================================
+
   Widget _desktopBreadcrumb() {
     TextStyle crumbStyle({bool active = false}) {
       return TextStyle(
@@ -652,7 +551,8 @@ class _ProductListScreenState extends State<ProductListScreen> {
           child: Text(
             widget.args.isShop
                 ? widget.args.title
-                : 'Search Results for "${widget.args.value}"',
+                : 'Search Results for '
+                      '"${widget.args.value}"',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: crumbStyle(active: true),
@@ -669,254 +569,32 @@ class _ProductListScreenState extends State<ProductListScreen> {
   Widget _buildMobileScaffold() {
     return Column(
       children: [
-        _buildMobileHeader(),
+        // ---------------------------------------------------------------------
+        // REUSABLE MOBILE HEADER
+        // ---------------------------------------------------------------------
+
+        ProductMobileHeader(
+          title: widget.args.title,
+          onBack: () => _goBack(context),
+          onCart: _openCart,
+        ),
 
         Expanded(
           child: CustomScrollView(
             slivers: [
+              // ---------------------------------------------------------------
+              // MOBILE FILTER TOOLBAR
+              // ---------------------------------------------------------------
+
               SliverToBoxAdapter(child: _buildMobileFilterToolbar()),
 
+              // ---------------------------------------------------------------
+              // PRODUCTS
+              // ---------------------------------------------------------------
               ..._buildProductSlivers(isDesktopLayout: false),
 
               const SliverToBoxAdapter(child: SizedBox(height: 24)),
             ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMobileHeader() {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
-      child: _searchExpanded ? _buildSearchRow() : _buildTitleRow(),
-    );
-  }
-
-  Widget _buildTitleRow() {
-    return Row(
-      children: [
-        IconButton(
-          icon: const Icon(Icons.arrow_back, color: _ink),
-          onPressed: () => _goBack(context),
-        ),
-
-        Expanded(
-          child: Text(
-            widget.args.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: _ink,
-            ),
-          ),
-        ),
-
-        IconButton(
-          icon: const Icon(Icons.search, color: _ink),
-          onPressed: _openInlineSearch,
-        ),
-
-        ValueListenableBuilder<int>(
-          valueListenable: cartItemCount,
-          builder: (context, count, child) {
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.shopping_cart_outlined, color: _ink),
-                  onPressed: _openCart,
-                ),
-                if (count > 0)
-                  Positioned(
-                    right: 6,
-                    top: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 1,
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 16,
-                        minHeight: 16,
-                      ),
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        count > 99 ? '99+' : '$count',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSearchRow() {
-    return Row(
-      children: [
-        IconButton(
-          icon: const Icon(Icons.arrow_back, color: _ink),
-          onPressed: _closeInlineSearch,
-        ),
-
-        Expanded(
-          child: CompositedTransformTarget(
-            link: _searchLayerLink,
-            child: OverlayPortal(
-              controller: _searchOverlayController,
-              overlayChildBuilder: (context) {
-                return Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTap: () {
-                      _searchOverlayController.hide();
-                    },
-                    child: Stack(
-                      children: [
-                        CompositedTransformFollower(
-                          link: _searchLayerLink,
-                          showWhenUnlinked: false,
-                          offset: const Offset(0, 46),
-                          child: Align(
-                            alignment: Alignment.topLeft,
-                            child: Material(
-                              elevation: 4,
-                              borderRadius: BorderRadius.circular(14),
-                              color: Colors.white,
-                              child: SizedBox(
-                                width: MediaQuery.of(context).size.width - 56,
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxHeight: 320,
-                                  ),
-                                  child: ListView.separated(
-                                    shrinkWrap: true,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 6,
-                                    ),
-                                    itemCount: _suggestions.length,
-                                    separatorBuilder: (_, __) => Divider(
-                                      height: 1,
-                                      color: Colors.black.withOpacity(0.05),
-                                    ),
-                                    itemBuilder: (context, index) {
-                                      final suggestion = _suggestions[index];
-
-                                      return ListTile(
-                                        dense: true,
-                                        leading: Icon(
-                                          suggestion.isTag
-                                              ? Icons.sell_outlined
-                                              : Icons.search_rounded,
-                                          size: 18,
-                                          color: const Color(0xFF8B7355),
-                                        ),
-                                        title: Text(
-                                          suggestion.text,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        trailing: suggestion.isTag
-                                            ? const Text(
-                                                'tag',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.black38,
-                                                ),
-                                              )
-                                            : null,
-                                        onTap: () =>
-                                            _onSuggestionTap(suggestion),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-              child: Container(
-                height: 40,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1ECE3),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  focusNode: _searchFocusNode,
-                  textInputAction: TextInputAction.search,
-                  onSubmitted: (query) {
-                    _searchOverlayController.hide();
-                    _onSearchSubmitted(query);
-                  },
-                  onChanged: _onSearchChanged,
-                  style: const TextStyle(fontSize: 14, color: _ink),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    border: InputBorder.none,
-                    prefixIcon: const Icon(
-                      Icons.search,
-                      size: 20,
-                      color: Colors.black45,
-                    ),
-                    suffixIcon: _isSuggesting
-                        ? const Padding(
-                            padding: EdgeInsets.all(10),
-                            child: SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          )
-                        : (_searchController.text.isEmpty
-                              ? null
-                              : IconButton(
-                                  icon: const Icon(
-                                    Icons.close,
-                                    size: 18,
-                                    color: Colors.black45,
-                                  ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _searchController.clear();
-                                      _suggestions = [];
-                                    });
-
-                                    _searchOverlayController.hide();
-                                  },
-                                )),
-                    hintText: 'Search products',
-                    hintStyle: const TextStyle(
-                      fontSize: 13,
-                      color: Colors.black45,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                  ),
-                ),
-              ),
-            ),
           ),
         ),
       ],
@@ -964,19 +642,39 @@ class _ProductListScreenState extends State<ProductListScreen> {
   // =========================================================================
 
   int _gridColumnCount(double width) {
-    if (width >= 1000) return 4;
-    if (width >= 700) return 3;
-    if (width >= 460) return 2;
+    if (width >= 1000) {
+      return 4;
+    }
+
+    if (width >= 700) {
+      return 3;
+    }
+
+    if (width >= 460) {
+      return 2;
+    }
 
     return 2;
   }
 
+  // =========================================================================
+  // PRODUCT SLIVERS
+  // =========================================================================
+
   List<Widget> _buildProductSlivers({required bool isDesktopLayout}) {
+    // -------------------------------------------------------------------------
+    // LOADING
+    // -------------------------------------------------------------------------
+
     if (_isLoading) {
       return const [
         SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
       ];
     }
+
+    // -------------------------------------------------------------------------
+    // ERROR
+    // -------------------------------------------------------------------------
 
     if (_error != null) {
       return [
@@ -986,7 +684,9 @@ class _ProductListScreenState extends State<ProductListScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(_error!, style: const TextStyle(color: Colors.black54)),
+
                 const SizedBox(height: 12),
+
                 TextButton(
                   onPressed: _loadProducts,
                   child: const Text('Retry'),
@@ -998,6 +698,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
       ];
     }
 
+    // -------------------------------------------------------------------------
+    // EMPTY
+    // -------------------------------------------------------------------------
+
     if (_products.isEmpty) {
       return [
         SliverFillRemaining(
@@ -1007,11 +711,13 @@ class _ProductListScreenState extends State<ProductListScreen> {
               children: [
                 Text(
                   _emptyMessage,
+                  textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.black54),
                 ),
 
                 if (_filters.activeCount > 0) ...[
                   const SizedBox(height: 8),
+
                   TextButton(
                     onPressed: _clearFilters,
                     child: const Text('Clear filters'),
@@ -1023,6 +729,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
         ),
       ];
     }
+
+    // -------------------------------------------------------------------------
+    // PRODUCT GRID
+    // -------------------------------------------------------------------------
 
     return [
       SliverLayoutBuilder(
@@ -1044,10 +754,11 @@ class _ProductListScreenState extends State<ProductListScreen> {
                 final isUpdating = _wishlistUpdatingIds.contains(product.id);
 
                 return ProductCard(
-                  // IMPORTANT:
-                  // Stable key prevents Flutter from incorrectly
-                  // reusing a hovered card for another product when
-                  // the wishlist state changes.
+                  // Stable key prevents Flutter
+                  // from incorrectly reusing a
+                  // hovered card for another
+                  // product when wishlist state
+                  // changes.
                   key: ValueKey('product_${product.id}'),
 
                   product: product,
