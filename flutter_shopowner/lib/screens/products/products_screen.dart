@@ -22,6 +22,14 @@ class _ProductsScreenState extends State<ProductsScreen> {
   String _searchQuery = '';
   int? _hoveredIndex;
 
+  // Owns the vertical scroll position for everything below the sticky
+  // header (loading/error/empty states + the product grid). Passed to
+  // Scrollbar so a persistent, draggable scrollbar always renders along
+  // the right edge of the screen — matching how the rest of the app
+  // signals "there's more below, keep scrolling" instead of silently
+  // overflowing once there are enough products to not fit on screen.
+  final ScrollController _scrollController = ScrollController();
+
   static const _stockFilters = ['All', 'Low stock', 'Out of stock'];
 
   @override
@@ -38,6 +46,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -231,6 +240,34 @@ class _ProductsScreenState extends State<ProductsScreen> {
             ),
             const SizedBox(height: 20),
 
+            // Everything below the sticky header lives inside a scrollable
+            // area so any number of products (6, 20, 100+) stays reachable
+            // by scrolling instead of overflowing the fixed height this
+            // screen gets from ShopOwnerLayout's Expanded. Scrollbar keeps
+            // a persistent, draggable scrollbar on the right edge of the
+            // screen so it's always obvious there's more to see below.
+            Expanded(
+              child: Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  child: _buildBody(isMobile),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Loading / error / empty / grid states — scrolls as one unit inside the
+  // Expanded + Scrollbar + SingleChildScrollView wrapper in build().
+  Widget _buildBody(bool isMobile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
             if (_loading)
               const Padding(
                 padding: EdgeInsets.only(top: 60),
@@ -364,9 +401,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   },
                 ),
               ),
-          ],
-        );
-      },
+      ],
     );
   }
 
@@ -803,8 +838,16 @@ class _ProductGridCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
+                    // sub_category is an optional field on the add-product
+                    // form — a product created without one (e.g. a quick
+                    // single-size add) must not crash the whole grid.
+                    // Falls back to the category name, which is always
+                    // present, so this line is never blank either.
                     Text(
-                      product['sub_category'] as String,
+                      (product['sub_category'] as String?)?.trim().isNotEmpty ==
+                              true
+                          ? product['sub_category'] as String
+                          : (product['category'] as String? ?? ''),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(

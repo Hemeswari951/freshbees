@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,9 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'dart:io';
 
 class AppConfig {
-  // static const bool isDevelopment = true;
-  static const bool isDevelopment = false;
+  static const bool isDevelopment = true;
 
+  static const Duration requestTimeout = Duration(seconds: 15);
 
   static String get serverUrl {
     if (isDevelopment) {
@@ -20,7 +21,6 @@ class AppConfig {
       return 'http://localhost:3000';
     }
 
-    // Production
     return 'https://thiraa.onrender.com';
   }
 }
@@ -29,9 +29,11 @@ class ApiService {
   static String get serverUrl => AppConfig.serverUrl;
   static String get baseUrl => '$serverUrl/api/customer';
 
-  //static String? _token;
-  static String? _accessToken;
-static String? _refreshToken;
+  static String? _token;
+  static String? _refreshToken;
+
+  // Prevent multiple API calls from refreshing simultaneously
+  static Future<bool>? _refreshing;
 
   // ============================================================
   // IMAGE URL
@@ -42,13 +44,9 @@ static String? _refreshToken;
       return '';
     }
 
-    // Already a complete URL
     if (photoUrl.startsWith('http://') || photoUrl.startsWith('https://')) {
       return photoUrl;
     }
-
-    // Backend returns paths like:
-    // /uploads/tryon/profile_1_xxx.jpg
 
     if (photoUrl.startsWith('/')) {
       return '$serverUrl$photoUrl';
@@ -56,6 +54,10 @@ static String? _refreshToken;
 
     return '$serverUrl/$photoUrl';
   }
+
+  // ============================================================
+  // JWT EXPIRY CHECK
+  // ============================================================
 
   static bool _isTokenExpired(String token) {
     try {
@@ -86,221 +88,416 @@ static String? _refreshToken;
     }
   }
 
-  static bool _isTokenExpiredResponse(http.Response response) {
-  try {
-    final body = jsonDecode(response.body);
-
-    return body['code'] == 'TOKEN_EXPIRED';
-  } catch (_) {
-    return false;
-  }
-}
-  
-  // =========================
+  // ============================================================
   // TOKEN MANAGEMENT
-  // =========================
+  // ============================================================
 
-  static Future<void> setTokens({
-  required String accessToken,
-  String? refreshToken,
-  Map<String, dynamic>? customer,
-}) async {
-  _accessToken = accessToken;
+  static Future<void> setToken(
+    String? token, {
+    String? refreshToken,
+    Map<String, dynamic>? customer,
+  }) async {
+    _token = token;
 
-  if (refreshToken != null && refreshToken.isNotEmpty) {
-    _refreshToken = refreshToken;
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      _refreshToken = refreshToken;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+
+    if (token == null || token.isEmpty) {
+      await prefs.remove('customer_token');
+    } else {
+      await prefs.setString('customer_token', token);
+    }
+
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      await prefs.setString('customer_refresh_token', refreshToken);
+    }
+
+    if (customer != null) {
+      final fullName =
+          '${customer['first_name'] ?? ''} '
+                  '${customer['last_name'] ?? ''}'
+              .trim();
+
+      await prefs.setString(
+        'user_name',
+        fullName.isNotEmpty ? fullName : 'User',
+      );
+    }
   }
 
-  final prefs = await SharedPreferences.getInstance();
+  static Future<void> loadToken() async {
+    final prefs = await SharedPreferences.getInstance();
 
-  await prefs.setString(
-    'customer_access_token',
-    accessToken,
-  );
+    _token = prefs.getString('customer_token');
 
-  if (refreshToken != null && refreshToken.isNotEmpty) {
-    await prefs.setString(
-      'customer_refresh_token',
-      refreshToken,
-    );
+    _refreshToken = prefs.getString('customer_refresh_token');
+
+    debugPrint('Access token loaded: ${_token != null}');
+
+    debugPrint('Refresh token loaded: ${_refreshToken != null}');
   }
 
-  if (customer != null) {
-    final fullName =
-        '${customer['first_name'] ?? ''} ${customer['last_name'] ?? ''}'
-            .trim();
+  static Future<void> clearToken() async {
+    _token = null;
+    _refreshToken = null;
 
-    await prefs.setString(
-      'user_name',
-      fullName.isNotEmpty ? fullName : 'User',
-    );
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.remove('customer_token');
+    await prefs.remove('customer_refresh_token');
+    await prefs.remove('user_name');
   }
-}
-  static Future<void> loadTokens() async {
-  final prefs = await SharedPreferences.getInstance();
 
-  _accessToken = prefs.getString('customer_access_token');
-  _refreshToken = prefs.getString('customer_refresh_token');
+  static String? getToken() => _token;
 
-  debugPrint(
-    'Access token loaded: ${_accessToken != null}',
-  );
+  static String? getRefreshToken() => _refreshToken;
 
-  debugPrint(
-    'Refresh token loaded: ${_refreshToken != null}',
-  );
-}
-
-  static Future<void> clearTokens() async {
-  _accessToken = null;
-  _refreshToken = null;
-
-  final prefs = await SharedPreferences.getInstance();
-
-  await prefs.remove('customer_access_token');
-  await prefs.remove('customer_refresh_token');
-  await prefs.remove('user_name');
-}
-
-  //static String? getToken() => _token;
-  static String? getAccessToken() => _accessToken;
-
-static String? getRefreshToken() => _refreshToken;
-
-  // =========================
+  // ============================================================
   // HEADERS
-  // =========================
+  // ============================================================
+
   static Map<String, String> get headers => {
-  'Content-Type': 'application/json',
-  'Accept': 'application/json',
-  if (_accessToken != null && _accessToken!.isNotEmpty)
-    'Authorization': 'Bearer $_accessToken',
-};
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    if (_token != null && _token!.isNotEmpty) 'Authorization': 'Bearer $_token',
+  };
+
+  // ============================================================
+  // REFRESH ACCESS TOKEN
+  // ============================================================
+
+  static Future<bool> refreshAccessToken() async {
+    // If another request is already refreshing,
+    // wait for that same refresh operation.
+    if (_refreshing != null) {
+      return await _refreshing!;
+    }
+
+    _refreshing = _performRefresh();
+
+    try {
+      return await _refreshing!;
+    } finally {
+      _refreshing = null;
+    }
+  }
+
+  static Future<bool> _performRefresh() async {
+    try {
+      final refreshToken = _refreshToken;
+
+      if (refreshToken == null || refreshToken.isEmpty) {
+        debugPrint('No refresh token available');
+        return false;
+      }
+
+      debugPrint('Refreshing access token...');
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/refresh'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({'refreshToken': refreshToken}),
+      );
+
+      debugPrint('Refresh status: ${response.statusCode}');
+
+      debugPrint('Refresh body: ${response.body}');
+
+      Map<String, dynamic> data;
+
+      try {
+        data = jsonDecode(response.body) as Map<String, dynamic>;
+      } catch (_) {
+        debugPrint('Invalid refresh response');
+        return false;
+      }
+
+      if (response.statusCode == 200 &&
+          data['success'] == true &&
+          data['accessToken'] != null) {
+        final newAccessToken = data['accessToken'].toString();
+
+        _token = newAccessToken;
+
+        final prefs = await SharedPreferences.getInstance();
+
+        await prefs.setString('customer_token', newAccessToken);
+
+        debugPrint('Access token refreshed successfully');
+
+        return true;
+      }
+
+      debugPrint('Refresh token invalid or expired');
+
+      return false;
+    } catch (e) {
+      debugPrint('Refresh access token error: $e');
+
+      return false;
+    }
+  }
+
+  // ============================================================
+  // MAKE REQUEST
+  // ============================================================
+
+  static Future<http.Response> _request({
+    required String method,
+    required String endpoint,
+    Map<String, dynamic>? body,
+    bool retry = true,
+  }) async {
+    // ----------------------------------------------------------
+    // Check locally whether access token already expired
+    // ----------------------------------------------------------
+
+    if (_token != null && _token!.isNotEmpty && _isTokenExpired(_token!)) {
+      debugPrint('Access token already expired. Refreshing...');
+
+      final refreshed = await refreshAccessToken();
+
+      if (!refreshed) {
+        await clearToken();
+
+        throw Exception('Session expired. Please login again.');
+      }
+    }
+
+    final uri = Uri.parse('$baseUrl$endpoint');
+
+    final requestHeaders = headers;
+
+    late http.Response response;
+
+    switch (method) {
+      case 'GET':
+        response = await http.get(uri, headers: requestHeaders);
+        break;
+
+      case 'POST':
+        response = await http.post(
+          uri,
+          headers: requestHeaders,
+          body: jsonEncode(body ?? {}),
+        );
+        break;
+
+      case 'PUT':
+        response = await http.put(
+          uri,
+          headers: requestHeaders,
+          body: jsonEncode(body ?? {}),
+        );
+        break;
+
+      case 'PATCH':
+        response = await http.patch(
+          uri,
+          headers: requestHeaders,
+          body: jsonEncode(body ?? {}),
+        );
+        break;
+
+      case 'DELETE':
+        response = await http.delete(uri, headers: requestHeaders);
+        break;
+
+      default:
+        throw Exception('Unsupported HTTP method: $method');
+    }
+
+    debugPrint('$method $endpoint → ${response.statusCode}');
+
+    // ----------------------------------------------------------
+    // Access token expired on server
+    // ----------------------------------------------------------
+
+    if (response.statusCode == 401 && retry) {
+      debugPrint('401 received. Trying refresh token...');
+
+      final refreshed = await refreshAccessToken();
+
+      if (refreshed) {
+        debugPrint('Retrying original request...');
+
+        return await _request(
+          method: method,
+          endpoint: endpoint,
+          body: body,
+          retry: false,
+        );
+      }
+
+      // Refresh token itself failed
+      await clearToken();
+
+      throw Exception('Session expired. Please login again.');
+    }
+
+    return response;
+  }
+
+  // ============================================================
+  // GET
+  // ============================================================
 
   static Future<Map<String, dynamic>> get(String endpoint) async {
-  var res = await http.get(
-    Uri.parse('$baseUrl$endpoint'),
-    headers: headers,
-  );
+    final response = await _request(method: 'GET', endpoint: endpoint);
 
-  if (res.statusCode == 401 &&
-      _isTokenExpiredResponse(res)) {
-    final refreshed = await refreshAccessToken();
-
-    if (refreshed) {
-      res = await http.get(
-        Uri.parse('$baseUrl$endpoint'),
-        headers: headers,
-      );
-    }
+    return _handle(response);
   }
 
-  return _handle(res);
-}
-  static Future<Map<String, dynamic>> post(
-  String endpoint,
-  Map body,
-) async {
-  var res = await http.post(
-    Uri.parse('$baseUrl$endpoint'),
-    headers: headers,
-    body: jsonEncode(body),
-  );
+  // ============================================================
+  // POST
+  // ============================================================
 
-  if (res.statusCode == 401 &&
-      _isTokenExpiredResponse(res)) {
-    final refreshed = await refreshAccessToken();
+  static Future<Map<String, dynamic>> post(String endpoint, Map body) async {
+    final response = await _request(
+      method: 'POST',
+      endpoint: endpoint,
+      body: Map<String, dynamic>.from(body),
+    );
 
-    if (refreshed) {
-      res = await http.post(
-        Uri.parse('$baseUrl$endpoint'),
-        headers: headers,
-        body: jsonEncode(body),
-      );
-    }
+    return _handle(response);
   }
 
-  return _handle(res);
-}
+  // ============================================================
+  // PUT
+  // ============================================================
 
+  static Future<Map<String, dynamic>> put(
+    String endpoint,
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _request(
+      method: 'PUT',
+      endpoint: endpoint,
+      body: body,
+    );
 
-  static Future<Map<String, dynamic>> patch(
-  String endpoint,
-  Map body,
-) async {
-  var res = await http.patch(
-    Uri.parse('$baseUrl$endpoint'),
-    headers: headers,
-    body: jsonEncode(body),
-  );
-
-  if (res.statusCode == 401 &&
-      _isTokenExpiredResponse(res)) {
-    final refreshed = await refreshAccessToken();
-
-    if (refreshed) {
-      res = await http.patch(
-        Uri.parse('$baseUrl$endpoint'),
-        headers: headers,
-        body: jsonEncode(body),
-      );
-    }
+    return _handle(response);
   }
 
-  return _handle(res);
-}
+  // ============================================================
+  // PATCH
+  // ============================================================
 
- static Future<Map<String, dynamic>> put(
-  String endpoint,
-  Map<String, dynamic> body,
-) async {
-  var res = await http.put(
-    Uri.parse('$baseUrl$endpoint'),
-    headers: headers,
-    body: jsonEncode(body),
-  );
+  static Future<Map<String, dynamic>> patch(String endpoint, Map body) async {
+    final response = await _request(
+      method: 'PATCH',
+      endpoint: endpoint,
+      body: Map<String, dynamic>.from(body),
+    );
 
-  if (res.statusCode == 401 &&
-      _isTokenExpiredResponse(res)) {
-    final refreshed = await refreshAccessToken();
-
-    if (refreshed) {
-      res = await http.put(
-        Uri.parse('$baseUrl$endpoint'),
-        headers: headers,
-        body: jsonEncode(body),
-      );
-    }
+    return _handle(response);
   }
 
-  return _handle(res);
-}
+  // ============================================================
+  // DELETE
+  // ============================================================
 
   static Future<Map<String, dynamic>> delete(String endpoint) async {
-  var res = await http.delete(
-    Uri.parse('$baseUrl$endpoint'),
-    headers: headers,
-  );
+    final response = await _request(method: 'DELETE', endpoint: endpoint);
 
-  if (res.statusCode == 401 &&
-      _isTokenExpiredResponse(res)) {
-    final refreshed = await refreshAccessToken();
-
-    if (refreshed) {
-      res = await http.delete(
-        Uri.parse('$baseUrl$endpoint'),
-        headers: headers,
-      );
-    }
+    return _handle(response);
   }
 
-  return _handle(res);
-}
+  // ============================================================
+  // MULTIPART POST (file upload — e.g. image search)
+  // ============================================================
+  // Same expired/401-refresh handling as `_request`, but built on
+  // http.MultipartRequest since jsonEncode-based `_request` can't carry
+  // binary file bytes. `fields` are sent alongside the file as regular
+  // form fields when needed later.
+  // ============================================================
 
+  static Future<Map<String, dynamic>> postMultipart(
+    String endpoint, {
+    required List<int> bytes,
+    required String filename,
+    String fieldName = 'image',
+    Map<String, String>? fields,
+    bool retry = true,
+  }) async {
+    if (_token != null && _token!.isNotEmpty && _isTokenExpired(_token!)) {
+      final refreshed = await refreshAccessToken();
+      if (!refreshed) {
+        await clearToken();
+        throw Exception('Session expired. Please login again.');
+      }
+    }
+
+    final uri = Uri.parse('$baseUrl$endpoint');
+    final request = http.MultipartRequest('POST', uri);
+
+    if (_token != null && _token!.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer $_token';
+    }
+
+    if (fields != null) {
+      request.fields.addAll(fields);
+    }
+
+    request.files.add(
+      http.MultipartFile.fromBytes(fieldName, bytes, filename: filename),
+    );
+
+    http.Response response;
+    try {
+      final streamedResponse = await request.send().timeout(
+        AppConfig.requestTimeout,
+      );
+      response = await http.Response.fromStream(streamedResponse);
+    } on TimeoutException {
+      debugPrint(
+        'POST(multipart) $endpoint → timed out after ${AppConfig.requestTimeout.inSeconds}s',
+      );
+      throw Exception(
+        'Could not reach the server. Please check your connection and try again.',
+      );
+    } on SocketException catch (e) {
+      debugPrint('POST(multipart) $endpoint → SocketException: $e');
+      throw Exception(
+        'Could not reach the server. Please check your connection and try again.',
+      );
+    }
+
+    debugPrint('POST(multipart) $endpoint → ${response.statusCode}');
+
+    if (response.statusCode == 401 && retry) {
+      final refreshed = await refreshAccessToken();
+      if (refreshed) {
+        return postMultipart(
+          endpoint,
+          bytes: bytes,
+          filename: filename,
+          fieldName: fieldName,
+          fields: fields,
+          retry: false,
+        );
+      }
+      await clearToken();
+      throw Exception('Session expired. Please login again.');
+    }
+
+    return _handle(response);
+  }
+
+  // ============================================================
+  // RESPONSE HANDLER
+  // ============================================================
 
   static Map<String, dynamic> _handle(http.Response res) {
-    print("STATUS: ${res.statusCode}");
-    print("BODY: ${res.body}");
+    debugPrint('STATUS: ${res.statusCode}');
+
+    debugPrint('BODY: ${res.body}');
 
     Map<String, dynamic> body;
 
@@ -318,65 +515,16 @@ static String? getRefreshToken() => _refreshToken;
       return body;
     }
 
-    throw Exception(body['message'] ?? 'Something went wrong');
+    throw Exception(body['message']?.toString() ?? 'Something went wrong');
   }
+
+  // ============================================================
+  // USER NAME
+  // ============================================================
 
   static Future<String?> getUserName() async {
     final prefs = await SharedPreferences.getInstance();
+
     return prefs.getString('user_name');
   }
-
-  static Future<bool> refreshAccessToken() async {
-  try {
-    if (_refreshToken == null || _refreshToken!.isEmpty) {
-      debugPrint('No refresh token available');
-      return false;
-    }
-
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/refresh-token'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: jsonEncode({
-        'refreshToken': _refreshToken,
-      }),
-    );
-
-    debugPrint('REFRESH STATUS: ${response.statusCode}');
-    debugPrint('REFRESH BODY: ${response.body}');
-
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300) {
-      return false;
-    }
-
-    final body = jsonDecode(response.body);
-
-    final newAccessToken = body['accessToken'];
-
-    if (newAccessToken == null ||
-        newAccessToken.toString().isEmpty) {
-      return false;
-    }
-
-    _accessToken = newAccessToken.toString();
-
-    final prefs = await SharedPreferences.getInstance();
-
-    await prefs.setString(
-      'customer_access_token',
-      _accessToken!,
-    );
-
-    debugPrint('Access token refreshed successfully');
-
-    return true;
-  } catch (e) {
-    debugPrint('Refresh token error: $e');
-    return false;
-  }
-}
-
 }

@@ -345,16 +345,16 @@ exports.createProfile = async (req, res) => {
       req.customer.customerId;
 
     const {
-      profileName,
-      relationship,
-      gender,
-      age,
-      size,
-      height,
-      weight,
-      photoUrl,
-      isDefault,
-    } = req.body;
+  profileName,
+  relationship,
+  gender,
+  date_of_birth,
+  size,
+  height,
+  weight,
+  photoUrl,
+  isDefault,
+} = req.body;
 
     // -----------------------------------------------
     // Required fields
@@ -378,8 +378,9 @@ exports.createProfile = async (req, res) => {
         profileName,
         relationship,
         gender,
-        age,
-        size,
+dateOfBirth: date_of_birth,
+size,
+       
         height,
         weight,
         photoUrl,
@@ -415,11 +416,9 @@ exports.createProfile = async (req, res) => {
 
 exports.updateProfile = async (req, res) => {
   try {
-    const customerId =
-      req.customer.customerId;
+    const customerId = req.customer.customerId;
 
-    const profileId =
-      Number(req.params.id);
+    const profileId = Number(req.params.id);
 
     // -----------------------------------------------
     // Validate profile ID
@@ -436,12 +435,15 @@ exports.updateProfile = async (req, res) => {
       profileName,
       relationship,
       gender,
-      age,
+      date_of_birth,
       size,
       height,
       weight,
       photoUrl,
     } = req.body;
+
+    console.log("TRYON UPDATE REQUEST BODY:", req.body);
+console.log("TRYON UPDATE DATE OF BIRTH:", date_of_birth);
 
     // -----------------------------------------------
     // Update profile
@@ -455,13 +457,18 @@ exports.updateProfile = async (req, res) => {
           profileName,
           relationship,
           gender,
-          age,
+          dateOfBirth: date_of_birth,
           size,
           height,
           weight,
           photoUrl,
         }
       );
+
+      console.log(
+  "TRYON UPDATED PROFILE FROM DB:",
+  updatedProfile
+);
 
     // -----------------------------------------------
     // Profile not found
@@ -476,8 +483,7 @@ exports.updateProfile = async (req, res) => {
 
     return res.json({
       success: true,
-      message:
-        "Try-on profile updated successfully",
+      message: "Try-on profile updated successfully",
       data: updatedProfile,
     });
 
@@ -489,8 +495,7 @@ exports.updateProfile = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message:
-        "Failed to update try-on profile",
+      message: "Failed to update try-on profile",
       error: err.message,
     });
   }
@@ -553,6 +558,63 @@ exports.deleteProfile = async (req, res) => {
       success: false,
       message:
         "Failed to delete try-on profile",
+      error: err.message,
+    });
+  }
+};
+
+
+// =====================================================
+// GET OR CREATE MAIN USER TRY-ON PROFILE
+// GET /api/customer/tryon-profiles/main
+// =====================================================
+
+exports.getMainProfile = async (req, res) => {
+  try {
+    const customerId = req.customer.customerId;
+
+    // --------------------------------------------------
+    // Find existing Main User profile
+    // --------------------------------------------------
+
+    let profile = await tryonProfileModel.getMainProfile(
+      customerId
+    );
+
+    // --------------------------------------------------
+    // If Main User profile does not exist, create it
+    // --------------------------------------------------
+
+    if (!profile) {
+      profile = await tryonProfileModel.create({
+        customerId,
+        profileName: "Main User",
+        relationship: "self",
+        gender: null,
+        age: null,
+        dateOfBirth: null,
+        size: null,
+        height: null,
+        weight: null,
+        photoUrl: null,
+        isDefault: true,
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: profile,
+    });
+
+  } catch (err) {
+    console.error(
+      "Get Main Try-On Profile Error:",
+      err
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get main try-on profile",
       error: err.message,
     });
   }

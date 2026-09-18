@@ -3,8 +3,6 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const { sendOtpMail } = require("../../services/shared/sendotpmail.service");
-const { sendOtpSms } = require('../../services/customer/sms.service');
-
 const {
     issueTokens,
     verifyRefreshToken,
@@ -19,16 +17,20 @@ const PORTAL = "customer";
 
 // Check if identifier is a phone number
 function isPhone(identifier) {
-    return /^[0-9]{10}$/.test(identifier.replace(/\D/g, "").slice(-10));
+    return /^[6-9][0-9]{9}$/.test(identifier);
+}
+
+function isValidEmail(identifier) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
+}
+
+function isValidIdentifier(identifier) {
+    return isPhone(identifier) || isValidEmail(identifier);
 }
 
 // Normalize phone to last 10 digits (consistent storage/lookup everywhere)
 function normalizeIdentifier(identifier) {
-    const raw = (identifier || "").toString().trim().toLowerCase();
-    if (isPhone(raw)) {
-        return raw.replace(/\D/g, "").slice(-10);
-    }
-    return raw; // email - already lowercased/trimmed
+    return (identifier || "").toString().trim().toLowerCase();
 }
 
 // ==============================
@@ -37,6 +39,13 @@ function normalizeIdentifier(identifier) {
 exports.sendOtp = async (req, res) => {
     try {
         const identifier = normalizeIdentifier(req.body.identifier);
+
+        if (!isValidIdentifier(identifier)) {
+    return res.status(400).json({
+        success: false,
+        message: "Please enter a valid 10-digit mobile number or email address",
+    });
+}
 
         if (!identifier) {
             return res.status(400).json({
@@ -98,10 +107,7 @@ exports.sendOtp = async (req, res) => {
 
         // Send OTP via SMS or Mail
         if (isPhone(identifier)) {
-            await sendOtpSms({
-    phoneNumber: identifier,
-    otp: otp,
-  });
+            // await sendOtpSms(identifier, otp);
         } else {
             await sendOtpMail({
                 toEmail: identifier,
@@ -150,6 +156,13 @@ exports.verifyOtp = async (req, res) => {
         }
 
         const identifier = normalizeIdentifier(req.body.identifier);
+
+        if (!isValidIdentifier(identifier)) {
+    return res.status(400).json({
+        success: false,
+        message: "Please enter a valid 10-digit mobile number or email address",
+    });
+}
 
         // Get OTP record
         const otpResult = await pool.query(
@@ -328,6 +341,13 @@ exports.register = async (req, res) => {
 
         const identifier = normalizeIdentifier(req.body.identifier);
 
+        if (!isValidIdentifier(identifier)) {
+    return res.status(400).json({
+        success: false,
+        message: "Please enter a valid 10-digit mobile number or email address",
+    });
+}
+
         const otpResult = await pool.query(
             `
       SELECT *
@@ -370,9 +390,9 @@ exports.register = async (req, res) => {
         const customerPhone = isEmail ? null : identifier;
 
         const customerResult = await pool.query(
-            `
-      INSERT INTO customers
-      (
+    `
+    INSERT INTO customers
+    (
         first_name,
         last_name,
         email,
@@ -382,21 +402,29 @@ exports.register = async (req, res) => {
         date_of_birth,
         is_verified,
         last_login
-      )
-      VALUES
-      ($1, $2, $3, $4, $5, $6, $7, true, CURRENT_TIMESTAMP)
-      RETURNING *
-      `,
-            [
-                first_name,
-                last_name,
-                customerEmail,
-                customerPhone,
-                passwordHash,
-                gender,
-                date_of_birth,
-            ]
-        );
+    )
+    VALUES
+    ($1, $2, $3, $4, $5, $6, $7, true, CURRENT_TIMESTAMP)
+    RETURNING
+        customer_id,
+        first_name,
+        last_name,
+        email,
+        phone,
+        gender,
+        date_of_birth,
+        profile_image
+    `,
+    [
+        first_name,
+        last_name,
+        customerEmail,
+        customerPhone,
+        passwordHash,
+        gender,
+        date_of_birth,
+    ]
+);
 
         const customer = customerResult.rows[0];
 
@@ -457,6 +485,13 @@ exports.login = async (req, res) => {
         }
 
         const identifier = normalizeIdentifier(req.body.identifier);
+
+        if (!isValidIdentifier(identifier)) {
+    return res.status(400).json({
+        success: false,
+        message: "Please enter a valid 10-digit mobile number or email address",
+    });
+}
 
         const result = await pool.query(
             `

@@ -5,9 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:io';
 
 class AppConfig {
-  //static const bool isDevelopment = true;
-  static const bool isDevelopment = false;
-
+  static const bool isDevelopment = true;
 
   static String get serverUrl {
     if (isDevelopment) {
@@ -20,7 +18,6 @@ class AppConfig {
       return 'http://localhost:3000';
     }
 
-    // Production
     return 'https://thiraa.onrender.com';
   }
 }

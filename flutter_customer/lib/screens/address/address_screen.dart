@@ -1,22 +1,85 @@
 
 import 'package:flutter/material.dart';
 import '../../services/address_service.dart';
+import '../../models/buy_now_product.dart';
+import '../../widgets/checkout_stepper.dart';
 import 'add_address_screen.dart';
-import '../payment/payment_screen.dart';
+import '../order/order_summary_screen.dart';
 
-/// Step 2 of checkout: select (or add) a delivery address, then continue
-/// to the Payment screen. Reached from CartScreen's "Buy Now".
+/// Step 1 of checkout: select (or add) a delivery address, then continue
+/// to the Order Summary screen.
+///
+/// Two ways to land here:
+///  - From CartScreen's "Buy Now"  -> pass subtotal/itemCount/cartItemIds
+///  - From ProductViewScreen's "Buy Now" -> pass buyNowProduct
+/// Exactly one of the two must be provided.
 class AddressScreen extends StatefulWidget {
-  final double subtotal;
-  final int itemCount;
-  final List<int> cartItemIds;
+  final List<int>? cartItemIds;
+  final BuyNowProduct? buyNowProduct;
+  final bool selectOnly;
 
   const AddressScreen({
     super.key,
-    required this.subtotal,
-    required this.itemCount,
-    required this.cartItemIds,
-  });
+    this.cartItemIds,
+    this.buyNowProduct,
+    this.selectOnly = false,
+  }) : assert(
+          selectOnly || buyNowProduct != null || cartItemIds != null,
+          'AddressScreen needs either a buyNowProduct or cartItemIds (unless selectOnly)',
+        );
+
+
+  // ── PASTE startCheckout HERE ──
+  /// Shared entry point for both CartScreen's "Buy Now/Proceed" and
+  /// ProductViewScreen's "Buy Now". Checks if the user already has a
+  /// saved address:
+  ///  - If yes → skip this screen entirely, go straight to
+  ///    OrderSummaryScreen with the default (or first) address.
+  ///  - If no → push this screen as normal, so the user adds one first.
+  static Future<void> startCheckout(
+    BuildContext context, {
+    List<int>? cartItemIds,
+    BuyNowProduct? buyNowProduct,
+  }) async {
+    assert(
+      buyNowProduct != null || cartItemIds != null,
+      'startCheckout needs either a buyNowProduct or cartItemIds',
+    );
+
+    List<AddressModel> addresses = [];
+    try {
+      addresses = await AddressService.getAddresses();
+    } catch (_) {}
+
+    if (!context.mounted) return;
+
+    if (addresses.isNotEmpty) {
+      final address = addresses.firstWhere(
+        (a) => a.isDefault,
+        orElse: () => addresses.first,
+      );
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => OrderSummaryScreen(
+            address: address,
+            buyNowProduct: buyNowProduct,
+            cartItemIds: cartItemIds,
+          ),
+        ),
+      );
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AddressScreen(
+          cartItemIds: cartItemIds,
+          buyNowProduct: buyNowProduct,
+        ),
+      ),
+    );
+  }
+  // ── END startCheckout ──
 
   @override
   State<AddressScreen> createState() => _AddressScreenState();
@@ -67,19 +130,24 @@ class _AddressScreenState extends State<AddressScreen> {
     }
   }
 
-  void _deliverHere(AddressModel address) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => PaymentScreen(
-          address: address,
-          subtotal: widget.subtotal,
-          itemCount: widget.itemCount,
-          cartItemIds: widget.cartItemIds,
-        ),
-      ),
-    );
+ void _deliverHere(AddressModel address) {
+  // In "change address" mode (opened from OrderSummaryScreen), just
+  // hand the picked address back instead of pushing a new order flow.
+  if (widget.selectOnly) {
+    Navigator.of(context).pop(address);
+    return;
   }
 
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => OrderSummaryScreen(
+        address: address,
+        buyNowProduct: widget.buyNowProduct,
+        cartItemIds: widget.cartItemIds,
+      ),
+    ),
+  );
+}
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 900;
@@ -96,11 +164,18 @@ class _AddressScreenState extends State<AddressScreen> {
         ),
       ),
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: isDesktop ? 700 : double.infinity),
-            child: _buildBody(),
-          ),
+        child: Column(
+          children: [
+            const CheckoutStepper(currentStep: 0),
+            Expanded(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: isDesktop ? 700 : double.infinity),
+                  child: _buildBody(),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

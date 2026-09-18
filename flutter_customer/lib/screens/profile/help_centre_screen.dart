@@ -3,95 +3,127 @@ import 'package:flutter/material.dart';
 class HelpCentreScreen extends StatelessWidget {
   const HelpCentreScreen({super.key});
 
+  // ============================================================
+  // COLORS
+  // ============================================================
+
   static const Color _bg = Color(0xFFFAF7F2);
   static const Color _accent = Color(0xFF8B7355);
   static const Color _text = Color(0xFF252525);
   static const Color _muted = Color(0xFF777777);
+  static const Color _border = Color(0xFFE8E1D8);
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _bg,
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
 
-      // appBar: AppBar(
-      //   backgroundColor: _bg,
-      //   elevation: 0,
-      //   surfaceTintColor: Colors.transparent,
+    // IMPORTANT:
+    // This screen is displayed INSIDE ProfileDetailsScreen.
+    //
+    // ProfileDetailsScreen already provides:
+    //
+    // SingleChildScrollView
+    //     └── _buildContent()
+    //
+    // Therefore this screen must NOT create another
+    // vertical ListView / SingleChildScrollView.
 
-      //   leading: IconButton(
-      //     icon: const Icon(
-      //       Icons.arrow_back,
-      //       color: _text,
-      //     ),
-      //     onPressed: () => Navigator.pop(context),
-      //   ),
-
-      //   title: const Text(
-      //     'Help Centre',
-      //     style: TextStyle(
-      //       color: _text,
-      //       fontWeight: FontWeight.w700,
-      //       fontSize: 20,
-      //     ),
-      //   ),
-      // ),
-
-      body: SafeArea(
-        child: ListView(
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: isDesktop ? 760 : double.infinity,
+        ),
+        child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 30),
-          children: [
-            _buildWelcomeCard(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // --------------------------------------------------
+              // WELCOME
+              // --------------------------------------------------
 
-            const SizedBox(height: 22),
+              _buildWelcomeCard(),
 
-            _sectionTitle('QUICK HELP'),
+              const SizedBox(height: 22),
 
-            _quickHelpGrid(),
+              // --------------------------------------------------
+              // QUICK HELP
+              // --------------------------------------------------
+              _sectionTitle('QUICK HELP'),
 
-            const SizedBox(height: 24),
+              _quickHelpGrid(),
 
-            _sectionTitle('FREQUENTLY ASKED QUESTIONS'),
+              const SizedBox(height: 24),
 
-            _faqItem(
-              'How can I place an order?',
-              'Browse the products available from nearby stores, select the product you want, add it to your bag and continue through checkout.',
-            ),
+              // --------------------------------------------------
+              // FAQ
+              // --------------------------------------------------
+              _sectionTitle('FREQUENTLY ASKED QUESTIONS'),
 
-            _faqItem(
-              'How can I track my order?',
-              'Open your Profile and go to Orders. Select the order you want to view its current status and details.',
-            ),
+              _faqItem(
+                'How can I place an order?',
+                'Browse the products available from nearby stores, '
+                    'select the product you want, add it to your bag '
+                    'and continue through checkout.',
+              ),
 
-            _faqItem(
-              'Can I save multiple delivery addresses?',
-              'Yes. You can add and manage multiple delivery addresses from the Address section in your profile.',
-            ),
+              _faqItem(
+                'How can I track my order?',
+                'Open your Profile and go to Orders. Select the '
+                    'order you want to view its current status and details.',
+              ),
 
-            _faqItem(
-              'How does Virtual Try-On work?',
-              'Create a Try-On Profile and add your details and photo. You can then select your profile while using the Virtual Try-On feature.',
-            ),
+              _faqItem(
+                'Can I save multiple delivery addresses?',
+                'Yes. You can add and manage multiple delivery '
+                    'addresses from the Address section in your profile.',
+              ),
 
-            _faqItem(
-              'Can I use Virtual Try-On for different people?',
-              'Yes. You can create multiple Try-On Profiles, such as yourself or family members, and select the required profile when using Virtual Try-On.',
-            ),
+              _faqItem(
+                'How does Virtual Try-On work?',
+                'Create a Try-On Profile and add your details and '
+                    'photo. You can then select your profile while '
+                    'using the Virtual Try-On feature.',
+              ),
 
-            _faqItem(
-              'Where can I see my saved cards?',
-              'Your Saved Cards section will show payment methods saved through the payment system once payment gateway support is enabled.',
-            ),
+              _faqItem(
+                'Can I use Virtual Try-On for different people?',
+                'Yes. You can create multiple Try-On Profiles, '
+                    'such as yourself or family members, and select '
+                    'the required profile when using Virtual Try-On.',
+              ),
 
-            const SizedBox(height: 24),
+              _faqItem(
+                'Where can I see my saved cards?',
+                'Your Saved Cards section will show payment methods '
+                    'saved through the payment system once payment '
+                    'gateway support is enabled.',
+              ),
 
-            _sectionTitle('NEED MORE HELP?'),
+              const SizedBox(height: 24),
 
-            _buildContactCard(),
-          ],
+              // --------------------------------------------------
+              // CONTACT
+              // --------------------------------------------------
+              _sectionTitle('NEED MORE HELP?'),
+
+              _buildContactCard(),
+
+              const SizedBox(height: 10),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  // ============================================================
+  // WELCOME CARD
+  // ============================================================
 
   Widget _buildWelcomeCard() {
     return Container(
@@ -99,9 +131,7 @@ class HelpCentreScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.black.withOpacity(0.06),
-        ),
+        border: Border.all(color: _border),
       ),
       child: Row(
         children: [
@@ -133,14 +163,13 @@ class HelpCentreScreen extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+
                 SizedBox(height: 5),
+
                 Text(
-                  'Find answers to common questions or get in touch with us.',
-                  style: TextStyle(
-                    color: _muted,
-                    fontSize: 12.5,
-                    height: 1.4,
-                  ),
+                  'Find answers to common questions or get in touch '
+                  'with us.',
+                  style: TextStyle(color: _muted, fontSize: 12.5, height: 1.4),
                 ),
               ],
             ),
@@ -150,12 +179,13 @@ class HelpCentreScreen extends StatelessWidget {
     );
   }
 
+  // ============================================================
+  // SECTION TITLE
+  // ============================================================
+
   Widget _sectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(
-        left: 4,
-        bottom: 10,
-      ),
+      padding: const EdgeInsets.only(left: 4, bottom: 10),
       child: Text(
         title,
         style: const TextStyle(
@@ -168,65 +198,62 @@ class HelpCentreScreen extends StatelessWidget {
     );
   }
 
+  // ============================================================
+  // QUICK HELP GRID
+  // ============================================================
+
   Widget _quickHelpGrid() {
     return GridView.count(
       crossAxisCount: 2,
+
+      // IMPORTANT:
+      // GridView is inside the ProfileDetailsScreen scroll view.
+      // So it must not scroll independently.
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
+
       crossAxisSpacing: 10,
       mainAxisSpacing: 10,
       childAspectRatio: 1.8,
+
       children: [
-        _quickHelpItem(
-          icon: Icons.shopping_bag_outlined,
-          title: 'Orders',
-        ),
-        _quickHelpItem(
-          icon: Icons.location_on_outlined,
-          title: 'Delivery',
-        ),
-        _quickHelpItem(
-          icon: Icons.payment_outlined,
-          title: 'Payments',
-        ),
-        _quickHelpItem(
-          icon: Icons.refresh_outlined,
-          title: 'Returns',
-        ),
+        _quickHelpItem(icon: Icons.shopping_bag_outlined, title: 'Orders'),
+
+        _quickHelpItem(icon: Icons.location_on_outlined, title: 'Delivery'),
+
+        _quickHelpItem(icon: Icons.payment_outlined, title: 'Payments'),
+
+        _quickHelpItem(icon: Icons.refresh_outlined, title: 'Returns'),
       ],
     );
   }
 
-  Widget _quickHelpItem({
-    required IconData icon,
-    required String title,
-  }) {
+  // ============================================================
+  // QUICK HELP ITEM
+  // ============================================================
+
+  Widget _quickHelpItem({required IconData icon, required String title}) {
     return InkWell(
       onTap: () {
         // UI only for now.
-        // Later each category can open its own help section.
+        //
+        // Later you can navigate to a specific
+        // help category.
       },
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 12,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Colors.black.withOpacity(0.06),
-          ),
+          border: Border.all(color: _border),
         ),
         child: Row(
           children: [
-            Icon(
-              icon,
-              color: _accent,
-              size: 21,
-            ),
+            Icon(icon, color: _accent, size: 21),
+
             const SizedBox(width: 10),
+
             Expanded(
               child: Text(
                 title,
@@ -237,43 +264,34 @@ class HelpCentreScreen extends StatelessWidget {
                 ),
               ),
             ),
-            const Icon(
-              Icons.chevron_right,
-              size: 18,
-              color: Colors.black38,
-            ),
+
+            const Icon(Icons.chevron_right, size: 18, color: Colors.black38),
           ],
         ),
       ),
     );
   }
 
-  Widget _faqItem(
-    String question,
-    String answer,
-  ) {
+  // ============================================================
+  // FAQ ITEM
+  // ============================================================
+
+  Widget _faqItem(String question, String answer) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.black.withOpacity(0.06),
-        ),
+        border: Border.all(color: _border),
       ),
       child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 2,
-        ),
-        childrenPadding: const EdgeInsets.fromLTRB(
-          14,
-          0,
-          14,
-          14,
-        ),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+
+        childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+
         iconColor: _accent,
         collapsedIconColor: Colors.black45,
+
         title: Text(
           question,
           style: const TextStyle(
@@ -282,6 +300,7 @@ class HelpCentreScreen extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
+
         children: [
           Align(
             alignment: Alignment.centerLeft,
@@ -299,23 +318,21 @@ class HelpCentreScreen extends StatelessWidget {
     );
   }
 
+  // ============================================================
+  // CONTACT CARD
+  // ============================================================
+
   Widget _buildContactCard() {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: Colors.black.withOpacity(0.06),
-        ),
+        border: Border.all(color: _border),
       ),
       child: Column(
         children: [
-          const Icon(
-            Icons.chat_bubble_outline,
-            color: _accent,
-            size: 28,
-          ),
+          const Icon(Icons.chat_bubble_outline, color: _accent, size: 28),
 
           const SizedBox(height: 10),
 
@@ -333,10 +350,7 @@ class HelpCentreScreen extends StatelessWidget {
           const Text(
             'Our support team will be happy to help you.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: _muted,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: _muted, fontSize: 12),
           ),
 
           const SizedBox(height: 14),
@@ -346,15 +360,14 @@ class HelpCentreScreen extends StatelessWidget {
             child: ElevatedButton(
               onPressed: () {
                 // UI only for now.
+                //
                 // Later connect this to support/contact backend.
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: _accent,
                 foregroundColor: Colors.white,
                 elevation: 0,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 13,
-                ),
+                padding: const EdgeInsets.symmetric(vertical: 13),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(9),
                 ),

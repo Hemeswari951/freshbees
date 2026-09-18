@@ -7,6 +7,17 @@ class OrderItemModel {
   final double price;
   final String itemStatus;
 
+  /// Only set once itemStatus is 'Cancelled' — the reason picked (or typed)
+  /// in the cancel sheet, whether the cancellation was by the customer or
+  /// the shop.
+  final String? cancellationReason;
+
+  /// Last time this item's row changed (set on every status transition —
+  /// Pending -> Processing -> Packed -> Shipped -> Delivered, or on
+  /// cancellation). When itemStatus is 'Delivered' this is effectively the
+  /// delivered-on timestamp, since nothing updates the row after that.
+  final DateTime? itemUpdatedAt;
+
   final String? productName;
   final String? productImage;
   final String? shopName;
@@ -23,6 +34,8 @@ class OrderItemModel {
     required this.quantity,
     required this.price,
     required this.itemStatus,
+    this.cancellationReason,
+    this.itemUpdatedAt,
     this.productName,
     this.productImage,
     this.shopName,
@@ -43,6 +56,10 @@ class OrderItemModel {
           ) ??
           0,
       itemStatus: json['item_status'] ?? 'Processing',
+      cancellationReason: json['cancellation_reason'],
+      itemUpdatedAt: json['item_updated_at'] != null
+          ? DateTime.tryParse(json['item_updated_at'].toString())
+          : null,
 
       productName: json['product_name'],
       productImage: json['product_image'],
@@ -96,6 +113,16 @@ class OrderModel {
     this.deliveryPincode,
     required this.items,
   });
+
+  /// The amount that actually counts today — totalAmount is whatever was
+  /// charged when the order was placed and never changes afterwards, so a
+  /// cancelled item would otherwise still show up in every total on
+  /// screen. This sums price * quantity for every item that ISN'T
+  /// cancelled, so cards and the details screen always reflect what's
+  /// still active in the order.
+  double get activeTotal => items
+      .where((i) => i.itemStatus.toLowerCase() != 'cancelled')
+      .fold(0.0, (sum, i) => sum + (i.price * i.quantity));
 
   factory OrderModel.fromRows(List<Map<String, dynamic>> rows) {
     final first = rows.first;

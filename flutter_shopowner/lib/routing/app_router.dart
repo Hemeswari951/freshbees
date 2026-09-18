@@ -9,6 +9,8 @@ import '../screens/auth/reset_password.dart';
 
 import '../screens/home/home_screen.dart';
 import '../screens/orders/order_screen.dart';
+import '../screens/orders/order_details_screen.dart';
+import '../screens/notifications/notifications_screen.dart';
 import '../screens/products/add_product_screen.dart';
 import '../screens/products/products_screen.dart';
 import '../screens/products/product_view_screen.dart';
@@ -31,7 +33,9 @@ class _LayoutVisibility {
 
 _LayoutVisibility _visibilityFor(String path) {
 
-  if (path.startsWith('/products/')) {
+  if (path.startsWith('/products/') ||
+      path.startsWith('/orders/') ||
+      path == '/notifications') {
     return const _LayoutVisibility(
       showFooterOnMobile: false,
     );
@@ -89,6 +93,16 @@ final GoRouter appRouter = GoRouter(
         GoRoute(path: '/home', builder: (_, _) => const HomeScreen()),
 
         GoRoute(path: '/orders', builder: (_, _) => const OrdersScreen()),
+        GoRoute(
+          path: '/orders/:orderId',
+          builder: (_, state) => OrderDetailsScreen(
+            orderId: int.parse(state.pathParameters['orderId']!),
+          ),
+        ),
+        GoRoute(
+          path: '/notifications',
+          builder: (_, _) => const NotificationsScreen(),
+        ),
         GoRoute(
           path: '/add-product',
           builder: (_, _) => const AddProductScreen(),

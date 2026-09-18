@@ -5,6 +5,11 @@ const productService = require('../../services/customer/product.service');
 // Flutter filter panel actually filters on. Without them, ProductModel
 // gets empty sizes/colors/rating=0 for every product and Size/Color/
 // Rating filters silently match nothing.
+//
+// reviewCount added — service now selects review_count on every list
+// query (findAllPublicProducts, findPublicProductsByShop,
+// findPublicProductsBySearch), so this just needs to forward it into the
+// JSON the same way rating already is.
 function mapListItem(row) {
   return {
     id: row.product_id,
@@ -14,6 +19,7 @@ function mapListItem(row) {
     mrp: row.mrp != null ? Number(row.mrp) : null,
     discountPercent: Number(row.discount_percent) || 0,
     thumbnail: row.thumbnail || '',
+    productColorId: row.product_color_id != null ? Number(row.product_color_id) : null, // <-- ADDED
     shopId: row.shop_id,
     shopName: row.shop_name,
     categoryId: row.category_id,
@@ -25,6 +31,8 @@ function mapListItem(row) {
     sizes: row.sizes || [],
     colors: row.colors || [],
     rating: row.rating != null ? Number(row.rating) : 0,
+    reviewCount: Number(row.review_count) || 0,
+    hoverImages: row.hover_images || [],
   };
 }
 
@@ -116,13 +124,15 @@ async function listProducts(req, res) {
       minPrice,
       maxPrice,
       sortBy,
+      color, // <-- ADDED
+      size, // <-- ADDED: Extract size from query params
     } = req.query;
 
     let rows;
     if (search && search.trim() !== '') {
-      rows = await productService.findPublicProductsBySearch(search.trim());
+      rows = await productService.findPublicProductsBySearch(search.trim(), color, size);
     } else if (shopId) {
-      rows = await productService.findPublicProductsByShop(Number(shopId));
+      rows = await productService.findPublicProductsByShop(Number(shopId), color, size);
     } else {
       // minPrice / maxPrice / sortBy were previously dropped here, so the
       // Flutter price-range chips and sort sheet had no effect on the
@@ -134,6 +144,8 @@ async function listProducts(req, res) {
         minPrice,
         maxPrice,
         sortBy,
+         color, 
+         size, // <-- ADDED
       });
     }
     res.json({ success: true, data: rows.map(mapListItem) });
@@ -176,4 +188,5 @@ module.exports = {
   listProducts,
   getProduct,
   getFilterOptions,
+  mapListItem,
 };

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'product_filters.dart';
 import '../../../models/product_model.dart';
@@ -21,10 +22,17 @@ class ProductGrid extends StatefulWidget {
   /// kids
   /// beauty
   final String category;
+  final String? searchQuery;
+  final XFile? searchImage;
+  final int? shopId;
 
   const ProductGrid({
     super.key,
     required this.category,
+    this.searchQuery,
+    this.searchImage,
+    this.shopId,
+
   });
 
   @override
@@ -40,10 +48,10 @@ class _ProductGridState extends State<ProductGrid> {
   // Wishlist — same pattern as ProductListScreen
   // ------------------------------------------------------------
 
-  final Set<int> _wishlistIds = {};
+   final Set<String> _wishlistIds = {}; // <-- CHANGED from int to String
 
   bool get _isLoggedIn {
-    final token = ApiService.getAccessToken();
+    final token = ApiService.getToken();
     return token != null && token.isNotEmpty;
   }
 
@@ -59,9 +67,40 @@ class _ProductGridState extends State<ProductGrid> {
     'Kids',
   ];
 
-  // ------------------------------------------------------------
-  // Price ranges
-  // ------------------------------------------------------------
+   // Add this directly below static const List<String> _categories = [...];
+
+//new
+ static const List<String> _colors = [
+    'Black', 'White', 'Red', 'Blue', 'Green', 'Yellow', 'Pink', 'Brown'
+  ];
+
+  // Add this method near your _openCategorySheet() method
+  void _openColorSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) {
+        return _ColorSheet(
+          colors: _colors,
+          currentColor: _filters.color,
+          onSelect: (color) {
+            _applyFilter(
+              _filters.copyWith(
+                color: color,
+                clearColor: color == null,
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+
+
 
   static const List<List<dynamic>> _priceRangesOriginal = [
     ['Under ₹199', 0.0, 199.0],
@@ -84,6 +123,7 @@ class _ProductGridState extends State<ProductGrid> {
     // onto ProductFilters.category — the main category filter.
     _filters = ProductFilters(
       category: widget.category,
+      shopId: widget.shopId, // <-- ADDED
     );
 
     _priceRanges = List.of(_priceRangesOriginal);
@@ -100,7 +140,12 @@ class _ProductGridState extends State<ProductGrid> {
   void didUpdateWidget(covariant ProductGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.category != widget.category) {
+    final bool categoryChanged = oldWidget.category != widget.category;
+    final bool searchChanged =
+        oldWidget.searchQuery != widget.searchQuery ||
+        oldWidget.searchImage != widget.searchImage;
+
+    if (categoryChanged || searchChanged) {
       _filters = ProductFilters(
         category: widget.category,
       );
@@ -133,7 +178,7 @@ class _ProductGridState extends State<ProductGrid> {
   // WISHLIST
   // ------------------------------------------------------------
 
-  Future<void> _loadWishlistIds() async {
+ /* Future<void> _loadWishlistIds() async {
     if (!_isLoggedIn) return;
 
     try {
@@ -184,7 +229,74 @@ class _ProductGridState extends State<ProductGrid> {
       });
     }
   }
+*/
 
+ Future<void> _loadWishlistIds() async {
+    if (!_isLoggedIn) return;
+    try {
+      final items = await WishlistService.getWishlist();
+      if (!mounted) return;
+     setState(() {
+        _wishlistIds
+          ..clear()
+          ..addAll(items.map((p) => '${p.id}_${p.productColorId ?? 0}'));
+      });
+    } catch (_) {}
+  }
+
+
+  Future<void> _toggleWishlist(ProductModel product) async {
+    if (!_isLoggedIn) {
+      context.push('/login');
+      return;
+    }
+    
+    final key = '${product.id}_${product.productColorId ?? 0}';
+    // BUG FIX: this used to compare `product.id` (an int) against
+    // `_wishlistIds`, which is a Set<String> of "productId_colorId" keys.
+    // An int can never equal one of those strings, so this always
+    // evaluated to false — every tap was treated as "not wishlisted yet"
+    // regardless of the real state, so a color that was already wishlisted
+    // (or one that had actually been added a moment ago) could get stuck
+    // and never toggle off correctly. Check against the same composite
+    // `key` that's used everywhere else (including the isWishlisted flag
+    // passed into ProductCard below) so add/remove is always keyed by
+    // product + color, not product alone.
+    final wasWishlisted = _wishlistIds.contains(key);
+
+    setState(() {
+      if (wasWishlisted) {
+        _wishlistIds.remove(key); // Remove specific color
+      } else {
+        _wishlistIds.add(key);    // Add specific color
+      }
+    });
+
+   bool ok;
+    try {
+      ok = wasWishlisted
+          ? await WishlistService.removeFromWishlist(
+              product.id, 
+              productColorId: product.productColorId,
+            )
+          : await WishlistService.addToWishlist(
+              product.id,
+              productColorId: product.productColorId,
+            );
+    } catch (_) {
+      ok = false;
+    }
+
+    if (!ok && mounted) {
+      setState(() {
+        if (wasWishlisted) {
+          _wishlistIds.add(key); // Revert specific color
+        } else {
+          _wishlistIds.remove(key); // Revert specific color
+        }
+      });
+    }
+  }
   // ------------------------------------------------------------
   // NAVIGATION
   // ------------------------------------------------------------
@@ -334,6 +446,7 @@ class _ProductGridState extends State<ProductGrid> {
 
       _filters = ProductFilters(
         category: widget.category,
+        shopId: widget.shopId, // <-- ADDED
       );
     });
 
@@ -347,13 +460,17 @@ class _ProductGridState extends State<ProductGrid> {
   @override
   Widget build(BuildContext context) {
     final bool isMobile =
-        MediaQuery.of(context).size.width <
-            kMobileBreakpoint;
+        MediaQuery.of(context).size.width < kMobileBreakpoint;
+
+    // Image search returns a single best-match product — a sort/filter
+    // bar over one result doesn't mean anything, so it's hidden rather
+    // than shown-but-useless.
+    final bool showFilterBar = isMobile && widget.searchImage == null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (isMobile)
+        if (showFilterBar)
           _buildFilterBar(),
 
         const SizedBox(height: 12),
@@ -404,6 +521,16 @@ class _ProductGridState extends State<ProductGrid> {
           ),
 
           const SizedBox(width: 8),
+
+
+          _chip(
+            label: _filters.color ?? 'Color',
+            icon: Icons.palette_outlined, // Uses a palette icon
+            active: _filters.color != null,
+            onTap: _openColorSheet,
+          ),
+          const SizedBox(width: 8),
+
 
           // ------------------------------------------------------
           // PRICE
@@ -556,8 +683,7 @@ class _ProductGridState extends State<ProductGrid> {
   // ============================================================
 
   Widget _buildGrid() {
-    return FutureBuilder<
-        List<ProductModel>>(
+    return FutureBuilder<List<ProductModel>>(
       future: _future,
       builder: (
         context,
@@ -636,9 +762,15 @@ class _ProductGridState extends State<ProductGrid> {
         // ------------------------------------------------------
 
         if (products.isEmpty) {
-          return const Padding(
+          final String message = widget.searchImage != null
+              ? "We couldn't find a matching product for that photo"
+              : (widget.searchQuery != null
+                  ? 'No products found for "${widget.searchQuery}"'
+                  : 'No products found');
+
+          return Padding(
             padding:
-                EdgeInsets.symmetric(
+                const EdgeInsets.symmetric(
               vertical: 60,
             ),
             child: Center(
@@ -646,20 +778,24 @@ class _ProductGridState extends State<ProductGrid> {
                 mainAxisSize:
                     MainAxisSize.min,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons
                         .inventory_2_outlined,
                     size: 45,
                     color: Colors.grey,
                   ),
 
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-                  Text(
-                    'No products found',
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: Colors.black54,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Text(
+                      message,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: Colors.black54,
+                      ),
                     ),
                   ),
                 ],
@@ -671,45 +807,73 @@ class _ProductGridState extends State<ProductGrid> {
         // ------------------------------------------------------
         // GRID
         // ------------------------------------------------------
+        //
+        // Uses LayoutBuilder (instead of MediaQuery.of(context).size.width)
+        // to size against the space this widget actually has, and guards
+        // against a transient 0/invalid width — e.g. during a window
+        // resize on web (handleMetricsChanged) or a page-transition frame
+        // — which previously crashed with
+        // "crossAxisExtent > 0.0 is not true".
 
-        final width =
-            MediaQuery.of(context)
-                .size
-                .width;
+        return LayoutBuilder(
+          builder: (context, gridConstraints) {
+            if (!gridConstraints.maxWidth.isFinite ||
+                gridConstraints.maxWidth <= 0) {
+              return const SizedBox.shrink();
+            }
 
-        final maxExtent =
-            width < kMobileBreakpoint
-                ? 200.0
-                : 240.0;
+            final width = gridConstraints.maxWidth;
 
-        return GridView.builder(
-          shrinkWrap: true,
-          physics:
-              const NeverScrollableScrollPhysics(),
+            final maxExtent =
+                width < kMobileBreakpoint ? 200.0 : 240.0;
 
-          gridDelegate:
-              SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent:
-                maxExtent,
-            mainAxisSpacing: 14,
-            crossAxisSpacing: 14,
-            childAspectRatio: 0.62,
-          ),
+            // Never let maxCrossAxisExtent exceed the available width —
+            // that's what forces crossAxisExtent down to <= 0 on very
+            // narrow/transient widths.
+            final safeMaxExtent =
+                maxExtent > width ? width : maxExtent;
 
-          itemCount:
-              products.length,
+            return GridView.builder(
+              shrinkWrap: true,
+              physics:
+                  const NeverScrollableScrollPhysics(),
 
-          itemBuilder:
-              (context, index) {
-            final product = products[index];
+              gridDelegate:
+                  SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: safeMaxExtent,
+                mainAxisSpacing: 14,
+                crossAxisSpacing: 14,
+                childAspectRatio: 0.62,
+              ),
 
-            return ProductCard(
-              product: product,
-              isWishlisted:
-                  _wishlistIds.contains(product.id),
-              onWishlistTap: () =>
-                  _toggleWishlist(product),
-              onTap: () => _openProduct(product),
+              itemCount: products.length,
+
+             /* itemBuilder: (context, index) {
+                final product = products[index];
+
+                return ProductCard(
+                  product: product,
+                  isWishlisted:
+                      _wishlistIds.contains(product.id),
+                  onWishlistTap: () =>
+                      _toggleWishlist(product),
+                  onTap: () => _openProduct(product),
+                );
+              },*/
+
+               itemBuilder: (context, index) {
+                final product = products[index];
+
+                return ProductCard(
+                  product: product,
+                  // Pass the active color filter to the ProductCard
+                  color: _filters.color, 
+                  isWishlisted: _wishlistIds.contains('${product.id}_${product.productColorId ?? 0}'),
+                  onWishlistTap: () => _toggleWishlist(product),
+                  onTap: () => _openProduct(product),
+                );
+              },
+
             );
           },
         );
@@ -1158,6 +1322,134 @@ class _CategorySheetState
                               FontWeight.w700,
                         ),
                       ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ColorSheet extends StatefulWidget {
+  final List<String> colors;
+  final String? currentColor;
+  final ValueChanged<String?> onSelect;
+
+  const _ColorSheet({
+    required this.colors,
+    required this.currentColor,
+    required this.onSelect,
+  });
+
+  @override
+  State<_ColorSheet> createState() => _ColorSheetState();
+}
+
+class _ColorSheetState extends State<_ColorSheet> {
+  late String? _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.currentColor;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Colors', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: const Icon(Icons.close, size: 22),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: widget.colors.map((color) {
+                  final key = color.toLowerCase();
+                  final selected = _selected == key;
+
+                  return GestureDetector(
+                    onTap: () => setState(() => _selected = selected ? null : key),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: selected ? kAccent.withOpacity(0.12) : Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: selected ? kAccent : Colors.black26,
+                          width: selected ? 1.4 : 1,
+                        ),
+                      ),
+                      child: Text(
+                        color,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                          color: selected ? kAccent : Colors.black87,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        setState(() => _selected = null);
+                        widget.onSelect(null);
+                        Navigator.pop(context);
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: const BorderSide(color: Colors.black26),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Clear All', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        widget.onSelect(_selected);
+                        Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kAccent,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Apply Filters', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
                     ),
                   ),
                 ],

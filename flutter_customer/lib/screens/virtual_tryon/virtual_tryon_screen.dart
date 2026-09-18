@@ -7,18 +7,24 @@ import '../../widgets/app_colors.dart';
 import '../../widgets/virtual_tryon_header.dart';
 import '../../services/tryon_profile_service.dart';
 import '../../services/api_service.dart';
+import '../../models/product_model.dart';
+import '../../models/profile_model.dart';
+import '../../models/tryon_profile_model.dart';
 
 class VirtualTryOnScreen extends StatefulWidget {
   final TryOnProfile? selectedProfile;
+  final ProductModel? selectedProduct;
+  final ProfileModel? customerProfile;
 
   const VirtualTryOnScreen({
     super.key,
     this.selectedProfile,
+    this.selectedProduct,
+    this.customerProfile,
   });
 
   @override
-  State<VirtualTryOnScreen> createState() =>
-      _VirtualTryOnScreenState();
+  State<VirtualTryOnScreen> createState() => _VirtualTryOnScreenState();
 }
 
 class _VirtualTryOnScreenState extends State<VirtualTryOnScreen> {
@@ -27,10 +33,8 @@ class _VirtualTryOnScreenState extends State<VirtualTryOnScreen> {
   XFile? _selectedImage;
   String? _savedPhotoUrl;
   bool _savingPhoto = false;
-  
- 
 
-@override
+ @override
 void initState() {
   super.initState();
 
@@ -46,67 +50,104 @@ void initState() {
     'TRY-ON PHOTO URL: ${widget.selectedProfile?.photoUrl}',
   );
 
-  _savedPhotoUrl = widget.selectedProfile?.photoUrl;
+  debugPrint(
+    'CUSTOMER PROFILE: ${widget.customerProfile?.fullName}',
+  );
+
+  // ============================================================
+  // SAVED TRY-ON PROFILE
+  // ============================================================
+
+  if (widget.selectedProfile != null) {
+    _savedPhotoUrl = widget.selectedProfile!.photoUrl;
+
+    debugPrint(
+      'SAVED TRY-ON PROFILE PHOTO: $_savedPhotoUrl',
+    );
+  }
+
+  // ============================================================
+  // MAIN CUSTOMER
+  // ============================================================
+
+  else if (widget.customerProfile != null) {
+    _loadMainProfilePhoto();
+  }
 }
 
-  
+Future<void> _loadMainProfilePhoto() async {
+  try {
+    final mainProfile =
+        await TryOnProfileService.getMainProfile();
+
+    if (!mounted) return;
+
+    setState(() {
+      _savedPhotoUrl = mainProfile.photoUrl;
+    });
+
+    debugPrint(
+      'MAIN TRY-ON PROFILE PHOTO: $_savedPhotoUrl',
+    );
+  } catch (e) {
+    debugPrint(
+      'FAILED TO LOAD MAIN TRY-ON PROFILE: $e',
+    );
+  }
+}
 
   // ============================================================
   // TAKE PHOTO
   // ============================================================
 
   Future<void> _takePhoto() async {
-  try {
-    final XFile? image = await _picker.pickImage(
-      source: ImageSource.camera,
-      imageQuality: 85,
-    );
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+      );
 
-    if (image == null) return;
+      if (image == null) return;
 
-    setState(() {
-      _selectedImage = image;
-    });
-  } catch (e) {
-    debugPrint('Camera error: $e');
+      setState(() {
+        _selectedImage = image;
+      });
+    } catch (e) {
+      debugPrint('Camera error: $e');
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Unable to open camera'),
-      ),
-    );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Unable to open camera')));
+    }
   }
-}
   // ============================================================
   // UPLOAD PHOTO
   // ============================================================
 
   Future<void> _uploadPhoto() async {
-  try {
-    final XFile? image = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-    );
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
 
-    if (image == null) return;
+      if (image == null) return;
 
-    setState(() {
-      _selectedImage = image;
-    });
-  } catch (e) {
-    debugPrint('Gallery error: $e');
+      setState(() {
+        _selectedImage = image;
+      });
+    } catch (e) {
+      debugPrint('Gallery error: $e');
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Unable to open gallery'),
-      ),
-    );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Unable to open gallery')));
+    }
   }
-}
   // ============================================================
   // CONTINUE
   // ============================================================
@@ -117,13 +158,10 @@ void initState() {
   // ---------------------------------------------------------
 
   if (_selectedImage == null &&
-      (_savedPhotoUrl == null ||
-          _savedPhotoUrl!.isEmpty)) {
+      (_savedPhotoUrl == null || _savedPhotoUrl!.isEmpty)) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text(
-          'Please add your photo first',
-        ),
+        content: Text('Please add your photo first'),
       ),
     );
 
@@ -131,109 +169,210 @@ void initState() {
   }
 
   // ---------------------------------------------------------
-  // If user selected a NEW image, upload it first
+  // NEW IMAGE SELECTED
   // ---------------------------------------------------------
 
   if (_selectedImage != null) {
-    if (widget.selectedProfile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please select a try-on profile first',
-          ),
-        ),
-      );
 
-      return;
-    }
+    // =======================================================
+// MAIN CUSTOMER - ME
+// =======================================================
+
+if (widget.customerProfile != null) {
+  setState(() {
+    _savingPhoto = true;
+  });
+
+  try {
+    // ---------------------------------------------------
+    // Get permanent main Try-On profile
+    // ---------------------------------------------------
+
+    final mainProfile =
+        await TryOnProfileService.getMainProfile();
+
+    debugPrint(
+      'MAIN TRY-ON PROFILE ID: ${mainProfile.profileId}',
+    );
+
+    debugPrint(
+      'MAIN TRY-ON EXISTING PHOTO: ${mainProfile.photoUrl}',
+    );
+
+    // ---------------------------------------------------
+    // Upload newly selected photo
+    // ---------------------------------------------------
+
+    final image = _selectedImage!;
+
+    final bytes = await image.readAsBytes();
+
+    final updatedProfile =
+        await TryOnProfileService.uploadProfilePhoto(
+      profileId: mainProfile.profileId,
+      filePath: image.name,
+      bytes: bytes,
+    );
+
+    debugPrint(
+      'MAIN CUSTOMER PHOTO SAVED SUCCESSFULLY',
+    );
+
+    debugPrint(
+      'MAIN CUSTOMER SAVED PHOTO URL: '
+      '${updatedProfile.photoUrl}',
+    );
+
+    if (!mounted) return;
 
     setState(() {
-      _savingPhoto = true;
+      _savedPhotoUrl = updatedProfile.photoUrl;
+      _savingPhoto = false;
     });
 
-    try {
-      final image = _selectedImage!;
+    // ---------------------------------------------------
+    // Continue to product selection
+    // ---------------------------------------------------
 
-      final bytes = await image.readAsBytes();
+    context.push(
+      '/virtual-tryon/products',
+      extra: {
+        'photo': null,
+        'photoUrl': updatedProfile.photoUrl,
+        'profile': updatedProfile,
+      },
+    );
 
-      debugPrint(
-        'UPLOADING PHOTO FOR PROFILE: '
-        '${widget.selectedProfile!.profileId}',
-      );
+    return;
 
-      final updatedProfile =
-          await TryOnProfileService.uploadProfilePhoto(
-        profileId:
-            widget.selectedProfile!.profileId,
-        filePath: image.name,
-        bytes: bytes,
-      );
+  } catch (e) {
+    debugPrint(
+      'MAIN CUSTOMER PHOTO UPLOAD ERROR: $e',
+    );
 
-      debugPrint(
-        'PHOTO SAVED SUCCESSFULLY',
-      );
+    if (!mounted) return;
 
-      debugPrint(
-        'SAVED PHOTO URL: '
-        '${updatedProfile.photoUrl}',
-      );
+    setState(() {
+      _savingPhoto = false;
+    });
 
-      if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Failed to save photo: $e',
+        ),
+      ),
+    );
 
-// Keep the selected XFile because the next screen
-// currently expects an XFile.
-//final XFile uploadedPhoto = image;
+    return;
+  }
+}
+    // =======================================================
+    // ADDITIONAL TRY-ON PROFILE
+    // =======================================================
 
-setState(() {
-  _savedPhotoUrl = updatedProfile.photoUrl;
-  _savingPhoto = false;
-});
-
-context.push(
-  '/virtual-tryon/products',
-  extra: {
-    'photo': null,
-    'photoUrl': _savedPhotoUrl,
-    'profile': widget.selectedProfile,
-  },
-);
-
-return;
-    } catch (e) {
-      debugPrint(
-        'PROFILE PHOTO UPLOAD ERROR: $e',
-      );
-
-      if (!mounted) return;
-
+    if (widget.selectedProfile != null) {
       setState(() {
-        _savingPhoto = false;
+        _savingPhoto = true;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Failed to save photo: $e',
-          ),
-        ),
-      );
+      try {
+        final image = _selectedImage!;
 
-      return;
+        final bytes = await image.readAsBytes();
+
+        debugPrint(
+          'UPLOADING PHOTO FOR PROFILE: '
+          '${widget.selectedProfile!.profileId}',
+        );
+
+        final updatedProfile =
+            await TryOnProfileService.uploadProfilePhoto(
+          profileId:
+              widget.selectedProfile!.profileId,
+          filePath: image.name,
+          bytes: bytes,
+        );
+
+        debugPrint('PHOTO SAVED SUCCESSFULLY');
+
+        debugPrint(
+          'SAVED PHOTO URL: ${updatedProfile.photoUrl}',
+        );
+
+        if (!mounted) return;
+
+        setState(() {
+          _savedPhotoUrl = updatedProfile.photoUrl;
+          _savingPhoto = false;
+        });
+
+        context.push(
+          '/virtual-tryon/products',
+          extra: {
+            'photo': null,
+            'photoUrl': _savedPhotoUrl,
+            'profile': widget.selectedProfile,
+          },
+        );
+
+        return;
+
+      } catch (e) {
+        debugPrint(
+          'PROFILE PHOTO UPLOAD ERROR: $e',
+        );
+
+        if (!mounted) return;
+
+        setState(() {
+          _savingPhoto = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to save photo: $e',
+            ),
+          ),
+        );
+
+        return;
+      }
     }
+
+    // -------------------------------------------------------
+    // Safety check
+    // -------------------------------------------------------
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Please select a profile first'),
+      ),
+    );
+
+    return;
   }
 
   // ---------------------------------------------------------
-  // Existing saved photo
+  // EXISTING SAVED PHOTO
   // ---------------------------------------------------------
 
- context.push(
-  '/virtual-tryon/products',
-  extra: {
-    'photo': null,
-    'photoUrl': _savedPhotoUrl,
-    'profile': widget.selectedProfile,
-  },
-);
+  if (_savedPhotoUrl != null &&
+      _savedPhotoUrl!.isNotEmpty) {
+
+    context.push(
+      '/virtual-tryon/products',
+      extra: {
+        'photo': null,
+        'photoUrl': _savedPhotoUrl,
+        'profile': widget.selectedProfile ??
+            widget.customerProfile,
+      },
+    );
+
+    return;
+  }
 }
 
   // ============================================================
@@ -245,215 +384,178 @@ return;
     return Scaffold(
       backgroundColor: AppColors.cream,
 
-      
       // ========================================================
       // BODY
       // ========================================================
-
       body: SafeArea(
         child: Column(
-      children: [
-         VirtualTryOnHeader(
-          title: 'Virtual Try-On',
-          onBack: () {
-    context.go('/virtual-tryon/select-profile');
-  },
-        ),
+          children: [
+            VirtualTryOnHeader(
+              title: 'Virtual Try-On',
+              onBack: () {
+                context.go('/virtual-tryon/select-profile');
+              },
+            ),
 
-        Expanded(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(
-            20,
-            10,
-            20,
-            30,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-
-              // ==================================================
-              // TITLE
-              // ==================================================
-
-              const Text(
-                'Try Before You Buy',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black,
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              const Text(
-                'See how an outfit looks on you before you buy it.',
-                style: TextStyle(
-                  fontSize: 15,
-                  height: 1.4,
-                  color: Colors.black54,
-                ),
-              ),
-
-              const SizedBox(height: 28),
-
-              // ==================================================
-              // PHOTO AREA
-              // ==================================================
-
-              Container(
-                width: double.infinity,
-                height: 360,
-                decoration: BoxDecoration(
-                  color: AppColors.cardBg,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: AppColors.border,
-                  ),
-                ),
-                child: _selectedImage != null
-    ? _selectedPhoto()
-    : _savedPhotoUrl != null &&
-            _savedPhotoUrl!.isNotEmpty
-        ? _savedPhoto()
-        : _emptyPhotoState(),
-              ),
-
-              const SizedBox(height: 22),
-
-              // ==================================================
-              // INSTRUCTIONS
-              // ==================================================
-
-              const Text(
-                'For the best result',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black,
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              const Text(
-                'Use a clear front-facing photo with good lighting. '
-                'Try to keep your full outfit visible.',
-                style: TextStyle(
-                  fontSize: 13,
-                  height: 1.5,
-                  color: Colors.black54,
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // ==================================================
-              // PHOTO BUTTONS
-              // ==================================================
-
-              Row(
-                children: [
-
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _takePhoto,
-                      icon: const Icon(
-                        Icons.camera_alt_outlined,
-                      ),
-                      label: const Text('Take Photo'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.black,
-                        side: const BorderSide(
-                          color: Colors.black,
-                        ),
-                        minimumSize: const Size(
-                          double.infinity,
-                          52,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(14),
-                        ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ==================================================
+                    // TITLE
+                    // ==================================================
+                    const Text(
+                      'Try Before You Buy',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black,
                       ),
                     ),
-                  ),
 
-                  const SizedBox(width: 12),
+                    const SizedBox(height: 8),
 
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _uploadPhoto,
-                      icon: const Icon(
-                        Icons.photo_library_outlined,
-                      ),
-                      label: const Text('Upload'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.black,
-                        side: const BorderSide(
-                          color: Colors.black,
-                        ),
-                        minimumSize: const Size(
-                          double.infinity,
-                          52,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(14),
-                        ),
+                    const Text(
+                      'See how an outfit looks on you before you buy it.',
+                      style: TextStyle(
+                        fontSize: 15,
+                        height: 1.4,
+                        color: Colors.black54,
                       ),
                     ),
-                  ),
-                ],
-              ),
 
-              const SizedBox(height: 18),
+                    const SizedBox(height: 28),
 
-              // ==================================================
-              // CONTINUE
-              // ==================================================
-
-              SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton(
-                  onPressed:  _savingPhoto
-    ? null
-    : _continue,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(14),
+                    // ==================================================
+                    // PHOTO AREA
+                    // ==================================================
+                    Container(
+                      width: double.infinity,
+                      height: 360,
+                      decoration: BoxDecoration(
+                        color: AppColors.cardBg,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: _selectedImage != null
+                          ? _selectedPhoto()
+                          : _savedPhotoUrl != null && _savedPhotoUrl!.isNotEmpty
+                          ? _savedPhoto()
+                          : _emptyPhotoState(),
                     ),
-                  ),
-                  child: _savingPhoto
-    ? const SizedBox(
-        width: 22,
-        height: 22,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: Colors.white,
-        ),
-      )
-    
-                  : const Text(
-                    'Continue',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+
+                    const SizedBox(height: 22),
+
+                    // ==================================================
+                    // INSTRUCTIONS
+                    // ==================================================
+                    const Text(
+                      'For the best result',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black,
+                      ),
                     ),
-                  ),
+
+                    const SizedBox(height: 8),
+
+                    const Text(
+                      'Use a clear front-facing photo with good lighting. '
+                      'Try to keep your full outfit visible.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.5,
+                        color: Colors.black54,
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // ==================================================
+                    // PHOTO BUTTONS
+                    // ==================================================
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _takePhoto,
+                            icon: const Icon(Icons.camera_alt_outlined),
+                            label: const Text('Take Photo'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.black,
+                              side: const BorderSide(color: Colors.black),
+                              minimumSize: const Size(double.infinity, 52),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(width: 12),
+
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _uploadPhoto,
+                            icon: const Icon(Icons.photo_library_outlined),
+                            label: const Text('Upload'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.black,
+                              side: const BorderSide(color: Colors.black),
+                              minimumSize: const Size(double.infinity, 52),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // ==================================================
+                    // CONTINUE
+                    // ==================================================
+                    SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: ElevatedButton(
+                        onPressed: _savingPhoto ? null : _continue,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.black,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: _savingPhoto
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Continue',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-      ],
+            ),
+          ],
         ),
       ),
     );
@@ -467,21 +569,13 @@ return;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: const [
-
-        Icon(
-          Icons.person_outline,
-          size: 70,
-          color: Colors.black38,
-        ),
+        Icon(Icons.person_outline, size: 70, color: Colors.black38),
 
         SizedBox(height: 16),
 
         Text(
           'Add your photo',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
 
         SizedBox(height: 6),
@@ -489,142 +583,44 @@ return;
         Text(
           'Take a photo or choose one from your gallery',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 13,
-            color: Colors.black54,
-          ),
+          style: TextStyle(fontSize: 13, color: Colors.black54),
         ),
       ],
     );
   }
 
-//save photo widget
+  //save photo widget
 
   Widget _savedPhoto() {
-  final fullPhotoUrl =
-      ApiService.imageUrl(_savedPhotoUrl);
+    final fullPhotoUrl = ApiService.imageUrl(_savedPhotoUrl);
 
-  debugPrint(
-    'SAVED PHOTO URL FROM DB: $_savedPhotoUrl',
-  );
+    debugPrint('SAVED PHOTO URL FROM DB: $_savedPhotoUrl');
 
-  debugPrint(
-    'SAVED PHOTO FULL URL: $fullPhotoUrl',
-  );
+    debugPrint('SAVED PHOTO FULL URL: $fullPhotoUrl');
 
-  return ClipRRect(
-    borderRadius: BorderRadius.circular(24),
-    child: Stack(
-      fit: StackFit.expand,
-      children: [
-        Image.network(
-          fullPhotoUrl,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: double.infinity,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.network(
+            fullPhotoUrl,
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
 
-          loadingBuilder: (
-            context,
-            child,
-            loadingProgress,
-          ) {
-            if (loadingProgress == null) {
-              return child;
-            }
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) {
+                return child;
+              }
 
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          },
+              return const Center(child: CircularProgressIndicator());
+            },
 
-          errorBuilder: (
-            context,
-            error,
-            stackTrace,
-          ) {
-            debugPrint(
-              'SAVED PHOTO LOAD ERROR: $error',
-            );
+            errorBuilder: (context, error, stackTrace) {
+              debugPrint('SAVED PHOTO LOAD ERROR: $error');
 
-            debugPrint(
-              'FAILED IMAGE URL: $fullPhotoUrl',
-            );
-
-            return const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.broken_image_outlined,
-                    size: 55,
-                    color: Colors.black38,
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Unable to load saved photo',
-                    style: TextStyle(
-                      color: Colors.black54,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-
-        Positioned(
-          left: 12,
-          top: 12,
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 7,
-            ),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius:
-                  BorderRadius.circular(20),
-            ),
-            child: const Text(
-              'Saved Photo',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.black,
-              ),
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-  // ============================================================
-  // SELECTED PHOTO
-  // ============================================================
-
-  Widget _selectedPhoto() {
-  return ClipRRect(
-    borderRadius: BorderRadius.circular(24),
-    child: Stack(
-      fit: StackFit.expand,
-      children: [
-        FutureBuilder<Uint8List>(
-          future: _selectedImage!.readAsBytes(),
-          builder: (context, snapshot) {
-            // Loading
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(),
-              );
-            }
-
-            // Error
-            if (snapshot.hasError) {
-              debugPrint(
-                'Image preview error: ${snapshot.error}',
-              );
+              debugPrint('FAILED IMAGE URL: $fullPhotoUrl');
 
               return const Center(
                 child: Column(
@@ -637,64 +633,122 @@ return;
                     ),
                     SizedBox(height: 8),
                     Text(
-                      'Unable to preview image',
-                      style: TextStyle(
-                        color: Colors.black54,
-                      ),
+                      'Unable to load saved photo',
+                      style: TextStyle(color: Colors.black54),
                     ),
                   ],
                 ),
               );
-            }
+            },
+          ),
 
-            // No image
-            if (!snapshot.hasData) {
-              return const Center(
-                child: Icon(
-                  Icons.image_outlined,
-                  size: 55,
-                  color: Colors.black38,
+          Positioned(
+            left: 12,
+            top: 12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'Saved Photo',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black,
                 ),
-              );
-            }
-
-            // Actual image
-            return Image.memory(
-              snapshot.data!,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-            );
-          },
-        ),
-
-        // Close / change photo button
-        Positioned(
-          top: 12,
-          right: 12,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: IconButton(
-              onPressed: () {
-                setState(() {
-                  _selectedImage = null;
-                });
-              },
-              icon: const Icon(
-                Icons.close,
-                color: Colors.black,
               ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 
+  // ============================================================
+  // SELECTED PHOTO
+  // ============================================================
 
+  Widget _selectedPhoto() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          FutureBuilder<Uint8List>(
+            future: _selectedImage!.readAsBytes(),
+            builder: (context, snapshot) {
+              // Loading
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
+              // Error
+              if (snapshot.hasError) {
+                debugPrint('Image preview error: ${snapshot.error}');
+
+                return const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.broken_image_outlined,
+                        size: 55,
+                        color: Colors.black38,
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Unable to preview image',
+                        style: TextStyle(color: Colors.black54),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              // No image
+              if (!snapshot.hasData) {
+                return const Center(
+                  child: Icon(
+                    Icons.image_outlined,
+                    size: 55,
+                    color: Colors.black38,
+                  ),
+                );
+              }
+
+              // Actual image
+              return Image.memory(
+                snapshot.data!,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+              );
+            },
+          ),
+
+          // Close / change photo button
+          Positioned(
+            top: 12,
+            right: 12,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: IconButton(
+                onPressed: () {
+                  setState(() {
+                    _selectedImage = null;
+                  });
+                },
+                icon: const Icon(Icons.close, color: Colors.black),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

@@ -19,7 +19,7 @@ class AppConfig {
     }
 
     // Production
-    return 'https://api.thiraa.com';
+    return 'https://thiraa.onrender.com';
   }
 }
 

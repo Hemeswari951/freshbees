@@ -8,4 +8,6 @@ router.use('/products',  require('./product.routes'));
 router.use('/customers', require('./customer.route'));
 // router.use('/orders',    require('./orders.routes'));
 router.use('/settings', require('./settings.routes'));
+router.use('/notifications', require('./notification.routes'));
+
 module.exports = router;

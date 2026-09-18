@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/tryon_profile_service.dart';
+import '../../models/tryon_profile_model.dart';
 
 class AddPersonScreen extends StatefulWidget {
-  const AddPersonScreen({super.key});
+  final TryOnProfile? profile;
+  const AddPersonScreen({super.key,this.profile,});
 
   @override
   State<AddPersonScreen> createState() => _AddPersonScreenState();
@@ -16,8 +18,34 @@ class _AddPersonScreenState extends State<AddPersonScreen> {
 
   String? _relationship;
   String? _gender;
-  String? _ageGroup;
+  DateTime? _dateOfBirth;
   String? _size;
+
+  @override
+void initState() {
+  super.initState();
+
+  final profile = widget.profile;
+
+  if (profile != null) {
+    _nameController.text = profile.profileName;
+    _heightController.text =
+        profile.height?.toString() ?? '';
+    _weightController.text =
+        profile.weight?.toString() ?? '';
+
+    _relationship = profile.relationship;
+    _gender = profile.gender;
+    _size = profile.size;
+
+    if (profile.dateOfBirth != null &&
+        profile.dateOfBirth!.isNotEmpty) {
+      _dateOfBirth = DateTime.tryParse(
+        profile.dateOfBirth!,
+      );
+    }
+  }
+}
 
   @override
   void dispose() {
@@ -31,7 +59,7 @@ class _AddPersonScreenState extends State<AddPersonScreen> {
   if (_nameController.text.trim().isEmpty ||
       _relationship == null ||
       _gender == null ||
-      _ageGroup == null ||
+      _dateOfBirth == null ||
       _size == null) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -42,64 +70,89 @@ class _AddPersonScreenState extends State<AddPersonScreen> {
   }
 
   try {
-    // Convert age group to an age only if your UI
-    // currently doesn't have an exact age field.
-    int? age;
-
-    switch (_ageGroup) {
-      case 'Child':
-        age = 10;
-        break;
-      case 'Teen':
-        age = 16;
-        break;
-      case 'Adult':
-        age = 25;
-        break;
-      case 'Senior':
-        age = 60;
-        break;
-    }
-
     final heightText = _heightController.text.trim();
     final weightText = _weightController.text.trim();
 
-    final profile = await TryOnProfileService.createProfile(
-      profileName: _nameController.text.trim(),
-      relationship: _relationship!,
-      gender: _gender,
-      age: age,
-      size: _size,
-      height: heightText.isEmpty
-          ? null
-          : double.tryParse(heightText),
-      weight: weightText.isEmpty
-          ? null
-          : double.tryParse(weightText),
-      photoUrl: null,
-      isDefault: false,
-    );
+    final existingProfile = widget.profile;
 
-    if (!mounted) return;
+    if (existingProfile != null) {
+      // =====================================================
+      // EDIT EXISTING TRY-ON PROFILE
+      // =====================================================
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '${profile.profileName} added successfully',
+      final updatedProfile =
+          await TryOnProfileService.updateProfile(
+        profileId: existingProfile.profileId,
+        profileName: _nameController.text.trim(),
+        relationship: _relationship!,
+        gender: _gender,
+        dateOfBirth:
+            _dateOfBirth?.toIso8601String().split('T').first,
+        size: _size,
+        height: heightText.isEmpty
+            ? null
+            : double.tryParse(heightText),
+        weight: weightText.isEmpty
+            ? null
+            : double.tryParse(weightText),
+        photoUrl: existingProfile.photoUrl,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${updatedProfile.profileName} updated successfully',
+          ),
         ),
-      ),
-    );
+      );
 
-    // Return to profile selection.
-    context.pop(true);
+      context.pop(true);
+    } else {
+      // =====================================================
+      // ADD NEW TRY-ON PROFILE
+      // =====================================================
 
+      final profile =
+          await TryOnProfileService.createProfile(
+        profileName: _nameController.text.trim(),
+        relationship: _relationship!,
+        gender: _gender,
+        dateOfBirth:
+            _dateOfBirth?.toIso8601String().split('T').first,
+        size: _size,
+        height: heightText.isEmpty
+            ? null
+            : double.tryParse(heightText),
+        weight: weightText.isEmpty
+            ? null
+            : double.tryParse(weightText),
+        photoUrl: null,
+        isDefault: false,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${profile.profileName} added successfully',
+          ),
+        ),
+      );
+
+      context.pop(true);
+    }
   } catch (e) {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Unable to add person: $e',
+          widget.profile != null
+              ? 'Unable to update profile: $e'
+              : 'Unable to add person: $e',
         ),
       ),
     );
@@ -121,8 +174,10 @@ class _AddPersonScreenState extends State<AddPersonScreen> {
           ),
           onPressed: () => context.pop(),
         ),
-        title: const Text(
-          'Add Person',
+        title: Text(
+         widget.profile == null
+      ? 'Save Person'
+      : 'Save Changes',
           style: TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.w600,
@@ -194,7 +249,7 @@ class _AddPersonScreenState extends State<AddPersonScreen> {
               const SizedBox(height: 8),
 
               DropdownButtonFormField<String>(
-                value: _relationship,
+                initialValue: _relationship,
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: Colors.white,
@@ -258,11 +313,10 @@ class _AddPersonScreenState extends State<AddPersonScreen> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-
-              const SizedBox(height: 8),
+const SizedBox(height: 8),
 
               DropdownButtonFormField<String>(
-                value: _gender,
+                initialValue: _gender,
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: Colors.white,
@@ -293,54 +347,22 @@ class _AddPersonScreenState extends State<AddPersonScreen> {
                 },
               ),
 
+             
               const SizedBox(height: 20),
 
-              // AGE GROUP
-              const Text(
-                'Age Group *',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+const Text(
+  'Date of Birth *',
+  style: TextStyle(
+    fontWeight: FontWeight.w600,
+  ),
+),
 
-              const SizedBox(height: 8),
+const SizedBox(height: 8),
 
-              DropdownButtonFormField<String>(
-                value: _ageGroup,
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                hint: const Text('Select age group'),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'Child',
-                    child: Text('Child'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'Teen',
-                    child: Text('Teen'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'Adult',
-                    child: Text('Adult'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'Senior',
-                    child: Text('Senior'),
-                  ),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _ageGroup = value;
-                  });
-                },
-              ),
+_dateOfBirthField(),
 
+              
+              
               const SizedBox(height: 20),
 
               // SIZE
@@ -354,7 +376,7 @@ class _AddPersonScreenState extends State<AddPersonScreen> {
               const SizedBox(height: 8),
 
               DropdownButtonFormField<String>(
-                value: _size,
+                initialValue: _size,
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: Colors.white,
@@ -465,8 +487,10 @@ class _AddPersonScreenState extends State<AddPersonScreen> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: const Text(
-                    'Save Person',
+                  child: Text(
+  widget.profile != null
+      ? 'Save Changes'
+      : 'Save Person',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -482,4 +506,53 @@ class _AddPersonScreenState extends State<AddPersonScreen> {
       ),
     );
   }
+
+  Widget _dateOfBirthField() {
+  return InkWell(
+    onTap: () async {
+      final now = DateTime.now();
+
+      final picked = await showDatePicker(
+        context: context,
+        initialDate: _dateOfBirth ??
+            DateTime(
+              now.year - 25,
+              now.month,
+              now.day,
+            ),
+        firstDate: DateTime(1900),
+        lastDate: now,
+      );
+
+      if (picked != null) {
+        setState(() {
+          _dateOfBirth = picked;
+        });
+      }
+    },
+    child: InputDecorator(
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+      ),
+      child: Text(
+        _dateOfBirth == null
+            ? 'Select date of birth'
+            : '${_dateOfBirth!.day.toString().padLeft(2, '0')}/'
+              '${_dateOfBirth!.month.toString().padLeft(2, '0')}/'
+              '${_dateOfBirth!.year}',
+        style: TextStyle(
+          color: _dateOfBirth == null
+              ? Colors.black54
+              : Colors.black,
+        ),
+      ),
+    ),
+  );
+}
+
 }

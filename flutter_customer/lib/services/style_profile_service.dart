@@ -1,9 +1,24 @@
 import 'api_service.dart';
 
 class StyleProfileService {
-  /// Get the currently logged-in customer's style profile.
-  static Future<Map<String, dynamic>?> getProfile() async {
-    final response = await ApiService.get('/style-profile');
+  /// Get style profile.
+  ///
+  /// If [tryOnProfileId] is null:
+  ///   → gets the main customer's style profile.
+  ///
+  /// If [tryOnProfileId] is provided:
+  ///   → gets that Try-On profile's style.
+  static Future<Map<String, dynamic>?> getProfile({
+    int? tryOnProfileId,
+  }) async {
+    String endpoint = '/style-profile';
+
+    if (tryOnProfileId != null) {
+      endpoint =
+          '/style-profile?tryon_profile_id=$tryOnProfileId';
+    }
+
+    final response = await ApiService.get(endpoint);
 
     if (response['success'] != true) {
       throw Exception(
@@ -14,26 +29,32 @@ class StyleProfileService {
     return response['data'] as Map<String, dynamic>?;
   }
 
-  /// Create or update the currently logged-in customer's style profile.
+
+  /// Create or update style profile.
+  ///
+  /// If [tryOnProfileId] is null:
+  ///   → saves the main customer's style.
+  ///
+  /// If [tryOnProfileId] is provided:
+  ///   → saves that Try-On profile's style.
   static Future<Map<String, dynamic>> saveProfile({
-    required String gender,
-    required String ageGroup,
-    required double heightCm,
-    required double weightKg,
-    required String size,
-    required List<String> preferredColors,
-    required List<String> preferredStyles,
+    int? tryOnProfileId,
+    String? apparelSize,
+    String? fitPreference,
+    List<String>? preferredColors,
+    List<String>? preferredStyles,
   }) async {
+
     final response = await ApiService.put(
       '/style-profile',
       {
-        'gender': gender,
-        'age_group': ageGroup,
-        'height_cm': heightCm,
-        'weight_kg': weightKg,
-        'size': size,
-        'preferred_colors': preferredColors,
-        'preferred_styles': preferredStyles,
+        // Only included when editing a Try-On profile.
+        'tryon_profile_id': tryOnProfileId,
+
+        'apparel_size': apparelSize,
+        'fit_preference': fitPreference,
+        'preferred_colors': preferredColors ?? [],
+        'preferred_styles': preferredStyles ?? [],
       },
     );
 

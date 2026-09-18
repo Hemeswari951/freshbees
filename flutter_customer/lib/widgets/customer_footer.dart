@@ -25,14 +25,14 @@ class CustomerFooter extends StatelessWidget {
 
   // Checks login state before navigating to a protected route.
   void _goToProtected(BuildContext context, String route) {
-    final token = ApiService.getAccessToken();
+    final token = ApiService.getToken();
 
     final isLoggedIn = token != null && token.isNotEmpty;
 
     if (isLoggedIn) {
-      context.go(route);
+      context.push(route);
     } else {
-      context.go(
+      context.push(
         Uri(path: '/login', queryParameters: {'redirect': route}).toString(),
       );
     }

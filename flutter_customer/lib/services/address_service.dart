@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'api_service.dart';
@@ -18,6 +17,13 @@ class AddressModel {
   final String addressType;
   final bool isDefault;
 
+  /// Saved coordinates for this address, if the backend has them.
+  /// LocationManager uses these directly for "nearest shop" lookups,
+  /// so they must come through even when null (no silent 0,0 fallback —
+  /// that would look like a real point in the Gulf of Guinea).
+  final double? latitude;
+  final double? longitude;
+
   AddressModel({
     required this.addressId,
     required this.fullName,
@@ -30,6 +36,8 @@ class AddressModel {
     required this.pincode,
     required this.addressType,
     required this.isDefault,
+    this.latitude,
+    this.longitude,
   });
 
   factory AddressModel.fromJson(Map<String, dynamic> json) {
@@ -45,7 +53,15 @@ class AddressModel {
       pincode: json['pincode'] ?? '',
       addressType: json['addressType'] ?? 'Home',
       isDefault: json['isDefault'] == true,
+      latitude: _toDouble(json['latitude']),
+      longitude: _toDouble(json['longitude']),
     );
+  }
+
+  static double? _toDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
   }
 
   /// "123 Main St, Near Park, Bengaluru, Karnataka - 560001"
@@ -60,7 +76,7 @@ class AddressModel {
 class AddressService {
   static Map<String, String> get _headers => {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${ApiService.getAccessToken()}',
+        'Authorization': 'Bearer ${ApiService.getToken()}',
       };
 
   /// GET /api/customer/addresses
@@ -91,6 +107,8 @@ class AddressService {
     required String pincode,
     String addressType = 'Home',
     bool isDefault = false,
+    double? latitude,
+    double? longitude,
   }) async {
     final response = await http.post(
       Uri.parse('${ApiService.serverUrl}/api/customer/addresses'),
@@ -106,6 +124,8 @@ class AddressService {
         'pincode': pincode,
         'address_type': addressType,
         'is_default': isDefault,
+        'latitude': latitude,
+        'longitude': longitude,
       }),
     );
 

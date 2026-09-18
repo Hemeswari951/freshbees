@@ -1,4 +1,3 @@
-
 /*const express = require("express");
 const router = express.Router();
 
@@ -15,7 +14,7 @@ const express = require("express");
 const router = express.Router();
 
 const orderController = require("../../controllers/customer/order.controller");
-const customerAuth = require("../../middleware/customerauth");
+const customerAuth = require("../../middleware/customerAuth");
 
 // POST /api/customer/orders  { product_id, variant_id?, quantity }
 router.post("/", customerAuth, orderController.placeOrder);
@@ -25,5 +24,9 @@ router.post("/checkout", customerAuth, orderController.checkoutCart);
 
 router.get("/", customerAuth, orderController.getMyOrders);
 
-module.exports = router;
+// GET /api/customer/orders/:orderId — MUST stay after "/checkout" above,
+// since Express matches routes top-to-bottom and ":orderId" would
+// otherwise swallow "/checkout" as if "checkout" were an order id.
+router.get("/:orderId", customerAuth, orderController.getOrderById);
 
+module.exports = router;

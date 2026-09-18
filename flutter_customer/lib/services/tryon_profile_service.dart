@@ -3,74 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 import 'api_service.dart';
-
-class TryOnProfile {
-  final int profileId;
-  final int customerId;
-  final String profileName;
-  final String relationship;
-  final String? gender;
-  final int? age;
-  final String? size;
-  final double? height;
-  final double? weight;
-  final String? photoUrl;
-  final bool isDefault;
-
-  TryOnProfile({
-    required this.profileId,
-    required this.customerId,
-    required this.profileName,
-    required this.relationship,
-    this.gender,
-    this.age,
-    this.size,
-    this.height,
-    this.weight,
-    this.photoUrl,
-    required this.isDefault,
-  });
-
-  factory TryOnProfile.fromJson(Map<String, dynamic> json) {
-    return TryOnProfile(
-      profileId:
-          int.tryParse(json['profile_id'].toString()) ?? 0,
-
-      customerId:
-          int.tryParse(json['customer_id'].toString()) ?? 0,
-
-      profileName:
-          json['profile_name']?.toString() ?? '',
-
-      relationship:
-          json['relationship']?.toString() ?? '',
-
-      gender:
-          json['gender']?.toString(),
-
-      age: json['age'] != null
-          ? int.tryParse(json['age'].toString())
-          : null,
-
-      size:
-          json['size']?.toString(),
-
-      height: json['height'] != null
-          ? double.tryParse(json['height'].toString())
-          : null,
-
-      weight: json['weight'] != null
-          ? double.tryParse(json['weight'].toString())
-          : null,
-
-      photoUrl:
-          json['photo_url']?.toString(),
-
-      isDefault:
-          json['is_default'] == true,
-    );
-  }
-}
+import '../models/tryon_profile_model.dart';
 
 
 class TryOnProfileService {
@@ -78,7 +11,7 @@ class TryOnProfileService {
   static Map<String, String> get _headers => {
         'Content-Type': 'application/json',
         'Authorization':
-            'Bearer ${ApiService.getAccessToken()}',
+            'Bearer ${ApiService.getToken()}',
       };
 
 
@@ -127,7 +60,7 @@ class TryOnProfileService {
     required String profileName,
     required String relationship,
     String? gender,
-    int? age,
+    String? dateOfBirth,
     String? size,
     double? height,
     double? weight,
@@ -144,7 +77,7 @@ class TryOnProfileService {
         'profileName': profileName,
         'relationship': relationship,
         'gender': gender,
-        'age': age,
+        'date_of_birth': dateOfBirth,
         'size': size,
         'height': height,
         'weight': weight,
@@ -180,12 +113,17 @@ class TryOnProfileService {
     String? profileName,
     String? relationship,
     String? gender,
-    int? age,
+    String? dateOfBirth,
     String? size,
     double? height,
     double? weight,
     String? photoUrl,
   }) async {
+
+    print(
+  'UPDATE TRY-ON PROFILE SENT DOB: $dateOfBirth',
+);
+
 
     final response = await http.put(
       Uri.parse(
@@ -196,7 +134,7 @@ class TryOnProfileService {
         'profileName': profileName,
         'relationship': relationship,
         'gender': gender,
-        'age': age,
+        'date_of_birth': dateOfBirth,
         'size': size,
         'height': height,
         'weight': weight,
@@ -270,7 +208,7 @@ static Future<TryOnProfile> uploadPhoto({
 
     // Authentication
     request.headers['Authorization'] =
-        'Bearer ${ApiService.getAccessToken()}';
+        'Bearer ${ApiService.getToken()}';
 
     // Read image bytes
     final bytes = await image.readAsBytes();
@@ -333,7 +271,7 @@ static Future<TryOnProfile> uploadProfilePhoto({
     uri,
   );
 
-  final token = ApiService.getAccessToken();
+  final token = ApiService.getToken();
 
   if (token != null && token.isNotEmpty) {
     request.headers['Authorization'] = 'Bearer $token';
@@ -377,6 +315,145 @@ static Future<TryOnProfile> uploadProfilePhoto({
     Map<String, dynamic>.from(
       data['data'],
     ),
+  );
+}
+
+
+// =====================================================
+// GET STYLE PREFERENCES FOR TRY-ON PROFILE
+// =====================================================
+
+static Future<Map<String, dynamic>?> getProfileStyle({
+  required int profileId,
+}) async {
+  final response = await http.get(
+    Uri.parse(
+      '${ApiService.serverUrl}/api/customer/tryon-profiles/$profileId/style',
+    ),
+    headers: _headers,
+  );
+
+  print('GET TRY-ON PROFILE STYLE STATUS: ${response.statusCode}');
+  print('GET TRY-ON PROFILE STYLE BODY: ${response.body}');
+
+  final data = jsonDecode(response.body);
+
+  if (response.statusCode != 200 ||
+      data['success'] != true) {
+    throw Exception(
+      data['message'] ?? 'Failed to load try-on profile style',
+    );
+  }
+
+  return data['data'] == null
+      ? null
+      : Map<String, dynamic>.from(data['data']);
+}
+
+
+// =====================================================
+// SAVE / UPDATE STYLE PREFERENCES
+// =====================================================
+
+static Future<Map<String, dynamic>> saveProfileStyle({
+  required int profileId,
+  String? apparelSize,
+  String? fitPreference,
+  List<String>? preferredColors,
+  List<String>? preferredStyles,
+}) async {
+  final response = await http.put(
+    Uri.parse(
+      '${ApiService.serverUrl}/api/customer/tryon-profiles/$profileId/style',
+    ),
+    headers: _headers,
+    body: jsonEncode({
+      'apparel_size': apparelSize,
+      'fit_preference': fitPreference,
+      'preferred_colors': preferredColors ?? [],
+      'preferred_styles': preferredStyles ?? [],
+    }),
+  );
+
+  print(
+    'SAVE TRY-ON PROFILE STYLE STATUS: ${response.statusCode}',
+  );
+
+  print(
+    'SAVE TRY-ON PROFILE STYLE BODY: ${response.body}',
+  );
+
+  final data = jsonDecode(response.body);
+
+  if (response.statusCode != 200 ||
+      data['success'] != true) {
+    throw Exception(
+      data['message'] ?? 'Failed to save try-on profile style',
+    );
+  }
+
+  return Map<String, dynamic>.from(data['data']);
+}
+static Future<Map<String, dynamic>> saveTryOnProfileStyle({
+  required int profileId,
+  String? apparelSize,
+  String? fitPreference,
+  List<String>? preferredColors,
+  List<String>? preferredStyles,
+}) async {
+  final response = await ApiService.put(
+    '/tryon-profiles/$profileId/style',
+    {
+      'apparel_size': apparelSize,
+      'fit_preference': fitPreference,
+      'preferred_colors': preferredColors ?? [],
+      'preferred_styles': preferredStyles ?? [],
+    },
+  );
+
+  if (response['success'] != true) {
+    throw Exception(
+      response['message'] ??
+          'Failed to save try-on profile style',
+    );
+  }
+
+  return response;
+}
+
+// =====================================================
+// GET MAIN USER TRY-ON PROFILE
+// GET /api/customer/tryon-profiles/main
+// =====================================================
+
+static Future<TryOnProfile> getMainProfile() async {
+  final response = await http.get(
+    Uri.parse(
+      '${ApiService.serverUrl}/api/customer/tryon-profiles/main',
+    ),
+    headers: _headers,
+  );
+
+  print(
+    'GET MAIN TRY-ON PROFILE STATUS: ${response.statusCode}',
+  );
+
+  print(
+    'GET MAIN TRY-ON PROFILE BODY: ${response.body}',
+  );
+
+  final data = jsonDecode(response.body);
+
+  if (response.statusCode != 200 ||
+      data['success'] != true) {
+    throw Exception(
+      data['message'] ??
+          'Failed to load main try-on profile',
+    );
+  }
+
+  return TryOnProfile.fromJson(
+    Map<String, dynamic>.from(data['data']),
   );
 }
 

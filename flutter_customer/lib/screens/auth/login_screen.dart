@@ -15,6 +15,15 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _inputController = TextEditingController();
   bool _isLoading = false;
+  bool _isValidPhone(String value) {
+  return RegExp(r'^[6-9][0-9]{9}$').hasMatch(value);
+}
+
+bool _isValidEmail(String value) {
+  return RegExp(
+    r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+  ).hasMatch(value);
+}
 
   @override
   void dispose() {
@@ -23,23 +32,55 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _handleSendOTP() async {
-    if (_isLoading) return;
-    String input = _inputController.text.trim();
+  if (_isLoading) return;
 
-    if (input.isEmpty) {
+  String input = _inputController.text.trim();
+
+  if (input.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Please enter mobile number or email"),
+        backgroundColor: Colors.red,
+      ),
+    );
+    return;
+  }
+
+  // Check whether input is phone or email
+  final isPhone = RegExp(r'^[0-9]+$').hasMatch(input);
+
+  if (isPhone) {
+    // Phone validation
+    if (!_isValidPhone(input)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Please enter mobile number or email"),
+          content: Text(
+            "Please enter a valid 10-digit mobile number",
+          ),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
+  } else {
+    // Email validation
+    if (!_isValidEmail(input)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Please enter a valid email address",
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+  }
 
-    // Autofill Context Finish
-    TextInput.finishAutofillContext();
+  // Autofill Context Finish
+  TextInput.finishAutofillContext();
 
-    setState(() => _isLoading = true);
+  setState(() => _isLoading = true);
 
     bool isSuccess = false;
     bool isExisting = false;
@@ -201,29 +242,58 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 20),
-                                TextField(
-                                  controller: _inputController,
-                                  keyboardType: TextInputType.emailAddress,
-                                  // Added Autofill Hints
-                                  autofillHints: const [
-                                    AutofillHints.telephoneNumber,
-                                    AutofillHints.email,
-                                    AutofillHints.username,
-                                  ],
-                                  decoration: InputDecoration(
-                                    hintText: 'Phone Number or Email',
-                                    prefixIcon: const Icon(
-                                      Icons.person_outline,
-                                      color: Color(0xFF8B7355),
-                                    ),
-                                    filled: true,
-                                    fillColor: Colors.white.withOpacity(0.95),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                  ),
-                                ),
+                               TextField(
+  controller: _inputController,
+
+  keyboardType: TextInputType.emailAddress,
+
+  autofillHints: const [
+    AutofillHints.telephoneNumber,
+    AutofillHints.email,
+    AutofillHints.username,
+  ],
+
+  inputFormatters: [
+    TextInputFormatter.withFunction(
+      (oldValue, newValue) {
+        final value = newValue.text;
+
+        // If the user is entering only numbers,
+        // allow maximum 10 digits.
+        if (RegExp(r'^[0-9]*$').hasMatch(value)) {
+          if (value.length <= 10) {
+            return newValue;
+          }
+
+          // Prevent 11th digit
+          return oldValue;
+        }
+
+        // If the input contains non-numeric characters,
+        // treat it as an email and allow it.
+        return newValue;
+      },
+    ),
+  ],
+
+  decoration: InputDecoration(
+    hintText: 'Phone Number or Email',
+
+    prefixIcon: const Icon(
+      Icons.person_outline,
+      color: Color(0xFF8B7355),
+    ),
+
+    filled: true,
+
+    fillColor: Colors.white.withOpacity(0.95),
+
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide.none,
+    ),
+  ),
+),
                                 const SizedBox(height: 20),
                                 SizedBox(
                                   width: double.infinity,

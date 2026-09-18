@@ -1,12 +1,13 @@
 const pool = require('../../config/db');
 
-async function findShops({ category } = {}) {
+async function findShops({ category, latitude, longitude } = {}) {
   const values = [];
   let categoryFilter = '';
+  let distanceSelect = 'NULL::numeric AS distance_km';
+  let orderClause = 'ORDER BY s.created_at DESC';
 
   if (category) {
     values.push(category.toLowerCase());
-
     categoryFilter = `
       AND EXISTS (
         SELECT 1
@@ -19,6 +20,34 @@ async function findShops({ category } = {}) {
     `;
   }
 
+  // Haversine distance in km, using PostgreSQL trig functions.
+  // Shops without lat/lng get NULL distance and are pushed to the
+  // end via the ORDER BY's NULLS LAST.
+  if (latitude !== undefined && longitude !== undefined) {
+    values.push(latitude);
+    const latParam = `$${values.length}`;
+
+    values.push(longitude);
+    const lngParam = `$${values.length}`;
+
+    distanceSelect = `
+      CASE
+        WHEN s.latitude IS NULL OR s.longitude IS NULL THEN NULL
+        ELSE (
+          6371 * acos(
+            LEAST(1, GREATEST(-1,
+              cos(radians(${latParam})) * cos(radians(s.latitude))
+                * cos(radians(s.longitude) - radians(${lngParam}))
+                + sin(radians(${latParam})) * sin(radians(s.latitude))
+            ))
+          )
+        )
+      END AS distance_km
+    `;
+
+    orderClause = 'ORDER BY distance_km ASC NULLS LAST, s.created_at DESC';
+  }
+
   const query = `
     SELECT
       s.shop_id,
@@ -29,6 +58,7 @@ async function findShops({ category } = {}) {
       s.address,
       s.city,
       s.state,
+      ${distanceSelect},
 
       COALESCE(
         ARRAY_AGG(
@@ -38,26 +68,15 @@ async function findShops({ category } = {}) {
         '{}'
       ) AS categories,
 
-      COALESCE(
-        ROUND(AVG(r.rating)::numeric, 1),
-        0
-      ) AS rating,
-
+      COALESCE(ROUND(AVG(r.rating)::numeric, 1), 0) AS rating,
       COUNT(r.review_id) AS rating_count
 
     FROM shops s
 
-    LEFT JOIN shop_categories sc
-      ON sc.shop_id = s.shop_id
-
-    LEFT JOIN categories c
-      ON c.category_id = sc.category_id
-
-    LEFT JOIN products p
-      ON p.shop_id = s.shop_id
-
-    LEFT JOIN reviews r
-      ON r.product_id = p.product_id
+    LEFT JOIN shop_categories sc ON sc.shop_id = s.shop_id
+    LEFT JOIN categories c ON c.category_id = sc.category_id
+    LEFT JOIN products p ON p.shop_id = s.shop_id
+    LEFT JOIN reviews r ON r.product_id = p.product_id
 
     WHERE s.is_blocked = FALSE
 
@@ -65,7 +84,7 @@ async function findShops({ category } = {}) {
 
     GROUP BY s.shop_id
 
-    ORDER BY s.created_at DESC
+    ${orderClause}
   `;
 
   const { rows } = await pool.query(query, values);

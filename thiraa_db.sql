@@ -628,3 +628,62 @@ CREATE TABLE IF NOT EXISTS cart_items (
 CREATE INDEX IF NOT EXISTS idx_cart_items_customer ON cart_items(customer_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_cart_items_customer_product_variant
     ON cart_items(customer_id, product_id, COALESCE(variant_id, -1));
+
+ALTER TABLE customer_style_profiles
+DROP COLUMN age_range;
+
+ALTER TABLE tryon_profiles
+ADD COLUMN date_of_birth DATE;
+
+ALTER TABLE customer_style_profiles
+DROP CONSTRAINT fk_customer_style_profile;
+
+ALTER TABLE customer_style_profiles
+DROP CONSTRAINT customer_style_profiles_customer_id_key;
+
+ALTER TABLE customer_style_profiles
+ADD COLUMN tryon_profile_id INTEGER;
+
+ALTER TABLE customer_style_profiles
+ADD CONSTRAINT fk_customer_style_profile
+FOREIGN KEY (customer_id)
+REFERENCES customers(customer_id)
+ON DELETE CASCADE;
+
+ALTER TABLE customer_style_profiles
+ADD CONSTRAINT fk_tryon_style_profile
+FOREIGN KEY (tryon_profile_id)
+REFERENCES tryon_profiles(profile_id)
+ON DELETE CASCADE;
+
+CREATE TABLE tryon_profile_styles (
+    style_id SERIAL PRIMARY KEY,
+
+    profile_id INTEGER NOT NULL UNIQUE,
+
+    apparel_size VARCHAR(10),
+
+    fit_preference VARCHAR(30),
+
+    preferred_colors TEXT[] DEFAULT '{}',
+
+    preferred_styles TEXT[] DEFAULT '{}',
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_tryon_profile_style
+        FOREIGN KEY (profile_id)
+        REFERENCES tryon_profiles(profile_id)
+        ON DELETE CASCADE
+);
+
+ALTER TABLE customer_style_profiles
+ADD CONSTRAINT unique_customer_style_profile
+UNIQUE (customer_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS
+idx_one_default_tryon_profile_per_customer
+ON tryon_profiles (customer_id)
+WHERE is_default = TRUE;

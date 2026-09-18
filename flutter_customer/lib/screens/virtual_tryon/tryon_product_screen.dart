@@ -4,19 +4,24 @@ import '../../models/product_model.dart';
 import '../../services/product_service.dart';
 import '../../widgets/app_colors.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../models/profile_model.dart';
+import '../../models/tryon_profile_model.dart';
 import '../../services/tryon_profile_service.dart';
+
 
 
 class TryOnProductScreen extends StatefulWidget {
   final XFile? customerPhoto;
   final String? customerPhotoUrl;
-  final TryOnProfile selectedProfile;
+  final TryOnProfile? selectedProfile;
+final ProfileModel? customerProfile;
 
   const TryOnProductScreen({
     super.key,
     this.customerPhoto,
     this.customerPhotoUrl,
-    required this.selectedProfile,
+    this.selectedProfile,
+    this.customerProfile,
   });
 
   @override
@@ -63,24 +68,163 @@ class _TryOnProductScreenState extends State<TryOnProductScreen> {
     });
   }
 
- void _continueWithProduct() {
+  void _continueWithProduct() async {
+  debugPrint(
+    'PRODUCT SCREEN → selectedProfile: ${widget.selectedProfile}',
+  );
+
+  debugPrint(
+    'PRODUCT SCREEN → profileId: ${widget.selectedProfile?.profileId}',
+  );
+
+  debugPrint(
+    'PRODUCT SCREEN → customerProfile: ${widget.customerProfile}',
+  );
+
   if (_selectedProduct == null) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Please select an outfit first'),
       ),
     );
+    return;
+  }
+
+  // ==================================================
+  // TRY-ON PROFILE
+  // ==================================================
+  //
+  // At this point both:
+  //
+  // 1. Main User
+  // 2. Additional User
+  //
+  // should have a TryOnProfile.
+  //
+  // The only difference is how the profile was obtained.
+  // ==================================================
+
+  TryOnProfile? profile = widget.selectedProfile;
+
+  // ==================================================
+  // MAIN USER
+  // ==================================================
+  //
+  // Main user's permanent Try-On profile may not have
+  // been passed from the previous screen.
+  //
+  // So load it from backend.
+  // ==================================================
+
+  if (profile == null && widget.customerProfile != null) {
+    try {
+      debugPrint(
+        'PRODUCT SCREEN → Loading MAIN TRY-ON PROFILE',
+      );
+
+      profile =
+          await TryOnProfileService.getMainProfile();
+
+      debugPrint(
+        'PRODUCT SCREEN → MAIN PROFILE ID: '
+        '${profile.profileId}',
+      );
+
+      debugPrint(
+        'PRODUCT SCREEN → MAIN PROFILE PHOTO: '
+        '${profile.photoUrl}',
+      );
+    } catch (e) {
+      debugPrint(
+        'PRODUCT SCREEN → Failed to load main profile: $e',
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Unable to load your try-on profile: $e',
+          ),
+        ),
+      );
+
+      return;
+    }
+  }
+
+  // ==================================================
+  // NO PROFILE
+  // ==================================================
+
+  if (profile == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Please select a try-on profile',
+        ),
+      ),
+    );
 
     return;
   }
 
+  // ==================================================
+  // PHOTO VALIDATION
+  // ==================================================
+
+  if (profile.photoUrl == null ||
+      profile.photoUrl!.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Please add a profile photo before trying on',
+        ),
+      ),
+    );
+
+    return;
+  }
+
+  // ==================================================
+  // NAVIGATE TO REVIEW
+  // ==================================================
+
+  debugPrint(
+    'PRODUCT SCREEN → REVIEW',
+  );
+
+  debugPrint(
+    'PROFILE ID: ${profile.profileId}',
+  );
+
+  debugPrint(
+    'PROFILE NAME: ${profile.profileName}',
+  );
+
+  debugPrint(
+    'PROFILE PHOTO: ${profile.photoUrl}',
+  );
+
+  if (!mounted) return;
+
   context.push(
     '/virtual-tryon/review',
     extra: {
-      'photo': widget.customerPhoto,
-      'photoUrl': widget.customerPhotoUrl,
+      // No temporary XFile anymore
+      'photo': null,
+
+      // Permanent profile photo
+      'photoUrl': profile.photoUrl,
+
       'product': _selectedProduct!,
-      'profile': widget.selectedProfile,
+
+      // Both Main User and Additional User
+      // are represented by TryOnProfile
+      'selectedProfile': profile,
+
+      // No need for ProfileModel here
+      'customerProfile': null,
     },
   );
 }

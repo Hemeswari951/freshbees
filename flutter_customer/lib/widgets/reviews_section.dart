@@ -73,7 +73,7 @@ class _ReviewsSectionState extends State<ReviewsSection> {
   // Guests don't have a token — skip the call entirely rather than
   // hitting the 401 and showing an error for something that's expected.
   Future<void> _loadEligibility() async {
-    final token = ApiService.getAccessToken();
+    final token = ApiService.getToken();
     if (token == null || token.isEmpty) {
       _eligibility = null;
       return;
@@ -113,7 +113,7 @@ class _ReviewsSectionState extends State<ReviewsSection> {
   }
 
   Future<void> _openWriteOrEditSheet() async {
-    final token = ApiService.getAccessToken();
+    final token = ApiService.getToken();
     if (token == null || token.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please login to write a review')),
@@ -129,7 +129,7 @@ class _ReviewsSectionState extends State<ReviewsSection> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => _WriteReviewSheet(
+      builder: (_) => WriteReviewSheet(
         productId: widget.productId,
         existingReview: existing,
       ),
@@ -353,17 +353,17 @@ class _ReviewsSectionState extends State<ReviewsSection> {
 // Write / edit review bottom sheet
 // ═══════════════════════════════════════════════════════════════════════
 
-class _WriteReviewSheet extends StatefulWidget {
+class WriteReviewSheet extends StatefulWidget {
   final int productId;
   final ReviewModel? existingReview; // null = writing a new review
 
-  const _WriteReviewSheet({required this.productId, this.existingReview});
+  const WriteReviewSheet({super.key, required this.productId, this.existingReview});
 
   @override
-  State<_WriteReviewSheet> createState() => _WriteReviewSheetState();
+  State<WriteReviewSheet> createState() => _WriteReviewSheetState();
 }
 
-class _WriteReviewSheetState extends State<_WriteReviewSheet> {
+class _WriteReviewSheetState extends State<WriteReviewSheet> {
   late int _rating;
   late final TextEditingController _textController;
   bool _isSubmitting = false;

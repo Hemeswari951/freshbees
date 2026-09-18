@@ -1,6 +1,47 @@
 const pool = require('../../config/db');
 const storageClient = require('../../config/storageClient');
 
+function extractCoordinatesFromGoogleMapsUrl(url) {
+  if (!url) {
+    return {
+      latitude: null,
+      longitude: null,
+    };
+  }
+
+  // Google Maps place URL:
+  // ...!3d11.6556048!4d78.1636302...
+  const placeMatch = url.match(
+    /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/,
+  );
+
+  if (placeMatch) {
+    return {
+      latitude: Number(placeMatch[1]),
+      longitude: Number(placeMatch[2]),
+    };
+  }
+
+  // Google Maps URL:
+  // ...@11.65561,78.1610553,...
+  const atMatch = url.match(
+    /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
+  );
+
+  if (atMatch) {
+    return {
+      latitude: Number(atMatch[1]),
+      longitude: Number(atMatch[2]),
+    };
+  }
+
+  return {
+    latitude: null,
+    longitude: null,
+  };
+}
+
+
 // ── List all shops with stats (products, orders, revenue, rating) ──────────
 // Used by: ShopsScreen grid + stat cards
 async function getAllShops() {
@@ -212,7 +253,7 @@ async function getShopPayouts(shopId) {
   return rows;
 }
 
-// ── Create a full shop (all 4 form steps in one transaction) ──────────────
+// ── Create a full shop ─────────────────────────────────────────────────────
 async function createShop({
   // Step 1 — Basic
   categoryIds,
@@ -222,8 +263,9 @@ async function createShop({
   city,
   state,
   pincode,
+  locationUrl,
 
-  // Files (NOT URLs)
+  // Files
   logoFile,
   bannerFile,
 
@@ -252,73 +294,81 @@ async function createShop({
     await client.query('BEGIN');
 
     // ------------------------------------------------------------------
-    // 1. Create shop first
+    // 1. Extract latitude and longitude from Google Maps URL
     // ------------------------------------------------------------------
+
+    const {
+      latitude,
+      longitude,
+    } = extractCoordinatesFromGoogleMapsUrl(locationUrl);
+
+    console.log('[createShop] Location URL:', locationUrl);
+    console.log('[createShop] Latitude:', latitude);
+    console.log('[createShop] Longitude:', longitude);
+
+    // ------------------------------------------------------------------
+    // 2. Create shop
+    // ------------------------------------------------------------------
+
     const shopRes = await client.query(
       `
       INSERT INTO shops
       (
-        
         shop_name,
         shop_description,
         address,
         city,
         state,
-        pincode
+        pincode,
+        location_url,
+        latitude,
+        longitude
       )
       VALUES
-      ($1,$2,$3,$4,$5,$6)
+      ($1,$2,$3,$4,$5,$6,$7,$8,$9)
       RETURNING shop_id
       `,
       [
-        
         shopName,
         description,
         address,
         city,
         state,
         pincode,
+        locationUrl,
+        latitude,
+        longitude,
       ]
     );
 
     const shopId = shopRes.rows[0].shop_id;
 
-    //--------------------------------------------------
-// Save Shop Categories
-//--------------------------------------------------
+    // ------------------------------------------------------------------
+    // 3. Save Shop Categories
+    // ------------------------------------------------------------------
 
-if (categoryIds && categoryIds.length > 0) {
-
-    for (const categoryId of categoryIds) {
-
+    if (categoryIds && categoryIds.length > 0) {
+      for (const categoryId of categoryIds) {
         await client.query(
-
-            `
-            INSERT INTO shop_categories
-            (
-                shop_id,
-                category_id
-            )
-            VALUES
-            ($1,$2)
-            `,
-
-            [
-
-                shopId,
-
-                categoryId,
-
-            ]
-
+          `
+          INSERT INTO shop_categories
+          (
+            shop_id,
+            category_id
+          )
+          VALUES
+          ($1,$2)
+          `,
+          [
+            shopId,
+            categoryId,
+          ]
         );
-
+      }
     }
 
-}
-
     // ------------------------------------------------------------------
-    // 2. Upload images using shop_id
+    // 4. Upload shop images
     // ------------------------------------------------------------------
 
     const safeShopName = shopName
@@ -344,10 +394,12 @@ if (categoryIds && categoryIds.length > 0) {
         `${safeShopName}_${shopId}_banner`
       );
     }
+
     console.log("logoUrl:", shopLogoUrl);
     console.log("bannerUrl:", shopBannerUrl);
+
     // ------------------------------------------------------------------
-    // 3. Update shop with image paths
+    // 5. Update shop with image paths
     // ------------------------------------------------------------------
 
     await client.query(
@@ -366,7 +418,7 @@ if (categoryIds && categoryIds.length > 0) {
     );
 
     // ------------------------------------------------------------------
-    // 4. Insert owner
+    // 6. Insert shop owner
     // ------------------------------------------------------------------
 
     await client.query(
@@ -392,7 +444,7 @@ if (categoryIds && categoryIds.length > 0) {
     );
 
     // ------------------------------------------------------------------
-    // 5. Insert bank details
+    // 7. Insert bank details
     // ------------------------------------------------------------------
 
     await client.query(
@@ -418,7 +470,7 @@ if (categoryIds && categoryIds.length > 0) {
     );
 
     // ------------------------------------------------------------------
-    // 6. Insert settings
+    // 8. Insert shop settings
     // ------------------------------------------------------------------
 
     await client.query(
@@ -445,16 +497,25 @@ if (categoryIds && categoryIds.length > 0) {
       ]
     );
 
+    // ------------------------------------------------------------------
+    // 9. Commit transaction
+    // ------------------------------------------------------------------
+
     await client.query('COMMIT');
 
     return {
       shopId,
       shopLogoUrl,
       shopBannerUrl,
+      locationUrl,
+      latitude,
+      longitude,
     };
+
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
+
   } finally {
     client.release();
   }
@@ -490,9 +551,7 @@ async function setShopBlockStatus(shopId, block, reason = null) {
 }
 
 async function updateBasicInfo(shopId, body) {
-
   const {
-
     shopName,
     description,
     categoryIds,
@@ -500,26 +559,33 @@ async function updateBasicInfo(shopId, body) {
     city,
     state,
     pincode,
-
+    locationUrl,
   } = body;
 
-  // Update shop basic information
+  // Extract coordinates from Google Maps URL
+  const {
+    latitude,
+    longitude,
+  } = extractCoordinatesFromGoogleMapsUrl(locationUrl);
+
+  // Location URL + coordinates update
   const result = await pool.query(
-
     `
-        UPDATE shops
-        SET
-            shop_name = $1,
-            shop_description = $2,
-            address = $3,
-            city = $4,
-            state = $5,
-            pincode = $6,
-            updated_at = NOW()
-        WHERE shop_id = $7
-        RETURNING *;
-        `,
-
+    UPDATE shops
+    SET
+      shop_name = $1,
+      shop_description = $2,
+      address = $3,
+      city = $4,
+      state = $5,
+      pincode = $6,
+      location_url = $7,
+      latitude = $8,
+      longitude = $9,
+      updated_at = NOW()
+    WHERE shop_id = $10
+    RETURNING *;
+    `,
     [
       shopName,
       description,
@@ -527,53 +593,45 @@ async function updateBasicInfo(shopId, body) {
       city,
       state,
       pincode,
+      locationUrl,
+      latitude,
+      longitude,
       shopId,
     ]
-
   );
+
+  if (result.rows.length === 0) {
+    throw new Error("Shop not found");
+  }
 
   // Remove old categories
   await pool.query(
-
     `
-        DELETE FROM shop_categories
-        WHERE shop_id = $1
-        `,
-
+    DELETE FROM shop_categories
+    WHERE shop_id = $1
+    `,
     [shopId]
-
   );
 
-  // Insert newly selected categories
+  // Insert new categories
   if (categoryIds && categoryIds.length > 0) {
-
     for (const categoryId of categoryIds) {
-
       await pool.query(
-
         `
-                INSERT INTO shop_categories
-                (
-                    shop_id,
-                    category_id
-                )
-                VALUES
-                ($1,$2)
-                `,
-
-        [
-          shopId,
-          categoryId,
-        ]
-
+        INSERT INTO shop_categories
+        (
+          shop_id,
+          category_id
+        )
+        VALUES
+        ($1, $2)
+        `,
+        [shopId, categoryId]
       );
-
     }
-
   }
 
   return result.rows[0];
-
 }
 
 async function updateOwnerInfo(shopId, body) {

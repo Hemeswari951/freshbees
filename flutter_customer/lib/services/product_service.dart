@@ -1,3 +1,5 @@
+import 'package:image_picker/image_picker.dart';
+
 import '../models/product_model.dart';
 import '../models/product_details_model.dart';
 import 'api_service.dart';
@@ -84,6 +86,22 @@ class ProductService {
     final params = {'search': searchQuery, ...?filters};
     final query = _buildQuery(params);
     final response = await ApiService.get('/products$query');
+    return _parseProducts(response);
+  }
+
+  /// Camera-icon image search — uploads the captured/picked photo and
+  /// returns products ranked by visual similarity. Same response shape
+  /// as text search, so it reuses ProductModel/_parseProducts as-is.
+  static Future<List<ProductModel>> searchByImage(XFile image) async {
+    final bytes = await image.readAsBytes();
+
+    final response = await ApiService.postMultipart(
+      '/search/image',
+      bytes: bytes,
+      filename: image.name.isNotEmpty ? image.name : 'search.jpg',
+      fieldName: 'image',
+    );
+
     return _parseProducts(response);
   }
 

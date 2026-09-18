@@ -8,6 +8,10 @@ class CouponsScreen extends StatefulWidget {
 }
 
 class _CouponsScreenState extends State<CouponsScreen> {
+  // ============================================================
+  // COLORS
+  // ============================================================
+
   static const Color _background = Color(0xFFFAF7F2);
   static const Color _accent = Color(0xFF8B7355);
   static const Color _text = Color(0xFF242424);
@@ -15,10 +19,9 @@ class _CouponsScreenState extends State<CouponsScreen> {
   static const Color _card = Colors.white;
   static const Color _border = Color(0xFFE8E1D8);
 
-  // ----------------------------------------------------------
-  // TEMPORARY HARDCODED COUPONS
-  // Later this can come from your backend API.
-  // ----------------------------------------------------------
+  // ============================================================
+  // COUPONS
+  // ============================================================
 
   final List<Map<String, dynamic>> _coupons = [
     {
@@ -49,9 +52,11 @@ class _CouponsScreenState extends State<CouponsScreen> {
 
   final Set<String> _copiedCoupons = {};
 
+  // ============================================================
+  // COPY COUPON
+  // ============================================================
+
   void _copyCoupon(String code) {
-    // UI-only for now.
-    // Later you can use Clipboard.setData().
     setState(() {
       _copiedCoupons.add(code);
     });
@@ -65,55 +70,33 @@ class _CouponsScreenState extends State<CouponsScreen> {
     );
   }
 
+  // ============================================================
+  // BUILD
+  // ============================================================
+
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 900;
 
-    return Scaffold(
-      backgroundColor: _background,
+    // IMPORTANT:
+    // No Scaffold.
+    // No ListView.
+    //
+    // ProfileDetailsScreen already provides the outer
+    // SingleChildScrollView.
 
-      // appBar: AppBar(
-      //   backgroundColor: _background,
-      //   surfaceTintColor: _background,
-      //   elevation: 0,
-
-      //   title: const Text(
-      //     'Coupons',
-      //     style: TextStyle(
-      //       color: _text,
-      //       fontSize: 19,
-      //       fontWeight: FontWeight.w700,
-      //     ),
-      //   ),
-
-      //   // Since your Profile/Overview navigation already provides
-      //   // the back navigation, remove this if this screen is opened
-      //   // inside your existing profile navigation structure.
-      //   leading: IconButton(
-      //     icon: const Icon(
-      //       Icons.arrow_back,
-      //       color: _text,
-      //     ),
-      //     onPressed: () {
-      //       Navigator.of(context).pop();
-      //     },
-      //   ),
-      // ),
-
-      body: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: isDesktop ? 760 : double.infinity,
-          ),
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-              16,
-              12,
-              16,
-              32,
-            ),
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: isDesktop ? 760 : double.infinity,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildHeader(),
+
               const SizedBox(height: 18),
 
               ..._coupons.map(
@@ -135,19 +118,17 @@ class _CouponsScreenState extends State<CouponsScreen> {
     );
   }
 
-  // ----------------------------------------------------------
+  // ============================================================
   // HEADER
-  // ----------------------------------------------------------
+  // ============================================================
 
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _border,
-        ),
+        border: Border.all(color: _border),
       ),
       child: Row(
         children: [
@@ -179,13 +160,12 @@ class _CouponsScreenState extends State<CouponsScreen> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+
                 SizedBox(height: 4),
+
                 Text(
                   'Save more on your fashion purchases.',
-                  style: TextStyle(
-                    color: _muted,
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(color: _muted, fontSize: 13),
                 ),
               ],
             ),
@@ -195,9 +175,9 @@ class _CouponsScreenState extends State<CouponsScreen> {
     );
   }
 
-  // ----------------------------------------------------------
+  // ============================================================
   // COUPON CARD
-  // ----------------------------------------------------------
+  // ============================================================
 
   Widget _buildCouponCard(Map<String, dynamic> coupon) {
     final String code = coupon['code'];
@@ -207,20 +187,17 @@ class _CouponsScreenState extends State<CouponsScreen> {
       decoration: BoxDecoration(
         color: _card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _border,
-        ),
+        border: Border.all(color: _border),
         boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          ),
+          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
         ],
       ),
       child: Column(
         children: [
+          // ------------------------------------------------------
           // TOP SECTION
+          // ------------------------------------------------------
+
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
@@ -234,28 +211,24 @@ class _CouponsScreenState extends State<CouponsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF2ECE4),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              coupon['type'],
-                              style: const TextStyle(
-                                color: _accent,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.6,
-                              ),
-                            ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF2ECE4),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          coupon['type'],
+                          style: const TextStyle(
+                            color: _accent,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.6,
                           ),
-                        ],
+                        ),
                       ),
 
                       const SizedBox(height: 8),
@@ -273,20 +246,14 @@ class _CouponsScreenState extends State<CouponsScreen> {
 
                       Text(
                         coupon['minimum'],
-                        style: const TextStyle(
-                          color: _muted,
-                          fontSize: 12,
-                        ),
+                        style: const TextStyle(color: _muted, fontSize: 12),
                       ),
 
                       const SizedBox(height: 3),
 
                       Text(
                         coupon['validity'],
-                        style: const TextStyle(
-                          color: _muted,
-                          fontSize: 11,
-                        ),
+                        style: const TextStyle(color: _muted, fontSize: 11),
                       ),
                     ],
                   ),
@@ -295,13 +262,14 @@ class _CouponsScreenState extends State<CouponsScreen> {
             ),
           ),
 
+          // ------------------------------------------------------
           // DIVIDER
-          Container(
-            height: 1,
-            color: _border,
-          ),
+          // ------------------------------------------------------
+          Container(height: 1, color: _border),
 
-          // COUPON CODE SECTION
+          // ------------------------------------------------------
+          // COUPON CODE
+          // ------------------------------------------------------
           Padding(
             padding: const EdgeInsets.all(14),
             child: Row(
@@ -313,11 +281,9 @@ class _CouponsScreenState extends State<CouponsScreen> {
                       vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFAF7F2),
+                      color: _background,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: _border,
-                      ),
+                      border: Border.all(color: _border),
                     ),
                     child: Row(
                       children: [
@@ -329,13 +295,16 @@ class _CouponsScreenState extends State<CouponsScreen> {
 
                         const SizedBox(width: 8),
 
-                        Text(
-                          code,
-                          style: const TextStyle(
-                            color: _text,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
-                            letterSpacing: 1,
+                        Expanded(
+                          child: Text(
+                            code,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _text,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              letterSpacing: 1,
+                            ),
                           ),
                         ),
                       ],
@@ -350,13 +319,10 @@ class _CouponsScreenState extends State<CouponsScreen> {
                   child: ElevatedButton(
                     onPressed: () => _copyCoupon(code),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          copied ? Colors.grey : _accent,
+                      backgroundColor: copied ? Colors.grey : _accent,
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -379,9 +345,9 @@ class _CouponsScreenState extends State<CouponsScreen> {
     );
   }
 
-  // ----------------------------------------------------------
+  // ============================================================
   // DISCOUNT BADGE
-  // ----------------------------------------------------------
+  // ============================================================
 
   Widget _discountBadge(String title) {
     return Container(
@@ -394,12 +360,10 @@ class _CouponsScreenState extends State<CouponsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
-            Icons.local_offer,
-            color: Colors.white,
-            size: 20,
-          ),
+          const Icon(Icons.local_offer, color: Colors.white, size: 20),
+
           const SizedBox(height: 5),
+
           Text(
             title,
             textAlign: TextAlign.center,
@@ -414,9 +378,9 @@ class _CouponsScreenState extends State<CouponsScreen> {
     );
   }
 
-  // ----------------------------------------------------------
+  // ============================================================
   // TERMS
-  // ----------------------------------------------------------
+  // ============================================================
 
   Widget _buildTerms() {
     return Container(
@@ -444,11 +408,7 @@ class _CouponsScreenState extends State<CouponsScreen> {
             '• Coupons are subject to minimum order values.\n'
             '• Offers may vary by shop and product.\n'
             '• Coupon availability may change without notice.',
-            style: TextStyle(
-              color: _muted,
-              fontSize: 12,
-              height: 1.6,
-            ),
+            style: TextStyle(color: _muted, fontSize: 12, height: 1.6),
           ),
         ],
       ),

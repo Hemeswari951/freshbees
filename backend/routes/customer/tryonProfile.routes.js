@@ -3,59 +3,119 @@ const express = require("express");
 const router = express.Router();
 
 const tryonProfileController =
-    require("../../controllers/customer/tryonProfile.controller");
+  require("../../controllers/customer/tryonProfile.controller");
+
+const tryOnProfileStyleController =
+  require("../../controllers/customer/tryon_profile_style.controller");
 
 const customerAuth =
-    require("../../middleware/customerauth");
+  require("../../middleware/customerauth");
 
 const {
   upload,
   handleUploadError,
 } = require("../../middleware/upload");
 
+
+// =====================================================
+// AUTHENTICATION
+// =====================================================
+
 // All Try-On Profile APIs require a logged-in customer.
 router.use(customerAuth);
 
 
+// =====================================================
+// GET ALL PROFILES
 // GET /api/customer/tryon-profiles
-// Get all profiles of the logged-in customer
+// =====================================================
+
 router.get(
-    "/",
-    tryonProfileController.getProfiles
+  "/",
+  tryonProfileController.getProfiles
 );
 
+// =====================================================
+// GET MAIN USER TRY-ON PROFILE
+// GET /api/customer/tryon-profiles/main
+// =====================================================
 
-// GET /api/customer/tryon-profiles/:id
-// Get one profile
 router.get(
-    "/:id",
-    tryonProfileController.getProfile
+  "/main",
+  tryonProfileController.getMainProfile
+);
+
+// =====================================================
+// GET PROFILE STYLE
+// GET /api/customer/tryon-profiles/:id/style
+// =====================================================
+
+router.get(
+  "/:id/style",
+  tryOnProfileStyleController.getStyle
 );
 
 
-// POST /api/customer/tryon-profiles
-// Create a new profile
-router.post(
-    "/",
-    tryonProfileController.createProfile
-);
+// =====================================================
+// UPDATE PROFILE STYLE
+// PUT /api/customer/tryon-profiles/:id/style
+// =====================================================
 
-
-// PUT /api/customer/tryon-profiles/:id
-// Update a profile
 router.put(
-    "/:id",
-    tryonProfileController.updateProfile
+  "/:id/style",
+  tryOnProfileStyleController.saveStyle
 );
 
 
+// =====================================================
+// GET ONE PROFILE
+// GET /api/customer/tryon-profiles/:id
+// =====================================================
+
+router.get(
+  "/:id",
+  tryonProfileController.getProfile
+);
+
+
+
+// =====================================================
+// CREATE PROFILE
+// POST /api/customer/tryon-profiles
+// =====================================================
+
+router.post(
+  "/",
+  tryonProfileController.createProfile
+);
+
+
+// =====================================================
+// UPDATE PROFILE
+// PUT /api/customer/tryon-profiles/:id
+// =====================================================
+
+router.put(
+  "/:id",
+  tryonProfileController.updateProfile
+);
+
+
+// =====================================================
+// DELETE PROFILE
 // DELETE /api/customer/tryon-profiles/:id
-// Delete a profile
+// =====================================================
+
 router.delete(
-    "/:id",
-    tryonProfileController.deleteProfile
+  "/:id",
+  tryonProfileController.deleteProfile
 );
 
+
+// =====================================================
+// UPLOAD PROFILE PHOTO
+// POST /api/customer/tryon-profiles/:profileId/photo
+// =====================================================
 
 router.post(
   "/:profileId/photo",
@@ -63,5 +123,6 @@ router.post(
   tryonProfileController.uploadProfilePhoto,
   handleUploadError
 );
+
 
 module.exports = router;

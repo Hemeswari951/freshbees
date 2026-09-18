@@ -16,4 +16,5 @@ app.use('/api/customer', require('./routes/customer/index'));
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
+  console.log('[Server] Try-on endpoint: POST /api/customer/virtual-tryon/generate');
 });

@@ -2,24 +2,41 @@
 import 'package:flutter/material.dart';
 import '../../services/address_service.dart';
 import '../../services/cart_service.dart';
+import '../../services/order_service.dart';
+import '../../models/buy_now_product.dart';
+import '../../widgets/checkout_stepper.dart';
+import '../../utils/checkout_constants.dart';
 import '../order/order_success_screen.dart';
 
-
-/// payment mode.
+/// Step 3 of checkout: pick a payment mode and place the order.
+///
+/// Reached from OrderSummaryScreen with either a [buyNowProduct] (single
+/// item, no cart — hits POST /orders/buy-now) or [cartItemIds] (hits the
+/// existing POST /orders/checkout). Exactly one of the two is set.
 class PaymentScreen extends StatefulWidget {
   final AddressModel address;
   final double subtotal;
   final int itemCount;
-  final List<int> cartItemIds;
-  
+  final List<int>? cartItemIds;
+  final List<CartItemModel>? cartItems;
+  final BuyNowProduct? buyNowProduct;
+  final double platformFee;
+  final double? mrpTotal;
 
   const PaymentScreen({
     super.key,
     required this.address,
     required this.subtotal,
     required this.itemCount,
-    required this.cartItemIds,
-  });
+    this.cartItemIds,
+    this.cartItems,
+    this.buyNowProduct,
+    this.platformFee = kPlatformFee,
+    this.mrpTotal,
+  }) : assert(
+          buyNowProduct != null || cartItemIds != null,
+          'PaymentScreen needs either a buyNowProduct or cartItemIds',
+        );
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
@@ -73,28 +90,67 @@ class _PaymentScreenState extends State<PaymentScreen> {
   static const Color _accent = Color(0xFF8B7355);
   static const Color _cardBorder = Color(0xFFEAEAEA);
   static const Color _imgBg = Color(0xFFF2ECE4);
+  static const double _desktopBreakpoint = 900;
+  static const double _maxContentWidth = 1000;
 
   _PaymentMethod _selected = _PaymentMethod.cod;
   bool _placingOrder = false;
 
+  double get _codFee => _selected == _PaymentMethod.cod ? kCodHandlingFee : 0;
+  double get _grandTotal => widget.subtotal + widget.platformFee + _codFee;
+
   Future<void> _placeOrder() async {
     setState(() => _placingOrder = true);
     try {
-      final result = await CartService.checkout(
-        addressId: widget.address.addressId,
-         paymentMethod: _selected.apiValue,
-         cartItemIds: widget.cartItemIds,
-      );
+      final int orderId;
+
+      if (widget.buyNowProduct != null) {
+        final p = widget.buyNowProduct!;
+        final result = await OrderService.buyNow(
+          productId: p.productId,
+          variantId: p.variantId,
+          quantity: p.quantity,
+          addressId: widget.address.addressId,
+          paymentMethod: _selected.apiValue,
+        );
+        orderId = result.orderId;
+      } else {
+        final result = await CartService.checkout(
+          addressId: widget.address.addressId,
+          paymentMethod: _selected.apiValue,
+          cartItemIds: widget.cartItemIds,
+        );
+        orderId = result.orderId;
+      }
+
       if (!mounted) return;
+
+      final successItems = widget.buyNowProduct != null
+          ? [
+              OrderSuccessItem(
+                productName: widget.buyNowProduct!.productName,
+                size: widget.buyNowProduct!.size,
+              ),
+            ]
+          : (widget.cartItems ?? [])
+              .map((i) => OrderSuccessItem(
+                    shopName: i.shopName,
+                    productName: i.productName,
+                    size: i.size,
+                    color: i.color,
+                  ))
+              .toList();
+
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
           builder: (_) => OrderSuccessScreen(
-           orderId: result.orderId,
-            subtotal: widget.subtotal,
+           orderId: orderId,
+            subtotal: _grandTotal,
             paymentMethod: _selected.label,
+            items: successItems,
           ),
         ),
-        (route) => route.isFirst, // back to Home, dropping Cart/Address/Payment
+        (route) => route.isFirst, // back to Home, dropping Cart/Address/Order Summary/Payment
       );
     } catch (e) {
       if (!mounted) return;
@@ -108,7 +164,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    final isDesktop = MediaQuery.of(context).size.width >= _desktopBreakpoint;
 
     return Scaffold(
       backgroundColor: _bg,
@@ -122,68 +178,193 @@ class _PaymentScreenState extends State<PaymentScreen> {
         ),
       ),
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: isDesktop ? 700 : double.infinity),
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _addressCard(),
-                const SizedBox(height: 16),
-                _orderSummaryCard(),
-                const SizedBox(height: 16),
-                const Text(
-                  'SELECT PAYMENT METHOD',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.6,
-                    color: Colors.black45,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ..._PaymentMethod.values.map(_paymentOption),
-                const SizedBox(height: 8),
-                const Text(
-                  'Demo checkout — no real payment is processed.',
-                  style: TextStyle(fontSize: 11, color: Colors.black38, fontStyle: FontStyle.italic),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _placingOrder ? null : _placeOrder,
-                    icon: _placingOrder
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation(Colors.white),
-                            ),
-                          )
-                        : const Icon(Icons.lock_outline, color: Colors.white, size: 18),
-                    label: Text(
-                      _placingOrder
-                          ? 'PLACING ORDER...'
-                          : 'PLACE ORDER  •  ₹${widget.subtotal.toStringAsFixed(0)}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _accent,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-              ],
-            ),
+        child: Column(
+          children: [
+            const CheckoutStepper(currentStep: 2),
+            Expanded(child: _buildBody(isDesktop)),
+          ],
+        ),
+      ),
+      // Desktop shows the price card + Place Order button inline (sticky,
+      // next to the payment options) — mobile gets a fixed bottom bar
+      // instead, same pattern as Cart / Order Summary.
+      bottomNavigationBar: (!isDesktop) ? _buildCheckoutBar() : null,
+    );
+  }
+
+  Widget _buildBody(bool isDesktop) {
+    if (!isDesktop) {
+      // Mobile: single scrollable column, price card inline, Place Order
+      // lives in the bottom bar.
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: double.infinity),
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              ..._formFields(),
+              const SizedBox(height: 16),
+              _priceDetailsCard(),
+              const SizedBox(height: 24),
+            ],
           ),
+        ),
+      );
+    }
+
+    // Desktop: address + payment method on the left, a sticky price +
+    // Place Order card on the right — matches Cart / Order Summary.
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: _maxContentWidth),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: SizedBox(
+                  height: 640,
+                  child: ListView(
+                    padding: const EdgeInsets.only(right: 4),
+                    children: _formFields(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(flex: 2, child: _desktopSummaryCard()),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Address card + payment method picker + notes — shared by both layouts.
+  List<Widget> _formFields() {
+    return [
+      _addressCard(),
+      const SizedBox(height: 16),
+      const Text(
+        'SELECT PAYMENT METHOD',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.6,
+          color: Colors.black45,
+        ),
+      ),
+      const SizedBox(height: 10),
+      ..._PaymentMethod.values.map(_paymentOption),
+      if (_selected == _PaymentMethod.cod) ...[
+        const SizedBox(height: 4),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _imgBg,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            'Due to handling costs, a nominal fee of ₹${kCodHandlingFee.toStringAsFixed(0)} will be charged for orders placed using Cash on Delivery. Avoid this fee by paying online.',
+            style: const TextStyle(fontSize: 12, color: Colors.black54, height: 1.4),
+          ),
+        ),
+      ],
+      const SizedBox(height: 8),
+      const Text(
+        'Demo checkout — no real payment is processed.',
+        style: TextStyle(fontSize: 11, color: Colors.black38, fontStyle: FontStyle.italic),
+      ),
+    ];
+  }
+
+  // Desktop-only: sticky price card + Place Order button, next to the form.
+  Widget _desktopSummaryCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _cardBorder),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 14, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _priceDetailsCardContent(),
+          const SizedBox(height: 20),
+          _placeOrderButton(height: 50),
+        ],
+      ),
+    );
+  }
+
+  // Slim bottom bar for mobile — total + Place Order, same pattern as
+  // Cart / Order Summary's bottom checkout bar.
+  Widget _buildCheckoutBar() {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05), offset: const Offset(0, -4), blurRadius: 10),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Total', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                  Text('₹${_grandTotal.toStringAsFixed(0)}',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+            SizedBox(width: 190, height: 48, child: _placeOrderButton()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _placeOrderButton({double height = 48}) {
+    return SizedBox(
+      height: height,
+      child: ElevatedButton.icon(
+        onPressed: _placingOrder ? null : _placeOrder,
+        icon: _placingOrder
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation(Colors.white),
+                ),
+              )
+            : const Icon(Icons.lock_outline, color: Colors.white, size: 18),
+        label: Text(
+          _placingOrder
+              ? 'PLACING ORDER...'
+              : _selected == _PaymentMethod.cod
+                  ? 'PLACE ORDER  •  ₹${_grandTotal.toStringAsFixed(0)}'
+                  : 'PAY  •  ₹${_grandTotal.toStringAsFixed(0)}',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.4,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _accent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
     );
@@ -244,23 +425,50 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  Widget _orderSummaryCard() {
+  Widget _priceRow(String label, String value, {bool bold = false, Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(fontSize: 13.5, fontWeight: bold ? FontWeight.w700 : FontWeight.w400)),
+          Text(value, style: TextStyle(fontSize: 13.5, fontWeight: bold ? FontWeight.w700 : FontWeight.w500, color: valueColor)),
+        ],
+      ),
+    );
+  }
+
+  Widget _priceDetailsCardContent() {
+    final mrpTotal = widget.mrpTotal ?? widget.subtotal;
+    final discount = (mrpTotal - widget.subtotal).clamp(0, double.infinity);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Order Total (${widget.itemCount} item${widget.itemCount == 1 ? '' : 's'})',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.4, color: Colors.black45)),
+        const SizedBox(height: 6),
+        _priceRow('MRP (incl. of all taxes)', '₹${mrpTotal.toStringAsFixed(0)}'),
+        if (discount > 0)
+          _priceRow('Discount on MRP', '- ₹${discount.toStringAsFixed(0)}', valueColor: const Color(0xFF388E3C)),
+        _priceRow('Platform Fee', '₹${widget.platformFee.toStringAsFixed(0)}'),
+        if (_codFee > 0) _priceRow('Payment Handling Fee', '₹${_codFee.toStringAsFixed(0)}'),
+        const Divider(height: 20),
+        _priceRow('Total Amount', '₹${_grandTotal.toStringAsFixed(0)}', bold: true),
+      ],
+    );
+  }
+
+  Widget _priceDetailsCard() {
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _cardBorder),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text('Order Total (${widget.itemCount} item${widget.itemCount == 1 ? '' : 's'})'),
-          Text(
-            '₹${widget.subtotal.toStringAsFixed(0)}',
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: _priceDetailsCardContent(),
       ),
     );
   }

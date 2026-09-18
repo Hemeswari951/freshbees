@@ -19,15 +19,22 @@ class WishlistService {
     return [];
   }
 
-  /// Add a product to the wishlist (heart tap on a product card).
-  static Future<bool> addToWishlist(int productId) async {
-    final response = await ApiService.post('/wishlist/$productId', {});
-    return response['success'] == true;
-  }
+ /// Add a product to the wishlist (heart tap on a product card).
+  static Future<bool> addToWishlist(int productId, {int? productColorId}) async {
+  final response = await ApiService.post('/wishlist/$productId', {
+    if (productColorId != null) 'productColorId': productColorId,
+  });
+  return response['success'] == true;
+}
 
-  /// Remove a product from the wishlist (heart tap again).
-  static Future<bool> removeFromWishlist(int productId) async {
-    final response = await ApiService.delete('/wishlist/$productId');
+   /// Remove a product from the wishlist (heart tap again).
+    static Future<bool> removeFromWishlist(int productId, {int? productColorId}) async {
+    // Pass the color ID in the URL so it doesn't get stripped from the DELETE request
+    final url = productColorId != null 
+        ? '/wishlist/$productId?productColorId=$productColorId' 
+        : '/wishlist/$productId';
+        
+    final response = await ApiService.delete(url);
     return response['success'] == true;
   }
 }

@@ -20,15 +20,19 @@ exports.getCartByCustomer = async (customerId) => {
             p.product_name,
             img.image_url AS thumbnail,
             p.shop_id,
+            s.shop_name,            -- NEW
             COALESCE(pv.price, p.price) AS price,
             pv.stock_quantity AS stock_quantity,
-            pv.size
+            pv.size,
+            pc.color_name AS color,
+            pc.product_color_id ,/* <-- NEW: Fetch color ID */
+            rs.avg_rating,          -- NEW
+            rs.total_reviews        -- NEW
          FROM cart_items ci
          JOIN products p ON p.product_id = ci.product_id
+         LEFT JOIN shops s ON s.shop_id = p.shop_id
          LEFT JOIN product_variants pv ON pv.variant_id = ci.variant_id
-         -- Pick one image for this row: prefer a photo tagged with the
-         -- variant's own color, fall back to any photo of the product
-         -- (e.g. when the item was added without a variant/color).
+         LEFT JOIN product_colors pc ON pc.product_color_id = pv.product_color_id
          LEFT JOIN LATERAL (
              SELECT pi.image_url
              FROM product_images pi
@@ -37,13 +41,19 @@ exports.getCartByCustomer = async (customerId) => {
              ORDER BY pi.display_order ASC
              LIMIT 1
          ) img ON TRUE
+         LEFT JOIN LATERAL (
+             SELECT
+                 COALESCE(AVG(r.rating), 0)::NUMERIC(3,2) AS avg_rating,
+                 COUNT(*)::INT AS total_reviews
+             FROM reviews r
+             WHERE r.product_id = p.product_id
+         ) rs ON TRUE
          WHERE ci.customer_id = $1
          ORDER BY ci.created_at DESC`,
         [customerId]
     );
     return result.rows;
 };
-
 // Adds an item, or bumps the quantity if the same product+variant is
 // already in the bag (so tapping "Add to Bag" twice just increases qty
 // instead of creating a duplicate row).

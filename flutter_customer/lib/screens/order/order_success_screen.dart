@@ -1,5 +1,21 @@
-
 import 'package:flutter/material.dart';
+
+/// One line item's display details for the Order Success screen —
+/// shop name, product name, size, color. Built from the cart/buy-now
+/// items at checkout time and carried through Payment -> Order Success.
+class OrderSuccessItem {
+  final String? shopName;
+  final String productName;
+  final String? size;
+  final String? color;
+
+  const OrderSuccessItem({
+    this.shopName,
+    required this.productName,
+    this.size,
+    this.color,
+  });
+}
 
 /// Step 4 / final screen of checkout: order confirmation. Reached by
 /// replacing the whole Cart → Address → Payment stack, so the back button
@@ -8,12 +24,14 @@ class OrderSuccessScreen extends StatelessWidget {
   final int orderId;
   final double subtotal;
   final String paymentMethod;
+  final List<OrderSuccessItem> items;
 
   const OrderSuccessScreen({
     super.key,
     required this.orderId,
     required this.subtotal,
     required this.paymentMethod,
+    this.items = const [],
   });
 
   static const Color _bg = Color(0xFFFAF7F2);
@@ -28,7 +46,7 @@ class OrderSuccessScreen extends StatelessWidget {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
-            child: Padding(
+            child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -54,6 +72,27 @@ class OrderSuccessScreen extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.black54, fontSize: 13, height: 1.5),
                   ),
+                  if (items.isNotEmpty) ...[
+                    const SizedBox(height: 28),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: _cardBorder),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (int i = 0; i < items.length; i++) ...[
+                            if (i > 0) const Divider(height: 20),
+                            _itemDetails(items[i]),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 28),
                   Container(
                     width: double.infinity,
@@ -99,6 +138,39 @@ class OrderSuccessScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _itemDetails(OrderSuccessItem item) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (item.shopName != null && item.shopName!.isNotEmpty) ...[
+          Text(
+            item.shopName!,
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: _accent,
+            ),
+          ),
+          const SizedBox(height: 2),
+        ],
+        Text(
+          item.productName,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+        ),
+        if (item.size != null || item.color != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            [
+              if (item.size != null) 'Size: ${item.size}',
+              if (item.color != null) 'Color: ${item.color}',
+            ].join('  |  '),
+            style: const TextStyle(fontSize: 12.5, color: Colors.black54),
+          ),
+        ],
+      ],
     );
   }
 

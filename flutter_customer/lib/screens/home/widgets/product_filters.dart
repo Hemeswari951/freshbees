@@ -11,7 +11,6 @@ class ProductFilters {
   // Main category:
   // men / women / kids / beauty / all
   final String? category;
-
   // Sub category:
   // shirt / saree / pant / t shirts / ...
   final String? subCategory;
@@ -19,6 +18,9 @@ class ProductFilters {
   final double? minPrice;
   final double? maxPrice;
   final SortOption sortBy;
+  final String? color; 
+  final int? shopId;
+
 
   const ProductFilters({
     this.category,
@@ -26,13 +28,17 @@ class ProductFilters {
     this.minPrice,
     this.maxPrice,
     this.sortBy = SortOption.recent,
-  });
+    this.color, 
+    this.shopId, 
 
+  });
+  
   bool get isDefault =>
       (category == null || category!.toLowerCase() == 'all') &&
       subCategory == null &&
       minPrice == null &&
       maxPrice == null &&
+      color == null && //
       sortBy == SortOption.recent;
 
   ProductFilters copyWith({
@@ -41,10 +47,15 @@ class ProductFilters {
     double? minPrice,
     double? maxPrice,
     SortOption? sortBy,
+     String? color, // 
+    int? shopId, // 
+    
 
     bool clearCategory = false,
     bool clearSubCategory = false,
     bool clearPrice = false,
+    bool clearColor = false, 
+    bool clearShop = false,
   }) {
     return ProductFilters(
       category: clearCategory
@@ -64,6 +75,8 @@ class ProductFilters {
           : (maxPrice ?? this.maxPrice),
 
       sortBy: sortBy ?? this.sortBy,
+       color: clearColor ? null : (color ?? this.color), 
+      shopId: clearShop ? null : (shopId ?? this.shopId)
     );
   }
 
@@ -113,6 +126,15 @@ class ProductFilters {
 
     if (maxPrice != null) {
       params['maxPrice'] = maxPrice!.toStringAsFixed(0);
+    }
+
+    // <-- ADDED COLOR TO PARAMS
+    if (color != null && color!.trim().isNotEmpty) {
+      params['color'] = color!.trim();
+    }
+    // <-- ADDED SHOP ID TO PARAMS
+    if (shopId != null) {
+      params['shopId'] = shopId.toString();
     }
 
     // Sorting

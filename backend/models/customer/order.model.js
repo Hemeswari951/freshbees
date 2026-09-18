@@ -63,7 +63,7 @@ exports.createOrder = async (customerId, productId, variantId, quantity, shopId,
     const itemResult = await pool.query(
         `INSERT INTO order_items
             (order_id, shop_id, product_id, variant_id, quantity, price, item_status, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 'Processing', CURRENT_TIMESTAMP)
+         VALUES ($1, $2, $3, $4, $5, $6, 'Pending', CURRENT_TIMESTAMP)
          RETURNING order_item_id`,
         [orderId, shopId, productId, variantId || null, quantity, price]
     );
@@ -110,7 +110,7 @@ exports.createOrderFromItems = async (customerId, items, addressId, paymentMetho
             const itemResult = await client.query(
                 `INSERT INTO order_items
                     (order_id, shop_id, product_id, variant_id, quantity, price, item_status, created_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, 'Processing', CURRENT_TIMESTAMP)
+                 VALUES ($1, $2, $3, $4, $5, $6, 'Pending', CURRENT_TIMESTAMP)
                  RETURNING order_item_id`,
                 [orderId, item.shopId, item.productId, item.variantId || null, item.quantity, item.price]
             );
@@ -158,6 +158,8 @@ exports.getCustomerOrders = async (customerId) => {
             oi.quantity,
             oi.price AS item_price,
             oi.item_status,
+            oi.cancellation_reason,
+            oi.updated_at AS item_updated_at,
 
             p.product_name,
             p.description AS product_description,
@@ -212,6 +214,102 @@ exports.getCustomerOrders = async (customerId) => {
         ORDER BY o.created_at DESC, oi.order_item_id ASC
         `,
         [customerId]
+    );
+
+    return result.rows;
+};
+
+// GET /api/customer/orders/:orderId — same shape as getCustomerOrders,
+// just scoped to one order. o.customer_id = $2 is the ownership check —
+// a customer can never fetch another customer's order by guessing an id;
+// an empty result set means "not found OR not yours", and the controller
+// treats both as a plain 404 without distinguishing them.
+exports.getOrderById = async (customerId, orderId) => {
+    const result = await pool.query(
+        `
+        SELECT
+            o.order_id,
+            o.total_amount,
+            o.payment_method,
+            o.payment_status,
+            o.order_status,
+            o.created_at,
+            o.updated_at,
+
+            a.address_id,
+            a.full_name AS delivery_name,
+            a.phone AS delivery_phone,
+            a.address_line1,
+            a.address_line2,
+            a.city AS delivery_city,
+            a.state AS delivery_state,
+            a.country AS delivery_country,
+            a.pincode AS delivery_pincode,
+
+            oi.order_item_id,
+            oi.shop_id,
+            oi.product_id,
+            oi.variant_id,
+            oi.quantity,
+            oi.price AS item_price,
+            oi.item_status,
+            oi.cancellation_reason,
+            oi.updated_at AS item_updated_at,
+
+            p.product_name,
+            p.description AS product_description,
+            p.price AS product_base_price,
+            p.mrp AS product_mrp,
+
+            s.shop_name,
+
+            pv.size AS variant_size,
+
+            pc.product_color_id,
+            pc.color_name,
+            pc.color_hex,
+
+            pi.image_url AS product_image
+
+        FROM orders o
+
+        LEFT JOIN addresses a
+            ON a.address_id = o.address_id
+
+        LEFT JOIN order_items oi
+            ON oi.order_id = o.order_id
+
+        LEFT JOIN products p
+            ON p.product_id = oi.product_id
+
+        LEFT JOIN shops s
+            ON s.shop_id = oi.shop_id
+
+        LEFT JOIN product_variants pv
+            ON pv.variant_id = oi.variant_id
+
+        LEFT JOIN product_colors pc
+            ON pc.product_color_id = pv.product_color_id
+
+        LEFT JOIN LATERAL (
+            SELECT image_url
+            FROM product_images
+            WHERE product_id = oi.product_id
+              AND (
+                    product_color_id = pv.product_color_id
+                    OR product_color_id IS NULL
+                  )
+              AND image_type != '360'
+            ORDER BY display_order ASC, image_id ASC
+            LIMIT 1
+        ) pi ON TRUE
+
+        WHERE o.customer_id = $1
+          AND o.order_id = $2
+
+        ORDER BY oi.order_item_id ASC
+        `,
+        [customerId, orderId]
     );
 
     return result.rows;

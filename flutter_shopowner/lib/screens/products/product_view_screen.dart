@@ -673,8 +673,15 @@ class _ProductViewScreenState extends State<ProductViewScreen> {
         const SizedBox(height: 5),
         // Sub name (category) — regular weight, softer gray, more legible
         // than the previous heavy 45% opacity mute.
+        //
+        // subCategory is an optional field on the add-product form (e.g.
+        // easy to skip on a quick single-size add) — falls back to the
+        // top-level category, which is always present, instead of
+        // crashing the whole review/publish screen on a null cast.
         Text(
-          product['subCategory'] as String,
+          (product['subCategory'] as String?)?.trim().isNotEmpty == true
+              ? product['subCategory'] as String
+              : (product['category'] as String? ?? ''),
           style: TextStyle(
             fontSize: 14.5,
             color: AppColors.ink.withValues(alpha: 0.6),

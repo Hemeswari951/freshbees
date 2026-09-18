@@ -9,11 +9,17 @@ class CustomerLayout extends StatelessWidget {
   final Widget child;
   final bool showFooterOnMobile;
 
+  /// Forwarded to CustomerHeader — controls the mic/camera icons in the
+  /// desktop search bar. Defaults to true; app_router.dart sets this to
+  /// false for Profile/Wishlist/Cart.
+  final bool showVoiceAndCameraSearch;
+
   const CustomerLayout({
     super.key,
     required this.currentPath,
     required this.child,
     this.showFooterOnMobile = true,
+    this.showVoiceAndCameraSearch = true,
   });
 
   @override
@@ -30,7 +36,9 @@ class CustomerLayout extends StatelessWidget {
         child: isDesktop
             ? Column(
                 children: [
-                  const CustomerHeader(),
+                  CustomerHeader(
+                    showVoiceAndCameraSearch: showVoiceAndCameraSearch,
+                  ),
 
                   Expanded(child: child),
                 ],

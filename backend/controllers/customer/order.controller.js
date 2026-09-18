@@ -1,11 +1,10 @@
 const orderModel = require("../../models/customer/order.model");
 const cartModel = require("../../models/customer/cart.model");
 const addressModel = require("../../models/customer/address.model");
+const notificationService = require("../../services/shared/notification.service"); // Import notification service
 
 exports.placeOrder = async (req, res) => {
-
     try {
-
         const { product_id, variant_id, quantity } = req.body;
 
         if (!product_id || !quantity) {
@@ -33,6 +32,9 @@ exports.placeOrder = async (req, res) => {
             productInfo.price
         );
 
+        // 🔔 NOTIFICATION CALL: Single item buy now order created
+        await notificationService.notifyNewOrder(orderId);
+
         return res.status(201).json({
             success: true,
             message: "Order placed successfully",
@@ -41,16 +43,13 @@ exports.placeOrder = async (req, res) => {
         });
 
     } catch (err) {
-
         console.log("Place Order Error:", err);
 
         return res.status(err.statusCode || 500).json({
             success: false,
             message: err.message || "Server Error"
         });
-
     }
-
 };
 
 // POST /api/customer/orders/checkout  { cart_item_ids?: number[], address_id: number, payment_method: string }
@@ -66,9 +65,7 @@ exports.placeOrder = async (req, res) => {
 // NULL and payment_method hardcoded to "COD" regardless of what (if
 // anything) the customer chose.
 exports.checkoutCart = async (req, res) => {
-
     try {
-
         const { cart_item_ids, address_id, payment_method } = req.body;
 
         if (!address_id) {
@@ -98,7 +95,7 @@ exports.checkoutCart = async (req, res) => {
         const items = [];
         for (const row of cartRows) {
             const productInfo = await orderModel.getProductForOrder(row.product_id, row.variant_id);
-            if (!productInfo) continue; // product was removed/unlisted since it was added — skip it
+            if (!productInfo) continue; 
 
             items.push({
                 productId: row.product_id,
@@ -123,8 +120,10 @@ exports.checkoutCart = async (req, res) => {
             payment_method
         );
 
-        // Only clear the rows that actually made it into the order.
         await cartModel.clearCartItems(req.customer.customerId, cartRows.map((r) => r.cart_item_id));
+
+        // 🔔 NOTIFICATION CALL: Multi-item cart checkout order created
+        await notificationService.notifyNewOrder(orderId);
 
         return res.status(201).json({
             success: true,
@@ -135,18 +134,14 @@ exports.checkoutCart = async (req, res) => {
         });
 
     } catch (err) {
-
         console.log("Checkout Cart Error:", err);
 
         return res.status(err.statusCode || 500).json({
             success: false,
             message: err.message || "Server Error"
         });
-
     }
-
 };
-
 
 exports.getMyOrders = async (req, res) => {
     try {
@@ -161,6 +156,39 @@ exports.getMyOrders = async (req, res) => {
 
     } catch (err) {
         console.log("Get My Orders Error:", err);
+
+        return res.status(err.statusCode || 500).json({
+            success: false,
+            message: err.message || "Server Error"
+        });
+    }
+};
+
+// GET /api/customer/orders/:orderId — single order (all its items), used
+// by "VIEW FULL ORDER" on the Orders list screen.
+exports.getOrderById = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+
+        const rows = await orderModel.getOrderById(
+            req.customer.customerId,
+            orderId
+        );
+
+        if (!rows.length) {
+            return res.status(404).json({
+                success: false,
+                message: "Order not found"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: rows
+        });
+
+    } catch (err) {
+        console.log("Get Order By Id Error:", err);
 
         return res.status(err.statusCode || 500).json({
             success: false,

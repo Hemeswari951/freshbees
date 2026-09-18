@@ -1,8 +1,52 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import './app_colors.dart';
+import 'package:go_router/go_router.dart';
 
-class ShopOwnerHeader extends StatelessWidget {
+import './app_colors.dart';
+import '../services/notification_service.dart';
+
+class ShopOwnerHeader extends StatefulWidget {
   const ShopOwnerHeader({super.key});
+
+  @override
+  State<ShopOwnerHeader> createState() => _ShopOwnerHeaderState();
+}
+
+class _ShopOwnerHeaderState extends State<ShopOwnerHeader> {
+  int _unreadCount = 0;
+  Timer? _poll;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshUnreadCount();
+    // Polls every 30s so a "New Order Received" notification shows up on
+    // the bell without the shop owner needing to manually refresh.
+    _poll = Timer.periodic(const Duration(seconds: 30), (_) => _refreshUnreadCount());
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refreshUnreadCount() async {
+    try {
+      final count = await NotificationService.getUnreadCount();
+      if (mounted) setState(() => _unreadCount = count);
+    } catch (_) {
+      // Silent — a failed poll shouldn't show an error banner on every
+      // screen; the bell just keeps its last known count.
+    }
+  }
+
+  Future<void> _openNotifications() async {
+    await context.push('/notifications');
+    // Coming back from the notifications screen likely changed some
+    // is_read flags — refresh the badge.
+    _refreshUnreadCount();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,9 +99,10 @@ class ShopOwnerHeader extends StatelessWidget {
 
           // Notification
           Stack(
+            clipBehavior: Clip.none,
             children: [
               IconButton(
-                onPressed: () {},
+                onPressed: _openNotifications,
                 icon: Icon(
                   Icons.notifications_none_outlined,
                   color: AppColors.textDark,
@@ -65,21 +110,26 @@ class ShopOwnerHeader extends StatelessWidget {
                 ),
               ),
 
-              Positioned(
-                right: 10,
-                top: 10,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
+              if (_unreadCount > 0)
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      _unreadCount > 9 ? '9+' : '$_unreadCount',
+                      style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800),
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
-
         ],
       ),
     );

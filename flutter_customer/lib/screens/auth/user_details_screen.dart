@@ -23,6 +23,11 @@ class UserDetailsScreen extends StatefulWidget {
 class _UserDetailsScreenState extends State<UserDetailsScreen> {
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
+  final FocusNode _firstNameFocusNode = FocusNode();
+  final FocusNode _lastNameFocusNode = FocusNode();
+  final FocusNode _genderFocusNode = FocusNode();
+  final FocusNode _dobFocusNode = FocusNode();
+  final FocusNode _submitFocusNode = FocusNode();
 
   String _gender = 'Other';
   DateTime? _dob;
@@ -32,17 +37,27 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
+    _firstNameFocusNode.dispose();
+    _lastNameFocusNode.dispose();
+    _genderFocusNode.dispose();
+    _dobFocusNode.dispose();
+    _submitFocusNode.dispose();
     super.dispose();
   }
 
   Future<void> _pickDob() async {
+    final today = DateTime.now();
+    final earliestDob = DateTime(today.year - 75, today.month, today.day);
     final picked = await showDatePicker(
       context: context,
       initialDate: DateTime(2000, 1, 1),
-      firstDate: DateTime(1950),
-      lastDate: DateTime.now(),
+      firstDate: earliestDob,
+      lastDate: today,
     );
-    if (picked != null) setState(() => _dob = picked);
+    if (picked != null) {
+      setState(() => _dob = picked);
+      _submitFocusNode.requestFocus();
+    }
   }
 
   Future<void> _handleCreateAccount() async {
@@ -51,6 +66,11 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
 
     if (firstName.isEmpty) {
       _showSnackBar("Please enter your first name", isError: true);
+      return;
+    }
+
+    if (lastName.isEmpty) {
+      _showSnackBar("Please enter your last name", isError: true);
       return;
     }
 
@@ -65,7 +85,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
       identifier: widget.identifier,
       password: widget.password,
       firstName: firstName,
-      lastName: lastName.isNotEmpty ? lastName : 'User',
+      lastName: lastName,
       gender: _gender,
       dob: _dob!.toIso8601String().split('T').first, // YYYY-MM-DD
     );
@@ -122,6 +142,9 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                 const SizedBox(height: 24),
                 TextField(
                   controller: _firstNameController,
+                  focusNode: _firstNameFocusNode,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) => _lastNameFocusNode.requestFocus(),
                   decoration: InputDecoration(
                     hintText: 'First Name',
                     prefixIcon: const Icon(
@@ -139,8 +162,11 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                 const SizedBox(height: 14),
                 TextField(
                   controller: _lastNameController,
+                  focusNode: _lastNameFocusNode,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) => _genderFocusNode.requestFocus(),
                   decoration: InputDecoration(
-                    hintText: 'Last Name (optional)',
+                    hintText: 'Last Name',
                     prefixIcon: const Icon(
                       Icons.person_outline,
                       color: AppColors.accentBrown,
@@ -156,6 +182,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                 const SizedBox(height: 14),
                 DropdownButtonFormField<String>(
                   initialValue: _gender,
+                  focusNode: _genderFocusNode,
                   decoration: InputDecoration(
                     filled: true,
                     fillColor: AppColors.white.withOpacity(0.95),
@@ -169,11 +196,18 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                     DropdownMenuItem(value: 'Female', child: Text('Female')),
                     DropdownMenuItem(value: 'Other', child: Text('Other')),
                   ],
-                  onChanged: (v) => setState(() => _gender = v ?? 'Other'),
+                  onChanged: (v) {
+                    setState(() => _gender = v ?? 'Other');
+                    _dobFocusNode.requestFocus();
+                  },
                 ),
                 const SizedBox(height: 14),
                 InkWell(
+                  focusNode: _dobFocusNode,
                   onTap: _pickDob,
+                  onFocusChange: (hasFocus) {
+                    if (hasFocus) _pickDob();
+                  },
                   child: InputDecorator(
                     decoration: InputDecoration(
                       hintText: 'Date of Birth',
@@ -200,6 +234,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton(
+                    focusNode: _submitFocusNode,
                     onPressed: _isLoading ? null : _handleCreateAccount,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.black,
