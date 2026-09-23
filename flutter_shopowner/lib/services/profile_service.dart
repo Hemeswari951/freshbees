@@ -1,17 +1,17 @@
 import 'dart:convert';
-
+ 
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
-
+ 
 import 'api_service.dart';
-
+ 
 class BankDetails {
   final String? accountNumber;
   final String? accountHolderName;
   final String? bankName;
   final String? ifscCode;
   final String? gstNumber;
-
+ 
   BankDetails({
     this.accountNumber,
     this.accountHolderName,
@@ -19,7 +19,7 @@ class BankDetails {
     this.ifscCode,
     this.gstNumber,
   });
-
+ 
   factory BankDetails.fromJson(Map<String, dynamic> j) => BankDetails(
     accountNumber: j['accountNumber'] as String?,
     accountHolderName: j['accountHolderName'] as String?,
@@ -28,7 +28,7 @@ class BankDetails {
     gstNumber: j['gstNumber'] as String?,
   );
 }
-
+ 
 class ShopProfile {
   final int id;
   final String shopName;
@@ -50,7 +50,7 @@ class ShopProfile {
   final int ordersCount;
   final double avgRating;
   final int reviewCount;
-
+ 
   ShopProfile({
     required this.id,
     required this.shopName,
@@ -73,7 +73,7 @@ class ShopProfile {
     required this.avgRating,
     required this.reviewCount,
   });
-
+ 
   factory ShopProfile.fromJson(Map<String, dynamic> j) => ShopProfile(
     id: j['id'] as int,
     shopName: (j['shopName'] ?? '') as String,
@@ -106,16 +106,16 @@ class ShopProfile {
     avgRating: (j['avgRating'] as num?)?.toDouble() ?? 0.0,
     reviewCount: (j['reviewCount'] as num?)?.toInt() ?? 0,
   );
-
+ 
   String get initial =>
       shopName.trim().isNotEmpty ? shopName.trim()[0].toUpperCase() : '?';
-
+ 
   String get location {
     final parts = [city, state].where((s) => s != null && s.isNotEmpty);
     return parts.isEmpty ? '-' : parts.join(', ');
   }
 }
-
+ 
 class ShopReview {
   final int id;
   final int rating;
@@ -124,7 +124,7 @@ class ShopReview {
   final String customerName;
   final int productId;
   final String productName;
-
+ 
   ShopReview({
     required this.id,
     required this.rating,
@@ -134,7 +134,7 @@ class ShopReview {
     required this.productId,
     required this.productName,
   });
-
+ 
   factory ShopReview.fromJson(Map<String, dynamic> j) => ShopReview(
     id: j['id'] as int,
     rating: (j['rating'] as num).toInt(),
@@ -145,10 +145,18 @@ class ShopReview {
     productName: (j['productName'] ?? '') as String,
   );
 }
-
+ 
 class ProfileService {
   ProfileService._();
-
+ 
+  // In-memory cache of the shop's own profile (name / logo / address etc).
+  // Populated the first time getProfile()/getProfileCached() succeeds and
+  // kept fresh by updateProfile(). Lets widgets that appear on every screen
+  // (e.g. ShopOwnerHeader) show the shop's details instantly on navigation
+  // instead of re-fetching from the server each time. Cleared on logout via
+  // clearCache().
+  static ShopProfile? cachedProfile;
+ 
   static String fullImageUrl(String relativePath) {
     if (relativePath.startsWith('http://') ||
         relativePath.startsWith('https://')) {
@@ -156,14 +164,32 @@ class ProfileService {
     }
     return '${ApiService.serverUrl}$relativePath';
   }
-
+ 
   static Future<ShopProfile> getProfile() async {
     final response = await ApiService.get('/profile');
-    return ShopProfile.fromJson(
+    final profile = ShopProfile.fromJson(
       Map<String, dynamic>.from(response['data'] as Map),
     );
+    cachedProfile = profile;
+    return profile;
   }
-
+ 
+  // Returns the cached profile when available (near-instant, no network
+  // round trip) and only hits the server on the first call of the app
+  // session or when forceRefresh is set.
+  static Future<ShopProfile> getProfileCached({bool forceRefresh = false}) async {
+    if (!forceRefresh && cachedProfile != null) {
+      return cachedProfile!;
+    }
+    return getProfile();
+  }
+ 
+  // Call on logout so the next shop owner to sign in on this device
+  // doesn't briefly see the previous owner's cached shop details.
+  static void clearCache() {
+    cachedProfile = null;
+  }
+ 
   static Future<ShopProfile> updateProfile({
     String? shopName,
     String? ownerName,
@@ -181,12 +207,12 @@ class ProfileService {
       'PUT',
       Uri.parse('${ApiService.baseUrl}/profile'),
     );
-
+ 
     final token = ApiService.getToken();
     if (token != null) {
       request.headers['Authorization'] = 'Bearer $token';
     }
-
+ 
     if (shopName != null) request.fields['shopName'] = shopName;
     if (ownerName != null) request.fields['ownerName'] = ownerName;
     if (description != null) request.fields['description'] = description;
@@ -196,7 +222,7 @@ class ProfileService {
     if (pincode != null) request.fields['pincode'] = pincode;
     if (email != null) request.fields['email'] = email;
     if (phoneNumber != null) request.fields['phoneNumber'] = phoneNumber;
-
+ 
     if (logo != null) {
       final bytes = await logo.readAsBytes();
       request.files.add(
@@ -209,22 +235,24 @@ class ProfileService {
         http.MultipartFile.fromBytes('banner', bytes, filename: banner.name),
       );
     }
-
+ 
     final streamed = await request.send();
     final response = await http.Response.fromStream(streamed);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
-
+ 
     if (response.statusCode == 200) {
-      return ShopProfile.fromJson(
+      final profile = ShopProfile.fromJson(
         Map<String, dynamic>.from(body['data'] as Map),
       );
+      cachedProfile = profile;
+      return profile;
     }
-
+ 
     throw Exception(
       body['message'] ?? 'Failed to update profile (${response.statusCode})',
     );
   }
-
+ 
   static Future<List<ShopReview>> getReviews({
     int page = 1,
     int limit = 20,
@@ -236,3 +264,4 @@ class ProfileService {
         .toList();
   }
 }
+ 
